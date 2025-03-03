@@ -1,7 +1,8 @@
 import discord
+import datetime
+import os
 from discord.ext import commands
 from discord import app_commands
-import os
 from dotenv import load_dotenv
 
 # Lade Umgebungsvariablen
@@ -27,13 +28,13 @@ class EventModal(discord.ui.Modal, title="Event Details"):
     description = discord.ui.TextInput(
         label="Kurze Beschreibung",
         style=discord.TextStyle.long,
-        placeholder="Beschreibe dein Event kurz..."
+        placeholder="Beschreibe dein Event kurz. Nutze \n für Zeilenumbrüche"
     )
     roles = discord.ui.TextInput(
-        label="Verfügbare Rollen (jede Rolle in einer neuen Zeile)",
+        label="Benötigte Rollen (Jede Rolle in einer neuen Zeile)",
         style=discord.TextStyle.long,
         required=False,
-        placeholder="Beispiel:\n1: Tankealer DPS\n2: Range DPS"
+        placeholder="Beispiel: \n Tank \n Heal \n DPS \n Support"
     )
 
     async def on_submit(self, interaction: discord.Interaction):
