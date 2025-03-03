@@ -1,90 +1,130 @@
 import discord
-import datetime
-import os
-from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
+import os
 
-# Lade Umgebungsvariablen
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+GUILD_ID = int(os.getenv("GUILD_ID"))
+CHANNEL_ID_EVENT = int(os.getenv("CHANNEL_ID_EVENT"))
+CHANNEL_ID_EVENT_LISTING = int(os.getenv("CHANNEL_ID_EVENT_LISTING"))
 
-# Event Modal Popup
-class EventModal(discord.ui.Modal, title="Event Details"):
-    def __init__(self, event_title: str):
+class Event:
+    def __init__(self, title, date, time, description, roles):
+        self.title = title
+        self.date = date
+        self.time = time
+        self.description = description
+        self.roles = roles
+        self.participants = {}  # Dictionary for participants and their roles
+
+class MyModal(discord.ui.Modal, title="Eventify"):
+    def __init__(self):
         super().__init__()
-        self.event_title = event_title
+        
+        # Info block for the creator
+        self.info = discord.ui.TextInput(label="Note", style=discord.TextStyle.paragraph, 
+                                          placeholder="Please fill in all fields to create an event. "
+                                                      "The date should be in the format YYYY-MM-DD and the time in the format HH:MM. "
+                                                      "Roles should be entered separated by line breaks.",
+                                          required=False)
+        self.add_item(self.info)
 
-    event_date = discord.ui.TextInput(
-        label="Datum (DD-MM-YYYY)",
-        style=discord.TextStyle.short,
-        placeholder="z.B. 31-12-2025"
-    )
-    event_time = discord.ui.TextInput(
-        label="Uhrzeit (HH:MM)",
-        style=discord.TextStyle.short,
-        placeholder="z.B. 18:30"
-    )
-    description = discord.ui.TextInput(
-        label="Kurze Beschreibung",
-        style=discord.TextStyle.long,
-        placeholder="Beschreibe dein Event kurz. Nutze \n für Zeilenumbrüche"
-    )
-    roles = discord.ui.TextInput(
-        label="Benötigte Rollen (Jede Rolle in einer neuen Zeile)",
-        style=discord.TextStyle.long,
-        required=False,
-        placeholder="Beispiel: \n Tank \n Heal \n DPS \n Support"
-    )
+        self.title_input = discord.ui.TextInput(label="Title")
+        self.date_input = discord.ui.TextInput(label="Date (YYYY-MM-DD)")
+        self.time_input = discord.ui.TextInput(label="Time (HH:MM)")
+        self.description_input = discord.ui.TextInput(label="Description")
+        self.roles_input = discord.ui.TextInput(label="Roles (separated by line breaks)")
+
+        self.add_item(self.title_input)
+        self.add_item(self.date_input)
+        self.add_item(self.time_input)
+        self.add_item(self.description_input)
+        self.add_item(self.roles_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        try:
-            event_date_obj = datetime.strptime(self.event_date.value, "%d-%m-%Y")
-        except ValueError:
-            await interaction.response.send_message("Das Datum muss im Format DD-MM-YYYY eingegeben werden.", ephemeral=True)
-            return
+        # Create event
+        event = Event(
+            title=self.title_input.value,
+            date=self.date_input.value,
+            time=self.time_input.value,
+            description=self.description_input.value,
+            roles=[role.strip() for role in self.roles_input.value.splitlines()]  # Split by line breaks
+        )
 
-        # Event Embed
-        embed = discord.Embed(title=self.event_title, description=self.description.value, color=0x00ff00)
-        embed.add_field(name="Datum", value=self.event_date.value, inline=True)
-        embed.add_field(name="Uhrzeit", value=self.event_time.value, inline=True)
-        
-        roles_text = self.roles.value if self.roles.value else "Keine Rollen angegeben"
-        embed.add_field(name="Verfügbare Rollen", value=roles_text, inline=False)
+        # Send event information to the defined channel
+        channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
+        event_message = f"**Event:** {event.title}\n**Date:** {event.date}\n**Time:** {event.time}\n**Description:** {event.description}\n**Roles:** {', '.join(event.roles)}"
+        event_post = await channel.send(event_message)
 
-        events_channel = discord.utils.get(interaction.guild.text_channels, name='events')
-        if events_channel:
-            post_message = await events_channel.send(embed=embed)
-            thread = await post_message.create_thread(name=f"{self.event_title} - Diskussion")
-        else:
-            await interaction.response.send_message("Kein 'events'-Channel gefunden.", ephemeral=True)
-            return
+        # Create thread
+        thread = await event_post.create_thread(name=event.title)
 
-        await interaction.response.send_message("Event wurde erstellt!", ephemeral=True)
+        # Role management in the thread
+        await thread.send("React with a number to sign up for a role. Type '-' to unsubscribe.")
 
-# EventifyBot Klasse
-class EventifyBot(commands.Bot):
+        # Participant management
+        def check(message):
+            return message.channel == thread and message.author != bot.user
+
+        while True:
+            try:
+                message = await bot.wait_for('message', check=check)
+                content = message.content.strip()
+
+                if content.startswith('-'):
+                    if content == '-':
+                        # Unsubscribe without a number
+                        if message.author.id in event.participants:
+                            del event.participants[message.author.id]
+                            await thread.send(f"{message.author.mention} has unsubscribed.")
+                        else:
+                            await thread.send(f"{message.author.mention}, you are not signed up for any role.")
+                    else:
+                        # Unsubscribe with a number
+                        role_index = int(content[1:]) - 1
+                        if role_index in range(len(event.roles)):
+                            if message.author.id in event.participants and event.participants[message.author.id] == event.roles[role_index]:
+                                del event.participants[message.author.id]
+                                await thread.send(f"{message.author.mention} has unsubscribed from the role '{event.roles[role_index]}'.")
+                            else:
+                                await thread.send(f"{message.author.mention}, you are not signed up for the role '{event.roles[role_index]}'.")
+                else:
+                    # Sign up for a role
+                    try:
+                        role_index = int(content) - 1
+                        if role_index in range(len(event.roles)):
+                            event.participants[message.author.id] = event.roles[role_index]
+                            await thread.send(f"{message.author.mention} has signed up for the role '{event.roles[role_index]}'.")
+                        else:
+                            await thread.send(f"{message.author.mention}, this role does not exist.")
+                    except ValueError:
+                        await thread.send(f"{message.author.mention}, please enter a valid number or '-' to unsubscribe.")
+
+class MyBot(discord.Client):
     def __init__(self):
-        intents = discord.Intents.default()
-        super().__init__(command_prefix="!", intents=intents)
+        super().__init__(intents=discord.Intents.default())
+        self.tree = app_commands.CommandTree(self)
 
-    async def setup_hook(self):
-        # Befehl zur Slash-Command-Registrierung
-        self.tree.add_command(create_event)
-        try:
-            await self.tree.sync()  # Synchronisieren der Slash-Befehle
-            print("Slash-Commands erfolgreich synchronisiert!")
-        except Exception as e:
-            print(f"Fehler bei der Synchronisierung der Slash-Commands: {e}")
-        await super().setup_hook()
+    async def on_ready(self):
+        print(f"Logged in as {self.user}")
+        await self.tree.sync(guild=discord.Object(id=GUILD_ID))  # Synchronize only with the specified guild
+        print("Slash commands synchronized!")
 
-bot = EventifyBot()
+bot = MyBot()
 
-# Der Create Event Befehl
-@app_commands.command(name="create_event", description="Erstelle ein neues Event")
-async def create_event(interaction: discord.Interaction, title: str):
-    # EventModal öffnen
-    modal = EventModal(title)
-    await interaction.response.send_modal(modal)
+@bot.tree.command(name="create", description="Start an event")
+async def create_event(interaction: discord.Interaction):
+    await interaction.response.send_modal(MyModal())
+
+@bot.tree.command(name="list", description="List all events")
+async def list_events(interaction: discord.Interaction):
+    # Here you can add logic to retrieve and display the saved events
+    await interaction.response.send_message("Here are the current events: ...", ephemeral=True)
+
+@bot.tree.command(name="propose", description="Propose a new role")
+async def propose_role(interaction: discord.Interaction, role_name: str):
+    # Here you can add logic to propose a new role
+    await interaction.response.send_message(f"Role '{role_name}' proposed!", ephemeral=True)
 
 bot.run(TOKEN)
