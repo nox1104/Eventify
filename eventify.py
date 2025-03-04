@@ -5,6 +5,7 @@ import os
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+GUILD_ID = int(os.getenv("GUILD_ID"))
 CHANNEL_ID_EVENT = int(os.getenv("CHANNEL_ID_EVENT"))
 CHANNEL_ID_EVENT_LISTING = int(os.getenv("CHANNEL_ID_EVENT_LISTING"))
 
@@ -118,12 +119,12 @@ class MyBot(discord.Client):
 
     async def on_ready(self):
         print(f"Logged in as {self.user}")
-        await self.tree.sync() 
+        await self.tree.sync(guild=discord.Object(id=GUILD_ID))  # Synchronisiere nur mit der angegebenen Gilde
         print("Slash commands synchronized!")
 
 bot = MyBot()
 
-@bot.tree.command(name="eventify", description="Start to eventify")
+@bot.tree.command(name="eventify", description="Start an event")
 async def create_event(interaction: discord.Interaction, title: str, date: str, time: str):
     # Überprüfe das Format von Datum und Uhrzeit hier, falls nötig
     # Beispiel: if not is_valid_date(date) or not is_valid_time(time):
