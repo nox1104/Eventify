@@ -16,7 +16,6 @@ class MyBot(discord.Client):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
 
-
 class Event:
     def __init__(self, title, date, time, description, roles):
         self.title = title
