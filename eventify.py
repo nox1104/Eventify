@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-TOKEN = os.getenv("DISCORD_TOKEN")
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID"))
 CHANNEL_ID_EVENT = int(os.getenv("CHANNEL_ID_EVENT"))
 CHANNEL_ID_EVENT_LISTING = int(os.getenv("CHANNEL_ID_EVENT_LISTING"))
@@ -19,51 +19,52 @@ class Event:
         self.participants = {}  # Dictionary for participants and their roles
 
 class MyModal(discord.ui.Modal, title="Eventify"):
-    def __init__(self):
+    def __init__(self, title: str, date: str, time: str):
         super().__init__()
-        
-        # Info block for the creator
-        self.info = discord.ui.TextInput(label="Note", style=discord.TextStyle.paragraph, 
-                                          placeholder="Please fill in all fields to create an event. "
-                                                      "The date should be in the format YYYY-MM-DD and the time in the format HH:MM. "
-                                                      "Roles should be entered separated by line breaks.",
-                                          required=False)
-        self.add_item(self.info)
 
-        self.title_input = discord.ui.TextInput(label="Title")
-        self.date_input = discord.ui.TextInput(label="Date (YYYY-MM-DD)")
-        self.time_input = discord.ui.TextInput(label="Time (HH:MM)")
-        self.description_input = discord.ui.TextInput(label="Description")
-        self.roles_input = discord.ui.TextInput(label="Roles (separated by line breaks)")
-
-        self.add_item(self.title_input)
-        self.add_item(self.date_input)
-        self.add_item(self.time_input)
+        # Füge die Eingabefelder für Beschreibung und Rollen hinzu
+        self.description_input = discord.ui.TextInput(label="Beschreibung", style=discord.TextStyle.paragraph, 
+                                                      placeholder="Gib eine Beschreibung für das Event ein.", 
+                                                      required=True)
         self.add_item(self.description_input)
+
+        self.roles_input = discord.ui.TextInput(label="Rollen (getrennt durch Zeilenumbrüche)", 
+                                                 style=discord.TextStyle.paragraph, 
+                                                 placeholder="Gib die Rollen ein, die für das Event benötigt werden.", 
+                                                 required=True)
         self.add_item(self.roles_input)
 
+        # Speichere die übergebenen Werte
+        self.title = title
+        self.date = date
+        self.time = time
+
     async def on_submit(self, interaction: discord.Interaction):
-        # Create event
+        # Extrahiere die Beschreibung und die Rollen
+        description = self.description_input.value
+        roles = [role.strip() for role in self.roles_input.value.splitlines()]  # Split by line breaks
+
+        # Erstelle das Event
         event = Event(
-            title=self.title_input.value,
-            date=self.date_input.value,
-            time=self.time_input.value,
-            description=self.description_input.value,
-            roles=[role.strip() for role in self.roles_input.value.splitlines()]  # Split by line breaks
+            title=self.title,
+            date=self.date,
+            time=self.time,
+            description=description,
+            roles=roles
         )
 
-        # Send event information to the defined channel
+        # Sende die Event-Informationen an den definierten Kanal
         channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
         event_message = f"**Event:** {event.title}\n**Date:** {event.date}\n**Time:** {event.time}\n**Description:** {event.description}\n**Roles:** {', '.join(event.roles)}"
         event_post = await channel.send(event_message)
 
-        # Create thread
+        # Erstelle einen Thread
         thread = await event_post.create_thread(name=event.title)
 
-        # Role management in the thread
-        await thread.send("React with a number to sign up for a role. Type '-' to unsubscribe.")
+        # Rollenverwaltung im Thread
+        await thread.send("Reagiere mit einer Zahl, um dich für eine Rolle anzumelden. Tippe '-' um dich abzumelden.")
 
-        # Participant management
+        # Teilnehmerverwaltung
         def check(message):
             return message.channel == thread and message.author != bot.user
 
@@ -74,32 +75,34 @@ class MyModal(discord.ui.Modal, title="Eventify"):
 
                 if content.startswith('-'):
                     if content == '-':
-                        # Unsubscribe without a number
+                        # Abmelden ohne Nummer
                         if message.author.id in event.participants:
                             del event.participants[message.author.id]
-                            await thread.send(f"{message.author.mention} has unsubscribed.")
+                            await thread.send(f"{message.author.mention} hat sich abgemeldet.")
                         else:
-                            await thread.send(f"{message.author.mention}, you are not signed up for any role.")
+                            await thread.send(f"{message.author.mention}, du bist für keine Rolle angemeldet.")
                     else:
-                        # Unsubscribe with a number
+                        # Abmelden mit einer Nummer
                         role_index = int(content[1:]) - 1
                         if role_index in range(len(event.roles)):
                             if message.author.id in event.participants and event.participants[message.author.id] == event.roles[role_index]:
                                 del event.participants[message.author.id]
-                                await thread.send(f"{message.author.mention} has unsubscribed from the role '{event.roles[role_index]}'.")
+                                await thread.send(f"{message.author.mention} hat sich von der Rolle '{event.roles[role_index]}' abgemeldet.")
                             else:
-                                await thread.send(f"{message.author.mention}, you are not signed up for the role '{event.roles[role_index]}'.")
+                                await thread.send(f"{message.author.mention}, du bist nicht für die Rolle '{event.roles[role_index]}' angemeldet.")
                 else:
-                    # Sign up for a role
+                    # Anmelden für eine Rolle
                     try:
                         role_index = int(content) - 1
                         if role_index in range(len(event.roles)):
                             event.participants[message.author.id] = event.roles[role_index]
-                            await thread.send(f"{message.author.mention} has signed up for the role '{event.roles[role_index]}'.")
+                            await thread.send(f"{message.author.mention} hat sich für die Rolle '{event.roles[role_index]}' angemeldet.")
                         else:
-                            await thread.send(f"{message.author.mention}, this role does not exist.")
+                            await thread.send(f"{message.author.mention}, diese Rolle existiert nicht.")
                     except ValueError:
-                        await thread.send(f"{message.author.mention}, please enter a valid number or '-' to unsubscribe.")
+                        await thread.send(f"{message.author.mention}, bitte gib eine gültige Zahl oder '-' zum Abmelden ein.")
+            except Exception as e:
+                await thread.send(f"Ein Fehler ist aufgetreten: {str(e)}")
 
 class MyBot(discord.Client):
     def __init__(self):
@@ -108,23 +111,30 @@ class MyBot(discord.Client):
 
     async def on_ready(self):
         print(f"Logged in as {self.user}")
-        await self.tree.sync(guild=discord.Object(id=GUILD_ID))  # Synchronize only with the specified guild
+        await self.tree.sync(guild=discord.Object(id=GUILD_ID))  # Synchronisiere nur mit der angegebenen Gilde
         print("Slash commands synchronized!")
 
 bot = MyBot()
 
-@bot.tree.command(name="create", description="Start an event")
-async def create_event(interaction: discord.Interaction):
-    await interaction.response.send_modal(MyModal())
+@bot.tree.command(name="eventify", description="Start an event")
+async def create_event(interaction: discord.Interaction, title: str, date: str, time: str):
+    # Überprüfe das Format von Datum und Uhrzeit hier, falls nötig
+    # Beispiel: if not is_valid_date(date) or not is_valid_time(time):
+    #     await interaction.response.send_message("Bitte gib ein gültiges Datum und eine gültige Uhrzeit ein.", ephemeral=True)
+    #     return
+
+    # Erstelle das Modal für Beschreibung und Rollen
+    modal = MyModal(title, date, time)
+    await interaction.response.send_modal(modal)
 
 @bot.tree.command(name="list", description="List all events")
 async def list_events(interaction: discord.Interaction):
-    # Here you can add logic to retrieve and display the saved events
-    await interaction.response.send_message("Here are the current events: ...", ephemeral=True)
+    # Hier kannst du Logik hinzufügen, um die gespeicherten Events abzurufen und anzuzeigen
+    await interaction.response.send_message("Hier sind die aktuellen Events: ...", ephemeral=True)
 
 @bot.tree.command(name="propose", description="Propose a new role")
 async def propose_role(interaction: discord.Interaction, role_name: str):
-    # Here you can add logic to propose a new role
-    await interaction.response.send_message(f"Role '{role_name}' proposed!", ephemeral=True)
+    # Hier kannst du Logik hinzufügen, um eine neue Rolle vorzuschlagen
+    await interaction.response.send_message(f"Rolle '{role_name}' vorgeschlagen!", ephemeral=True)
 
-bot.run(TOKEN)
+bot.run(DISCORD_TOKEN)
