@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 from dotenv import load_dotenv
 import os
+from datetime import datetime
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -34,14 +35,14 @@ class MyModal(discord.ui.Modal, title="Eventify"):
     def __init__(self, title: str, date: str, time: str):
         super().__init__()
 
-        self.description_input = discord.ui.TextInput(label="Beschreibung", style=discord.TextStyle.paragraph, 
-                                                      placeholder="Gib eine Beschreibung für das Event ein.", 
+        self.description_input = discord.ui.TextInput(label="Beschreibung", style=discord.TextStyle.paragraph,
+                                                      placeholder="Gib eine Beschreibung für das Event ein.",
                                                       required=True)
         self.add_item(self.description_input)
 
-        self.roles_input = discord.ui.TextInput(label="Rollen (getrennt durch Zeilenumbrüche)", 
-                                                 style=discord.TextStyle.paragraph, 
-                                                 placeholder="Gib die Rollen ein, die für das Event benötigt werden.", 
+        self.roles_input = discord.ui.TextInput(label="Rollen (getrennt durch Zeilenumbrüche)",
+                                                 style=discord.TextStyle.paragraph,
+                                                 placeholder="Gib die Rollen ein, die für das Event benötigt werden.",
                                                  required=True)
         self.add_item(self.roles_input)
 
@@ -62,7 +63,7 @@ class MyModal(discord.ui.Modal, title="Eventify"):
         )
 
         channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
-        event_message = f"**Event:** {event.title}\n**Date:** {event.date}\n**Time:** {event.time}\n**Description:** {event.description}\n**Roles:** {', '.join(event.roles)}"
+        event_message = f"**Event:** {event.title}\n**Datum:** {event.date}\n**Zeit:** {event.time}\n**Beschreibung:** {event.description}\n**Rollen:** {', '.join(event.roles)}"
         event_post = await channel.send(event_message)
 
         thread = await event_post.create_thread(name=event.title)
@@ -106,9 +107,31 @@ class MyModal(discord.ui.Modal, title="Eventify"):
 
 bot = MyBot()
 
+def parse_date(date_str: str):
+    try:
+        return datetime.strptime(date_str, "%d%m%Y").date()
+    except ValueError:
+        return None
+
+def parse_time(time_str: str):
+    try:
+        return datetime.strptime(time_str, "%H%M").time()
+    except ValueError:
+        return None
+
 @bot.tree.command(name="eventify", description="Start to eventify")
 async def create_event(interaction: discord.Interaction, title: str, date: str, time: str):
-    modal = MyModal(title, date, time)
+    parsed_date = parse_date(date)
+    parsed_time = parse_time(time)
+
+    if not parsed_date or not parsed_time:
+        await interaction.response.send_message("Ungültiges Datum oder Zeitformat! Bitte verwende DDMMYYYY für das Datum und HHMM für die Zeit.", ephemeral=True)
+        return
+
+    formatted_date = parsed_date.strftime("%d.%m.%Y")
+    formatted_time = parsed_time.strftime("%H:%M")
+
+    modal = MyModal(title, formatted_date, formatted_time)
     await interaction.response.send_modal(modal)
 
 @bot.tree.command(name="list", description="List all events")
