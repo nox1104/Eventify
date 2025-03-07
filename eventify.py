@@ -45,6 +45,18 @@ class MyBot(discord.Client):
         if isinstance(message.channel, discord.Thread):
             event_title = message.channel.name
             
+            # Load events from JSON for role index conversion
+            events = load_upcoming_events()
+            event = next((e for e in events if e['title'] == event_title), None)
+            
+            if not event:
+                logger.warning(f"No event found matching thread name: {event_title}")
+                # Only respond if user is attempting command
+                if message.content.strip() and (message.content.strip()[0].isdigit() or message.content.strip() == "-" or 
+                                               (message.content.strip().startswith("-") and message.content.strip()[1:].isdigit())):
+                    await message.channel.send("No matching event found for this thread.")
+                return
+            
             # Check for digit at the beginning (sign up for role)
             if message.content.strip() and message.content.strip()[0].isdigit():
                 # Extract the role number (everything until the first non-digit)
@@ -57,9 +69,17 @@ class MyBot(discord.Client):
                 
                 if role_number_str:
                     # Convert to int and process the role signup
-                    role_number = int(role_number_str)
+                    display_role_number = int(role_number_str)
                     logger.info(f"Processing role signup in thread: {message.channel.name}, content: {message.content}")
-                    await self._handle_role_signup(message, event_title, role_number)
+                    
+                    # Umwandlung von angezeigter Rollennummer zu tatsächlichem Index
+                    actual_role_index = self.role_number_to_index(event, display_role_number)
+                    
+                    if actual_role_index >= 0:
+                        # Anmeldung mit dem tatsächlichen Rollenindex verarbeiten
+                        await self._handle_role_signup(message, event_title, actual_role_index + 1)
+                    else:
+                        await message.channel.send(f"Invalid role number. Please select a number between 1 and {len(event['roles'])}.")
             
             # Check for unregister all roles with "-"
             elif message.content.strip() == "-":
@@ -68,9 +88,17 @@ class MyBot(discord.Client):
             
             # Check for unregister from specific role with "-N"
             elif message.content.strip().startswith("-") and message.content.strip()[1:].isdigit():
-                role_number = int(message.content.strip()[1:])
-                logger.info(f"Processing unregister from role {role_number}: {message.channel.name}, user: {message.author.name}")
-                await self._handle_unregister(message, True, role_number - 1)
+                display_role_number = int(message.content.strip()[1:])
+                logger.info(f"Processing unregister from role {display_role_number}: {message.channel.name}, user: {message.author.name}")
+                
+                # Umwandlung von angezeigter Rollennummer zu tatsächlichem Index
+                actual_role_index = self.role_number_to_index(event, display_role_number)
+                
+                if actual_role_index >= 0:
+                    # Abmeldung mit dem tatsächlichen Rollenindex verarbeiten
+                    await self._handle_unregister(message, True, actual_role_index)
+                else:
+                    await message.channel.send(f"Invalid role number. Please select a number between 1 and {len(event['roles'])}.")
         else:
             logger.debug("Message is not in a thread.")
 
@@ -333,90 +361,61 @@ class MyBot(discord.Client):
             
             # Extrahiere reguläre Rollen (alles außer FillALL)
             regular_roles = []
+            section_headers = []
             for i, role in enumerate(event['roles']):
                 if i != fill_index:  # Alles außer die FillALL-Rolle
-                    regular_roles.append((i, role))
+                    # Prüfe, ob es sich um eine Abschnittsüberschrift handelt (Text in Klammern)
+                    if role.strip().startswith('(') and role.strip().endswith(')'):
+                        section_headers.append((i, role))
+                    else:
+                        regular_roles.append((i, role))
 
-            # Begrenze die Anzahl der Felder für reguläre Rollen
-            max_role_fields = 23  # 24 fields total (23 + 1 for FillALL)
+            # Erstellung des Inhalts für alle regulären Rollen
+            field_content = ""
+            current_section = None
 
-            # Wenn wir mehr als max_role_fields reguläre Rollen haben, müssen wir sie gruppieren
-            if len(regular_roles) > max_role_fields:
-                # Gruppiere je 3 Rollen in ein Feld
-                role_groups = []
-                for i in range(0, len(regular_roles), 3):
-                    group = regular_roles[i:i+3]
-                    role_groups.append(group)
-                
-                # Erstelle Felder für jede Gruppe
-                for group_idx, group in enumerate(role_groups):
-                    if group_idx < max_role_fields:  # Stelle sicher, dass wir nicht mehr als max_role_fields Felder erstellen
-                        # Verwende keine Überschrift, einfach ein leeres Feld
-                        field_name = "\u200b"  # Unsichtbares Zeichen als Feldname
-                        field_content = ""
-                        
-                        for role_idx, role_name in group:
-                            role_key = f"{role_idx}:{role_name}"
-                            # Zeige die Rolle auf einer eigenen Zeile
-                            line_title = f"{role_idx+1}. {role_name}"
-                            field_content += line_title + "\n"
-                            
-                            # Player information
-                            participants = event.get('participants', {}).get(role_key, [])
-                            
-                            if participants:
-                                # Sort participants by timestamp and take only the first one (most recent)
-                                sorted_participants = sorted(participants, key=lambda x: x[2] if len(x) > 2 else 0)
-                                
-                                # Only display the first player (most recent signup)
-                                p_data = sorted_participants[0]
-                                if len(p_data) >= 2:  # Make sure we have at least name and ID
-                                    p_id = p_data[1]
-                                    field_content += f"<@{p_id}>"
-                                    
-                                    # Add comment if exists, on a new line
-                                    if len(p_data) >= 4 and p_data[3]:
-                                        field_content += f"\n{p_data[3]}"
-                                    
-                                    field_content += "\n"  # Neue Zeile nach Spieler/Kommentar
-                            else:
-                                field_content += "-\n"  # Anzeigen von "-" wenn kein Spieler
-                            
-                            field_content += "\n"  # Extra spacing between roles
-                        
-                        # Füge das Feld zum Embed hinzu
-                        embed.add_field(name=field_name, value=field_content, inline=True)
-            else:
-                # Wir haben weniger als max_role_fields Rollen, also können wir jede Rolle einzeln anzeigen
-                for role_idx, role_name in regular_roles:
+            # Gehe durch alle Rollen und Abschnittsüberschriften in der ursprünglichen Reihenfolge
+            all_items = section_headers + regular_roles
+            all_items.sort(key=lambda x: x[0])  # Sortiere nach dem ursprünglichen Index
+
+            for role_idx, role_name in all_items:
+                # Prüfe, ob es sich um eine Abschnittsüberschrift handelt
+                if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
+                    # Füge eine Leerzeile ein, wenn es nicht die erste Überschrift ist
+                    if field_content:
+                        field_content += "\n"
+                    field_content += f"**{role_name}**\n"
+                else:
+                    # Dies ist eine normale Rolle
+                    # Rolle und Teilnehmer anzeigen
                     role_key = f"{role_idx}:{role_name}"
-                    field_name = f"{role_idx+1}. {role_name}"
-                    
-                    # Player information
                     participants = event.get('participants', {}).get(role_key, [])
                     
-                    # Erstelle den Feldinhalt
-                    field_content = ""
-                    
                     if participants:
-                        # Sort participants by timestamp and take only the first one (most recent)
+                        # Sortiere Teilnehmer nach Zeitstempel und zeige nur den ersten
                         sorted_participants = sorted(participants, key=lambda x: x[2] if len(x) > 2 else 0)
-                        
-                        # Only display the first player (most recent signup)
                         p_data = sorted_participants[0]
-                        if len(p_data) >= 2:  # Make sure we have at least name and ID
+                        
+                        if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
                             p_id = p_data[1]
-                            field_content = f"<@{p_id}>"
                             
-                            # Add comment if exists, on a new line
+                            # Rolle und Spieler in einer Zeile
+                            field_content += f"{role_idx+1}. {role_name} <@{p_id}>"
+                            
+                            # Kommentar falls vorhanden
                             if len(p_data) >= 4 and p_data[3]:
-                                field_content += f"\n{p_data[3]}"
+                                field_content += f" {p_data[3]}"
+                            
+                            field_content += "\n"
+                        else:
+                            field_content += f"{role_idx+1}. {role_name} -\n"
                     else:
-                        field_content = "-"
-                    
-                    # Füge das Feld zum Embed hinzu
-                    embed.add_field(name=field_name, value=field_content, inline=True)
-            
+                        field_content += f"{role_idx+1}. {role_name} -\n"
+
+            # Füge alle regulären Rollen als ein einziges Feld hinzu
+            if field_content:
+                embed.add_field(name="\u200b", value=field_content, inline=False)
+
             # Add Fill role section
             fill_text = ""
             fill_players_text = ""
@@ -473,6 +472,39 @@ class MyBot(discord.Client):
             logger.error(f"Error in update_event_message: {e}")
             await thread.send(f"Error updating event message: {str(e)}")
             return False
+
+    def role_number_to_index(self, event, role_number):
+        """
+        Wandelt die fortlaufende Rollennummer (1, 2, 3...) in den tatsächlichen Index in der Rollenliste um.
+        
+        Args:
+            event: Das Event-Objekt
+            role_number: Die angezeigte Rollennummer (1-basiert)
+        
+        Returns:
+            Der tatsächliche Index der Rolle im event['roles'] Array
+        """
+        # Find the Fill role index
+        fill_index = next((i for i, role in enumerate(event['roles']) if role.lower() in ["fill", "fillall"]), None)
+        
+        # Get all regular roles (excluding FillALL and section headers)
+        regular_roles = []
+        for i, role in enumerate(event['roles']):
+            if i != fill_index:  # Alles außer die FillALL-Rolle
+                # Ignoriere Abschnittsüberschriften (Texte in Klammern)
+                if not (role.strip().startswith('(') and role.strip().endswith(')')):
+                    regular_roles.append((i, role))
+        
+        # Check if role_number is within range of regular roles
+        if 1 <= role_number <= len(regular_roles):
+            # Return the actual index of the role in the original roles array
+            return regular_roles[role_number-1][0]
+        elif role_number == len(regular_roles) + 1 and fill_index is not None:
+            # If the role_number is for the FillALL role
+            return fill_index
+        else:
+            # Invalid role number
+            return -1
 
 class Event:
     def __init__(self, title, date, time, description, roles, datetime_obj=None):
@@ -569,90 +601,61 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 
                 # Extrahiere reguläre Rollen (alles außer FillALL)
                 regular_roles = []
+                section_headers = []
                 for i, role in enumerate(roles):
                     if i != fill_index:  # Alles außer die FillALL-Rolle
-                        regular_roles.append((i, role))
-                
-                # Begrenze die Anzahl der Felder für reguläre Rollen
-                max_role_fields = 23  # 24 fields total (23 + 1 for FillALL)
+                        # Prüfe, ob es sich um eine Abschnittsüberschrift handelt (Text in Klammern)
+                        if role.strip().startswith('(') and role.strip().endswith(')'):
+                            section_headers.append((i, role))
+                        else:
+                            regular_roles.append((i, role))
 
-                # Wenn wir mehr als max_role_fields reguläre Rollen haben, müssen wir sie gruppieren
-                if len(regular_roles) > max_role_fields:
-                    # Gruppiere je 3 Rollen in ein Feld
-                    role_groups = []
-                    for i in range(0, len(regular_roles), 3):
-                        group = regular_roles[i:i+3]
-                        role_groups.append(group)
-                    
-                    # Erstelle Felder für jede Gruppe
-                    for group_idx, group in enumerate(role_groups):
-                        if group_idx < max_role_fields:  # Stelle sicher, dass wir nicht mehr als max_role_fields Felder erstellen
-                            # Verwende keine Überschrift, einfach ein leeres Feld
-                            field_name = "\u200b"  # Unsichtbares Zeichen als Feldname
-                            field_content = ""
-                            
-                            for role_idx, role_name in group:
-                                role_key = f"{role_idx}:{role_name}"
-                                # Zeige die Rolle auf einer eigenen Zeile
-                                line_title = f"{role_idx+1}. {role_name}"
-                                field_content += line_title + "\n"
-                                
-                                # Player information
-                                participants = getattr(event, 'participants', {}).get(role_key, [])
-                                
-                                if participants:
-                                    # Sort participants by timestamp and take only the first one (most recent)
-                                    sorted_participants = sorted(participants, key=lambda x: x[2] if len(x) > 2 else 0)
-                                    
-                                    # Only display the first player (most recent signup)
-                                    p_data = sorted_participants[0]
-                                    if len(p_data) >= 2:  # Make sure we have at least name and ID
-                                        p_id = p_data[1]
-                                        field_content += f"<@{p_id}>"
-                                        
-                                        # Add comment if exists, on a new line
-                                        if len(p_data) >= 4 and p_data[3]:
-                                            field_content += f"\n{p_data[3]}"
-                                        
-                                        field_content += "\n"  # Neue Zeile nach Spieler/Kommentar
-                                else:
-                                    field_content += "-\n"  # Anzeigen von "-" wenn kein Spieler
-                                
-                                field_content += "\n"  # Extra spacing between roles
-                            
-                            # Füge das Feld zum Embed hinzu
-                            embed.add_field(name=field_name, value=field_content, inline=True)
-                else:
-                    # Wir haben weniger als max_role_fields Rollen, also können wir jede Rolle einzeln anzeigen
-                    for role_idx, role_name in regular_roles:
+                # Erstellung des Inhalts für alle regulären Rollen
+                field_content = ""
+                current_section = None
+
+                # Gehe durch alle Rollen und Abschnittsüberschriften in der ursprünglichen Reihenfolge
+                all_items = section_headers + regular_roles
+                all_items.sort(key=lambda x: x[0])  # Sortiere nach dem ursprünglichen Index
+
+                for role_idx, role_name in all_items:
+                    # Prüfe, ob es sich um eine Abschnittsüberschrift handelt
+                    if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
+                        # Füge eine Leerzeile ein, wenn es nicht die erste Überschrift ist
+                        if field_content:
+                            field_content += "\n"
+                        field_content += f"**{role_name}**\n"
+                    else:
+                        # Dies ist eine normale Rolle
+                        # Rolle und Teilnehmer anzeigen
                         role_key = f"{role_idx}:{role_name}"
-                        field_name = f"{role_idx+1}. {role_name}"
-                        
-                        # Player information
-                        participants = getattr(event, 'participants', {}).get(role_key, [])
-                        
-                        # Erstelle den Feldinhalt
-                        field_content = ""
+                        participants = event.get('participants', {}).get(role_key, [])
                         
                         if participants:
-                            # Sort participants by timestamp and take only the first one (most recent)
+                            # Sortiere Teilnehmer nach Zeitstempel und zeige nur den ersten
                             sorted_participants = sorted(participants, key=lambda x: x[2] if len(x) > 2 else 0)
-                            
-                            # Only display the first player (most recent signup)
                             p_data = sorted_participants[0]
-                            if len(p_data) >= 2:  # Make sure we have at least name and ID
+                            
+                            if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
                                 p_id = p_data[1]
-                                field_content = f"<@{p_id}>"
                                 
-                                # Add comment if exists, on a new line
+                                # Rolle und Spieler in einer Zeile
+                                field_content += f"{role_idx+1}. {role_name} <@{p_id}>"
+                                
+                                # Kommentar falls vorhanden
                                 if len(p_data) >= 4 and p_data[3]:
-                                    field_content += f"\n{p_data[3]}"
+                                    field_content += f" {p_data[3]}"
+                                
+                                field_content += "\n"
+                            else:
+                                field_content += f"{role_idx+1}. {role_name} -\n"
                         else:
-                            field_content = "-"
-                        
-                        # Füge das Feld zum Embed hinzu
-                        embed.add_field(name=field_name, value=field_content, inline=True)
-                
+                            field_content += f"{role_idx+1}. {role_name} -\n"
+
+                # Füge alle regulären Rollen als ein einziges Feld hinzu
+                if field_content:
+                    embed.add_field(name="\u200b", value=field_content, inline=False)
+
                 # Add Fill role section
                 fill_text = ""
                 fill_players_text = ""
@@ -664,7 +667,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                     
                     # Get participants for Fill role
                     fill_key = f"{fill_index}:{roles[fill_index]}"
-                    fill_participants = getattr(event, 'participants', {}).get(fill_key, [])
+                    fill_participants = event.get('participants', {}).get(fill_key, [])
                     
                     if fill_participants:
                         # Sort participants by timestamp
