@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from dotenv import load_dotenv
 import os
-from datetime import datetime
+from datetime import datetime, time
 import json
 import logging
 
@@ -45,10 +45,21 @@ class MyBot(discord.Client):
         if isinstance(message.channel, discord.Thread):
             event_title = message.channel.name
             
-            # Check for digit (sign up for role)
-            if message.content.isdigit():
-                logger.info(f"Processing role signup in thread: {message.channel.name}, content: {message.content}")
-                await self._handle_role_signup(message, event_title, int(message.content))
+            # Check for digit at the beginning (sign up for role)
+            if message.content.strip() and message.content.strip()[0].isdigit():
+                # Extract the role number (everything until the first non-digit)
+                role_number_str = ""
+                for char in message.content.strip():
+                    if char.isdigit():
+                        role_number_str += char
+                    else:
+                        break
+                
+                if role_number_str:
+                    # Convert to int and process the role signup
+                    role_number = int(role_number_str)
+                    logger.info(f"Processing role signup in thread: {message.channel.name}, content: {message.content}")
+                    await self._handle_role_signup(message, event_title, role_number)
             
             # Check for unregister all roles with "-"
             elif message.content.strip() == "-":
@@ -88,7 +99,15 @@ class MyBot(discord.Client):
                     player_id = str(message.author.id)
                     current_time = datetime.now().timestamp()  # For sorting by signup time
 
-                    logger.info(f"Assigning {player_name} to role {role_name} at index {role_index}")
+                    # Extract optional comment if any
+                    # Look for the first space after the role number
+                    if ' ' in message.content:
+                        # The comment is everything after the first space
+                        comment = message.content.split(' ', 1)[1].strip()
+                    else:
+                        comment = ""
+                    
+                    logger.info(f"Assigning {player_name} to role {role_name} at index {role_index} with comment: {comment}")
                     
                     # Initialize participants dict if needed
                     if 'participants' not in event:
@@ -102,119 +121,77 @@ class MyBot(discord.Client):
                     
                     # Check if player is already signed up for this role
                     existing_entry = next((i for i, entry in enumerate(event['participants'][role_key]) 
-                                         if entry[0] == player_name), None)
+                                         if entry[1] == player_id), None)
                     
                     if existing_entry is not None:
-                        # Player is already signed up, do nothing
-                        logger.info(f"{player_name} already assigned to role {role_name} at index {role_index}")
-                        await message.add_reaction('ℹ️')  # Info reaction
+                        # Player is already signed up, update comment if provided
+                        if comment:
+                            existing_data = event['participants'][role_key][existing_entry]
+                            # Update with comment (name, id, timestamp, comment)
+                            if len(existing_data) >= 4:
+                                event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
+                            else:
+                                event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
+                            await self._update_event_and_save(message, event, events)
+                            await message.add_reaction('✅')  # Add confirmation reaction
+                            logger.info(f"Updated comment for {player_name} in role {role_name}")
+                        else:
+                            # Just acknowledge if no comment to update
+                            logger.info(f"{player_name} already assigned to role {role_name} at index {role_index}")
+                            await message.add_reaction('ℹ️')  # Info reaction
                     else:
-                        # For Fill role, no limit on players
+                        # For Fill role, no limit on players and can be added even if already registered for another role
                         if is_fill_role:
-                            # Add new entry with timestamp for sorting
-                            event['participants'][role_key].append((player_name, player_id, current_time))
+                            # Add new entry with timestamp and comment
+                            if comment:
+                                event['participants'][role_key].append((player_name, player_id, current_time, comment))
+                            else:
+                                event['participants'][role_key].append((player_name, player_id, current_time))
+                            
                             logger.info(f"Added {player_name} to Fill role")
                             
                             # Update the event message and save to JSON
                             await self._update_event_and_save(message, event, events)
                             await message.add_reaction('✅')  # Add confirmation reaction
                         else:
-                            # For regular roles, check choice number and if that position is available
-                            # First, calculate each player's choice order across all roles
-                            player_choices = {}  # Player name -> list of roles in order of signup
-                            
-                            # Get all participants sorted by timestamp across all roles
-                            all_participants = []
+                            # Check if player is already signed up for another role (except Fill)
+                            already_signed_up = False
+                            player_current_role = None
                             for r_idx, r_name in enumerate(event['roles']):
+                                if r_name.lower() == "fill":
+                                    continue  # Skip Fill role
+                                
                                 r_key = f"{r_idx}:{r_name}"
                                 if r_key in event.get('participants', {}):
-                                    for p_name, p_id, p_time in event['participants'][r_key]:
-                                        all_participants.append((p_name, p_id, r_idx, p_time))
+                                    if any(entry[1] == player_id for entry in event['participants'][r_key]):
+                                        already_signed_up = True
+                                        player_current_role = r_name
+                                        break
                             
-                            # Sort all participants by timestamp to get the signup order
-                            all_participants.sort(key=lambda x: x[3])  # Sort by timestamp
-                            
-                            # Build the player choice map
-                            for p_name, _, r_idx, _ in all_participants:
-                                if p_name not in player_choices:
-                                    player_choices[p_name] = []
-                                if r_idx not in [role_idx for role_idx in player_choices[p_name]]:
-                                    player_choices[p_name].append(r_idx)
-                            
-                            # Determine player's current choice number (0=first, 1=second, 2=third)
-                            choice_num = 0
-                            if player_name in player_choices:
-                                # Count only non-Fill roles
-                                fill_roles = [i for i, r in enumerate(event['roles']) if r.lower() == 'fill']
-                                non_fill_choices = [c for c in player_choices[player_name] if c not in fill_roles]
-                                choice_num = len(non_fill_choices)
-                            
-                            # Don't allow more than 3 choices
-                            if choice_num >= 3:
-                                logger.warning(f"{player_name} already has 3 role choices")
+                            if already_signed_up:
+                                # Player is already signed up for another role
+                                logger.warning(f"{player_name} is already signed up for role {player_current_role}")
                                 await message.add_reaction('❌')  # Rejected reaction
-                                await message.channel.send(f"Sorry, you already have 3 role choices. Please unregister from some roles first.")
-                                return
-                            
-                            # Check if this position (color) is already taken in this role
-                            position_taken = False
-                            
-                            # Get the roles' existing participants
-                            participants = event.get('participants', {}).get(role_key, [])
-                            
-                            # Count how many players have each choice number for this role
-                            first_choices = 0  # Green
-                            second_choices = 0  # Yellow
-                            third_choices = 0  # Orange
-                            
-                            for p_name, _, _ in participants:
-                                if p_name in player_choices:
-                                    try:
-                                        # Find this role's position in the player's choices
-                                        p_choice_num = player_choices[p_name].index(role_index)
-                                        
-                                        # Skip Fill role for counting choices
-                                        fill_roles = [i for i, r in enumerate(event['roles']) if r.lower() == 'fill']
-                                        non_fill_choices = [c for c in player_choices[p_name] if c not in fill_roles]
-                                        if role_index in non_fill_choices:
-                                            p_choice_num = non_fill_choices.index(role_index)
-                                        
-                                        if p_choice_num == 0:
-                                            first_choices += 1
-                                        elif p_choice_num == 1:
-                                            second_choices += 1
-                                        else:
-                                            third_choices += 1
-                                    except ValueError:
-                                        # If role not in player's choices, count as first choice
-                                        first_choices += 1
-                            
-                            # Check if the player's desired choice level is already taken
-                            if choice_num == 0 and first_choices >= 1:
-                                position_taken = True
-                                await message.channel.send(f"Sorry, the first choice (green) for '{role_name}' is already taken.")
-                            elif choice_num == 1 and second_choices >= 1:
-                                position_taken = True
-                                await message.channel.send(f"Sorry, the second choice (yellow) for '{role_name}' is already taken.")
-                            elif choice_num == 2 and third_choices >= 1:
-                                position_taken = True
-                                await message.channel.send(f"Sorry, the third choice (orange) for '{role_name}' is already taken.")
-                            
-                            # Also check if role is full (max 3 players)
-                            if len(participants) >= 3:
-                                position_taken = True
-                                await message.channel.send(f"Sorry, the role '{role_name}' already has the maximum of 3 players.")
-                            
-                            if position_taken:
-                                await message.add_reaction('❌')  # Rejected reaction
+                                await message.channel.send(f"Sorry, you are already signed up for role '{player_current_role}'. You can only sign up for one role (except Fill). If you want to change your role, unregister first with `-{event['roles'].index(player_current_role)+1}` and then sign up for the new role. You can add a comment to note your alternative roles.")
                             else:
-                                # Add new entry with timestamp for sorting
-                                event['participants'][role_key].append((player_name, player_id, current_time))
-                                logger.info(f"Added {player_name} to role {role_name} as choice #{choice_num+1}")
-                                
-                                # Update the event message and save to JSON
-                                await self._update_event_and_save(message, event, events)
-                                await message.add_reaction('✅')  # Add confirmation reaction
+                                # For regular roles, check if there's space
+                                if len(event['participants'][role_key]) < 3:  # Max 3 players per regular role
+                                    # Add new entry with timestamp and comment
+                                    if comment:
+                                        event['participants'][role_key].append((player_name, player_id, current_time, comment))
+                                    else:
+                                        event['participants'][role_key].append((player_name, player_id, current_time))
+                                    
+                                    logger.info(f"Added {player_name} to role {role_name}")
+                                    
+                                    # Update the event message and save to JSON
+                                    await self._update_event_and_save(message, event, events)
+                                    await message.add_reaction('✅')  # Add confirmation reaction
+                                else:
+                                    # Role already has three players
+                                    logger.warning(f"Role {role_name} already has 3 players, {player_name} cannot join")
+                                    await message.add_reaction('❌')  # Rejected reaction
+                                    await message.channel.send(f"Sorry, the role '{role_name}' already has the maximum of 3 players. Please select another role.")
                 else:
                     logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
                     await message.channel.send(f"Invalid role number. Please select a number between 1 and {len(event['roles'])}.")
@@ -332,164 +309,137 @@ class MyBot(discord.Client):
         try:
             logger.info(f"Updating event message for event: {event['title']}")
             
-            # First, calculate each player's choice order across all roles
-            player_choices = {}  # Player name -> list of roles in order of signup
+            # Create Discord Embed
+            embed = discord.Embed(title=event['title'], color=0x0dceda)  # Geänderte Embed-Farbe
             
-            # Get all participants sorted by timestamp across all roles
-            all_participants = []
-            for r_idx, r_name in enumerate(event['roles']):
-                r_key = f"{r_idx}:{r_name}"
-                if r_key in event.get('participants', {}):
-                    for p_name, p_id, p_time in event['participants'][r_key]:
-                        all_participants.append((p_name, p_id, r_idx, p_time))
+            # Add event details
+            embed.add_field(name="Date", value=event['date'], inline=True)
+            embed.add_field(name="Time", value=event['time'], inline=True)
+            embed.add_field(name="Description", value=event['description'], inline=False)
             
-            # Sort all participants by timestamp to get the signup order
-            all_participants.sort(key=lambda x: x[3])  # Sort by timestamp
-            
-            # Build the player choice map
-            for p_name, _, r_idx, _ in all_participants:
-                if p_name not in player_choices:
-                    player_choices[p_name] = []
-                if r_idx not in [role_idx for role_idx in player_choices[p_name]]:
-                    player_choices[p_name].append(r_idx)
-
-            # Prepare all players for each role
-            role_players = {}
-            fill_index = -1
-            
-            for i, role in enumerate(event['roles']):
-                # Find the Fill role
-                if role.lower() == "fill":
-                    fill_index = i
-                    continue  # Skip Fill for now
-                    
-                role_key = f"{i}:{role}"
-                participants = event.get('participants', {}).get(role_key, [])
-                
-                if participants:
-                    # Get the choice number for each player in this role
-                    player_choices_in_role = {}  # player_name -> choice number (0=first, 1=second, 2=third)
-                    
-                    for p_name, _, _ in participants:
-                        if p_name in player_choices:
-                            try:
-                                # Find this role's position in the player's choices
-                                choice_num = player_choices[p_name].index(i)
-                                # Skip Fill role for counting choices
-                                if fill_index >= 0:
-                                    # Adjust choice number to skip Fill role
-                                    actual_choices = [c for c in player_choices[p_name] if c != fill_index]
-                                    if i in actual_choices:
-                                        choice_num = actual_choices.index(i)
-                                player_choices_in_role[p_name] = choice_num
-                            except ValueError:
-                                player_choices_in_role[p_name] = 0
-                    
-                    # Organize players by their choice number
-                    first_choice = []
-                    second_choice = []
-                    third_choice = []
-                    
-                    for p_name, _, _ in participants:
-                        choice = player_choices_in_role.get(p_name, 0)
-                        if choice == 0:
-                            first_choice.append(p_name)
-                        elif choice == 1:
-                            second_choice.append(p_name)
-                        else:
-                            third_choice.append(p_name)
-                    
-                    role_players[i] = {
-                        'first': first_choice,
-                        'second': second_choice,
-                        'third': third_choice
-                    }
-            
-            # Now build the actual display
-            table_rows = []
-            
-            # Process each role
-            for i, role in enumerate(event['roles']):
-                # Skip Fill for now
-                if role.lower() == "fill":
-                    continue
-                    
-                # Format role with number and name (with padding 0 for numbers < 10)
-                role_number = f"{i+1:02d}"  # Format with leading zero if < 10
-                role_text = f"{role_number}. **{role}**"  # Make role name bold
-                
-                # Add the role to the table
-                table_rows.append(role_text)
-                
-                # Add participants hierarchically, sorted by choice (first, second, third)
-                if i in role_players:
-                    choices = role_players[i]
-                    player_num = 1
-                    
-                    # Add first choice players (green)
-                    for player in choices['first']:
-                        table_rows.append(f"    {player_num}. {player}")
-                        player_num += 1
-                    
-                    # Add second choice players (yellow)
-                    for player in choices['second']:
-                        table_rows.append(f"    {player_num}. 🟡 {player}")
-                        player_num += 1
-                    
-                    # Add third choice players (orange)
-                    for player in choices['third']:
-                        table_rows.append(f"    {player_num}. 🟠 {player}")
-                        player_num += 1
-                
-                # Add an empty line after each role for better readability
-                table_rows.append("")
-            
-            # Add the Fill role if it exists
-            if fill_index >= 0:
-                fill_role = event['roles'][fill_index]
-                fill_key = f"{fill_index}:{fill_role}"
-                fill_participants = event.get('participants', {}).get(fill_key, [])
-                
-                # Format Fill role with number and name
-                fill_number = f"{fill_index+1:02d}"  # Format with leading zero if < 10
-                fill_text = f"{fill_number}. **{fill_role}**"  # Make Fill role bold
-                
-                # Add the Fill role to the table
-                table_rows.append(fill_text)
-                
-                # Add all Fill participants in a flat list
-                if fill_participants:
-                    # Sort participants by timestamp
-                    sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
-                    
-                    # No limit for Fill role, list all participants
-                    for idx, (name, _, _) in enumerate(sorted_fill):
-                        table_rows.append(f"    {idx+1}. {name}")
-            else:
+            # Find the Fill role
+            fill_index = next((i for i, role in enumerate(event['roles']) if role.lower() == "fill"), None)
+            if fill_index is None:
                 # If no Fill role found, add one
                 fill_index = len(event['roles'])
-                fill_number = f"{fill_index+1:02d}"  # Format with leading zero
-                
-                # Add Fill role
-                table_rows.append(f"{fill_number}. **Fill**")  # Make Fill role bold
-                
-                # Add Fill role to the event
                 event['roles'].append("Fill")
                 # Save the updated event
                 save_event_to_json(event)
             
-            # DON'T wrap in a code block to preserve bold formatting
-            table_text = "\n" + "\n".join(table_rows)
-            
-            # Improve date/time alignment using proper spacing
-            event_message = (
-                f"# {event['title']}\n\n"
-                f"**Date:** `{event['date']}`\n"
-                f"**Time:** `{event['time']}`\n\n"
-                f"**Description:**\n{event['description']}\n\n"
-                f"**Roles:**{table_text}"
-            )
+            # Extrahiere reguläre Rollen
+            regular_roles = []
+            for i, role in enumerate(event['roles']):
+                if role.lower() != "fill":
+                    regular_roles.append((i, role))
 
+            # Frame 1: Roles list (excluding Fill) - Horizontal field
+            roles_text = ""
+            roles_lines = []
+
+            for i, role in enumerate(event['roles']):
+                if role.lower() != "fill":
+                    roles_lines.append(f"{i+1}. {role}")
+
+            # Join with newlines to have the same spacing as the other columns
+            roles_text = "\n".join(roles_lines)
+
+            embed.add_field(name="Roles", value=roles_text, inline=True)
+
+            # Frame 2: Players by user ID (excluding Fill) - Horizontal field
+            players_text = ""
+
+            # Initialize with "-" for each regular role for players
+            players_lines = ["-" for _ in range(len(regular_roles))]
+
+            # Now add players to their correct positions
+            for idx, (role_idx, role_name) in enumerate(regular_roles):
+                role_key = f"{role_idx}:{role_name}"
+                participants = event.get('participants', {}).get(role_key, [])
+                
+                if participants:
+                    # Sort participants by timestamp
+                    sorted_participants = sorted(participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                    
+                    # Create player line
+                    player_line = ""
+                    for p_data in sorted_participants:
+                        if len(p_data) >= 2:  # Make sure we have at least name and ID
+                            p_id = p_data[1]
+                            player_line += f"<@{p_id}> "
+                    
+                    # Ensure correct assignment to the players_lines
+                    players_lines[idx] = player_line.strip() if player_line.strip() else "-"
+
+            # Join the lines
+            players_text = "\n".join(players_lines)
+
+            embed.add_field(name="Volan", value=players_text if players_text.strip() else "\u200b", inline=True)
+
+            # Frame 3: Comments if any (excluding Fill) - Horizontal field
+            comments_text = ""
+
+            # Initialize with "-" for each regular role for comments
+            comments_lines = ["-" for _ in range(len(regular_roles))]
+
+            # Now add comments to their correct positions
+            for idx, (role_idx, role_name) in enumerate(regular_roles):
+                role_key = f"{role_idx}:{role_name}"
+                participants = event.get('participants', {}).get(role_key, [])
+                
+                comments_for_role = []
+                for p_data in participants:
+                    if len(p_data) >= 4 and p_data[3]:  # Check if comment exists
+                        comments_for_role.append(p_data[3])
+                
+                if comments_for_role:
+                    # Create comment line
+                    comment_line = ", ".join(comments_for_role)
+                    
+                    # Update the line at the correct index
+                    if idx < len(comments_lines):
+                        comments_lines[idx] = comment_line
+                    else:
+                        # Wenn keine Kommentare vorhanden sind, behalte den "-" Platzhalter
+                        comments_lines[idx] = "-"
+
+            # Join the lines
+            comments_text = "\n".join(comments_lines)
+
+            embed.add_field(name="Comments", value=comments_text if comments_text.strip() else "\u200b", inline=True)
+
+            # Add Fill role section
+            fill_text = ""
+            fill_players_text = ""
+
+            if fill_index is not None:
+                fill_role = event['roles'][fill_index]
+                fill_key = f"{fill_index}:{fill_role}"
+                fill_participants = event.get('participants', {}).get(fill_key, [])
+                
+                # Add Fill role header
+                fill_text = f"{fill_index+1}. {fill_role}"
+                
+                if fill_participants:
+                    # Sort participants by timestamp
+                    sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                    
+                    # List all Fill participants
+                    for p_data in sorted_fill:
+                        if len(p_data) >= 2:  # Make sure we have at least name and ID
+                            p_id = p_data[1]
+                            fill_players_text += f"<@{p_id}>"
+                            
+                            # Add comment if exists
+                            if len(p_data) >= 4 and p_data[3]:
+                                fill_players_text += f" - {p_data[3]}"
+                            
+                            fill_players_text += "\n"
+
+            # Add Fill section (non-inline to create a new row)
+            embed.add_field(name=fill_text, value=fill_players_text if fill_players_text else "\u200b", inline=False)
+            
+            # No footer text as requested
+            
             # Find the parent message of the thread
             try:
                 # The more reliable way - if thread has starter_message attribute
@@ -503,14 +453,14 @@ class MyBot(discord.Client):
                     logger.info("Found message through parent channel fetch")
                 
                 # Edit the message
-                await message_to_edit.edit(content=event_message)
+                await message_to_edit.edit(content=None, embed=embed)
                 logger.info("Successfully updated event message")
                 return True
             except Exception as e:
                 logger.error(f"Error finding or editing message: {e}")
                 # If we can't find the message to edit, send a new one in the thread
                 await thread.send("Could not update the original post. Here's the updated information:")
-                await thread.send(event_message)
+                await thread.send(embed=embed)
                 return False
         except Exception as e:
             logger.error(f"Error in update_event_message: {e}")
@@ -570,37 +520,6 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             if not any(role.lower() == "fill" for role in roles):
                 roles.append("Fill")  # Add Fill role automatically
             
-            # Create table for initial display
-            table_rows = []
-            
-            # Add regular roles
-            fill_index = -1
-            for i, role in enumerate(roles):
-                if role.lower() == "fill":
-                    fill_index = i
-                    continue
-                
-                # Format role with number and name (with padding 0 for numbers < 10)
-                role_number = f"{i+1:02d}"  # Format with leading zero if < 10
-                role_text = f"{role_number}. **{role}**"  # Make role bold
-                
-                # Add the row to the table
-                table_rows.append(role_text)
-                # Add an empty line after each role
-                table_rows.append("")
-            
-            # Add Fill role
-            if fill_index >= 0:
-                fill_number = f"{fill_index+1:02d}"  # Format with leading zero
-                table_rows.append(f"{fill_number}. **{roles[fill_index]}**")  # Make role bold
-            else:
-                fill_index = len(roles) - 1
-                fill_number = f"{fill_index+1:02d}"  # Format with leading zero
-                table_rows.append(f"{fill_number}. **Fill**")  # Make role bold
-            
-            # Don't wrap in code block to preserve bold formatting
-            table_text = "\n" + "\n".join(table_rows)
-            
             event = Event(
                 title=self.title,
                 date=self.date,
@@ -619,18 +538,134 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 await interaction.response.send_message(f"Event '{self.title}' created successfully!", ephemeral=True)
                 
                 channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
-                event_message = (
-                    f"# {event.title}\n\n"
-                    f"**Date:** `{event.date}`\n"
-                    f"**Time:** `{event.time}`\n\n"
-                    f"**Description:**\n{event.description}\n\n"
-                    f"**Roles:**{table_text}"
-                )
                 
-                event_post = await channel.send(event_message)
+                # Create embed with horizontal frames
+                embed = discord.Embed(title=event.title, color=0x0dceda)  # Geänderte Embed-Farbe
+                
+                # Add event details
+                embed.add_field(name="Date", value=event.date, inline=True)
+                embed.add_field(name="Time", value=event.time, inline=True)
+                embed.add_field(name="Description", value=event.description, inline=False)
+                
+                # Find the Fill role
+                fill_index = next((i for i, role in enumerate(roles) if role.lower() == "fill"), None)
+                
+                # Extrahiere reguläre Rollen
+                regular_roles = []
+                for i, role in enumerate(roles):
+                    if role.lower() != "fill":
+                        regular_roles.append((i, role))
+                
+                # Frame 1: Roles list (excluding Fill) - Horizontal field
+                roles_text = ""
+                roles_lines = []
+
+                for i, role in enumerate(roles):
+                    if role.lower() != "fill":
+                        roles_lines.append(f"{i+1}. {role}")
+
+                # Join with newlines to have the same spacing as the other columns
+                roles_text = "\n".join(roles_lines)
+
+                embed.add_field(name="Roles", value=roles_text, inline=True)
+
+                # Frame 2: Players by user ID (excluding Fill) - Horizontal field
+                players_text = ""
+
+                # Initialize with "-" for each regular role for players
+                players_lines = ["-" for _ in range(len(regular_roles))]
+
+                # Now add players to their correct positions
+                for idx, (role_idx, role_name) in enumerate(regular_roles):
+                    role_key = f"{role_idx}:{role_name}"
+                    participants = event.participants.get(role_key, [])
+                    
+                    if participants:
+                        # Sort participants by timestamp
+                        sorted_participants = sorted(participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                        
+                        # Create player line
+                        player_line = ""
+                        for p_data in sorted_participants:
+                            if len(p_data) >= 2:  # Make sure we have at least name and ID
+                                p_id = p_data[1]
+                                player_line += f"<@{p_id}> "
+                        
+                        # Ensure correct assignment to the players_lines
+                        players_lines[idx] = player_line.strip() if player_line.strip() else "-"
+
+                # Join the lines
+                players_text = "\n".join(players_lines)
+
+                embed.add_field(name="Volan", value=players_text if players_text.strip() else "\u200b", inline=True)
+
+                # Frame 3: Comments if any (excluding Fill) - Horizontal field
+                comments_text = ""
+
+                # Initialize with "-" for each regular role for comments
+                comments_lines = ["-" for _ in range(len(regular_roles))]
+
+                # Now add comments to their correct positions
+                for idx, (role_idx, role_name) in enumerate(regular_roles):
+                    role_key = f"{role_idx}:{role_name}"
+                    participants = event.participants.get(role_key, [])
+                    
+                    comments_for_role = []
+                    for p_data in participants:
+                        if len(p_data) >= 4 and p_data[3]:  # Check if comment exists
+                            comments_for_role.append(p_data[3])
+                    
+                    if comments_for_role:
+                        # Create comment line
+                        comment_line = ", ".join(comments_for_role)
+                        
+                        # Update the line at the correct index
+                        if idx < len(comments_lines):
+                            comments_lines[idx] = comment_line
+                        else:
+                            # Wenn keine Kommentare vorhanden sind, behalte den "-" Platzhalter
+                            comments_lines[idx] = "-"
+
+                # Join the lines
+                comments_text = "\n".join(comments_lines)
+
+                embed.add_field(name="Comments", value=comments_text if comments_text.strip() else "\u200b", inline=True)
+
+                # Add Fill role section
+                fill_text = ""
+                fill_players_text = ""
+
+                if fill_index is not None:
+                    fill_role = roles[fill_index]
+                    fill_key = f"{fill_index}:{fill_role}"
+                    fill_participants = event.participants.get(fill_key, [])
+                    
+                    # Add Fill role header
+                    fill_text = f"{fill_index+1}. {fill_role}"
+                    
+                    if fill_participants:
+                        # Sort participants by timestamp
+                        sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                        
+                        # List all Fill participants
+                        for p_data in sorted_fill:
+                            if len(p_data) >= 2:  # Make sure we have at least name and ID
+                                p_id = p_data[1]
+                                fill_players_text += f"<@{p_id}>"
+                                
+                                # Add comment if exists
+                                if len(p_data) >= 4 and p_data[3]:
+                                    fill_players_text += f" - {p_data[3]}"
+                                
+                                fill_players_text += "\n"
+
+                # Add Fill section (non-inline to create a new row)
+                embed.add_field(name=fill_text, value=fill_players_text if fill_players_text else "\u200b", inline=False)
+                
+                event_post = await channel.send(embed=embed)
                 
                 thread = await event_post.create_thread(name=event.title)
-                await thread.send("Type a number to sign up for a role. Your first signup will be your 1st choice (green), second signup your 2nd choice (yellow), etc. Only one player per role can have the same choice level. Type `-` to unregister from all roles, or `-N` to unregister from a specific role.")
+                await thread.send("Instructions for the event will be posted here.")
                 print("Event message and thread created.")
             except Exception as e:
                 print(f"Error creating event message or thread: {e}")
@@ -656,15 +691,36 @@ class EventModal(discord.ui.Modal, title="Eventify"):
 bot = MyBot()
 
 def parse_date(date_str: str):
+    """Parse date from string in format DDMMYYYY or DD.MM.YYYY"""
     try:
-        return datetime.strptime(date_str, "%d%m%Y").date()
-    except ValueError:
+        # Try to parse with dots
+        if "." in date_str:
+            day, month, year = date_str.split(".")
+        else:
+            # Try to parse without dots (DDMMYYYY)
+            day = date_str[:2]
+            month = date_str[2:4]
+            year = date_str[4:]
+        
+        return datetime(int(year), int(month), int(day)).date()
+    except Exception as e:
+        print(f"Error parsing date: {e}")
         return None
 
 def parse_time(time_str: str):
+    """Parse time from string in format HHMM or HH:MM"""
     try:
-        return datetime.strptime(time_str, "%H%M").time()
-    except ValueError:
+        # Try to parse with colon
+        if ":" in time_str:
+            hour, minute = time_str.split(":")
+        else:
+            # Try to parse without colon (HHMM)
+            hour = time_str[:2]
+            minute = time_str[2:]
+        
+        return time(int(hour), int(minute))
+    except Exception as e:
+        print(f"Error parsing time: {e}")
         return None
 
 def save_event_to_json(event):
@@ -742,40 +798,33 @@ def save_events_to_json(events):
 
 @bot.tree.command(name="eventify", description="Starte ein neues Event")
 async def create_event(interaction: discord.Interaction, title: str, date: str, time: str):
-    parsed_date = parse_date(date)
-    parsed_time = parse_time(time)
-
-    if not parsed_date or not parsed_time:
-        await interaction.response.send_message("Ungültiges Datum oder Zeitformat! \nBitte verwende DDMMYYYY (31122025 für den 31.12.2025) für das Datum und HHMM (1200 für 12:00 Uhr) für die Zeit.", ephemeral=True)
-        return
-
-    # Combine date and time into a datetime object
-    full_datetime = datetime.combine(parsed_date, parsed_time)
-    
-    formatted_date = parsed_date.strftime("%d.%m.%Y")
-    formatted_time = parsed_time.strftime("%H:%M")
-
-    modal = EventModal(title, formatted_date, formatted_time)
-    modal.full_datetime = full_datetime  # Store the datetime object in the modal
-    await interaction.response.send_modal(modal)
-
-@bot.tree.command(name="upcoming_events", description="List all upcoming events")
-async def list_upcoming_events(interaction: discord.Interaction):
-    upcoming_events = load_upcoming_events()
-    
-    if not upcoming_events:
-        await interaction.response.send_message("No upcoming events found.", ephemeral=True)
-        return
-    
-    # Create a nice formatted list of upcoming events
-    event_list = ["# Upcoming Events\n"]
-    
-    for i, event in enumerate(upcoming_events, 1):
-        event_list.append(f"## {i}. {event['title']}")
-        event_list.append(f"**Date:** {event['date']} | **Time:** {event['time']}")
-        event_list.append(f"**Description:** {event['description'][:100]}..." if len(event['description']) > 100 else f"**Description:** {event['description']}")
-        event_list.append("---")
-    
-    await interaction.response.send_message("\n".join(event_list), ephemeral=False)
+    try:
+        # Parse date and time
+        parsed_date = parse_date(date)
+        parsed_time = parse_time(time)
+        
+        if not parsed_date or not parsed_time:
+            await interaction.response.send_message("Ungültiges Datum oder Zeitformat! \nBitte verwende DDMMYYYY (31122025 für den 31.12.2025) für das Datum und HHMM (1300 für 13:00 Uhr) für die Zeit.", ephemeral=True)
+            return
+        
+        # Combine date and time into a datetime object
+        full_datetime = datetime.combine(parsed_date, parsed_time)
+        
+        # Check if the date is in the future
+        if full_datetime < datetime.now():
+            await interaction.response.send_message("Das Datum muss in der Zukunft liegen.", ephemeral=True)
+            return
+        
+        # Format date and time for display
+        formatted_date = parsed_date.strftime("%d.%m.%Y")
+        formatted_time = parsed_time.strftime("%H:%M")
+        
+        # Create and show the modal
+        modal = EventModal(title, formatted_date, formatted_time)
+        modal.full_datetime = full_datetime  # Pass the datetime object to the modal
+        await interaction.response.send_modal(modal)
+    except Exception as e:
+        print(f"Error in create_event: {e}")
+        await interaction.response.send_message(f"Ein Fehler ist aufgetreten: {str(e)}", ephemeral=True)
 
 bot.run(DISCORD_TOKEN)
