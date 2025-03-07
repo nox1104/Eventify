@@ -64,13 +64,13 @@ class MyBot(discord.Client):
             # Check for unregister all roles with "-"
             elif message.content.strip() == "-":
                 logger.info(f"Processing unregister from all roles: {message.channel.name}, user: {message.author.name}")
-                await self._handle_unregister_all(message, event_title)
+                await self._handle_unregister(message, False)
             
             # Check for unregister from specific role with "-N"
             elif message.content.strip().startswith("-") and message.content.strip()[1:].isdigit():
                 role_number = int(message.content.strip()[1:])
                 logger.info(f"Processing unregister from role {role_number}: {message.channel.name}, user: {message.author.name}")
-                await self._handle_unregister_specific(message, event_title, role_number)
+                await self._handle_unregister(message, True, role_number - 1)
         else:
             logger.debug("Message is not in a thread.")
 
@@ -91,7 +91,7 @@ class MyBot(discord.Client):
                 # Check if this is the "Fill" role by name instead of position
                 is_fill_role = False
                 if 0 <= role_index < len(event['roles']):
-                    is_fill_role = event['roles'][role_index].lower() == "fill"
+                    is_fill_role = event['roles'][role_index].lower() == "fill" or event['roles'][role_index].lower() == "fillall"
                 
                 if 0 <= role_index < len(event['roles']):
                     role_name = event['roles'][role_index]
@@ -142,24 +142,38 @@ class MyBot(discord.Client):
                     else:
                         # For Fill role, no limit on players and can be added even if already registered for another role
                         if is_fill_role:
-                            # Add new entry with timestamp and comment
-                            if comment:
-                                event['participants'][role_key].append((player_name, player_id, current_time, comment))
-                            else:
+                            # Check if the role is specifically FillALL
+                            is_fillall_role = event['roles'][role_index].lower() == "fillall"
+                            
+                            # For FillALL, we ignore comments and allow multiple roles
+                            if is_fillall_role:
+                                # Add new entry with timestamp (ignore comment for FillALL)
                                 event['participants'][role_key].append((player_name, player_id, current_time))
-                            
-                            logger.info(f"Added {player_name} to Fill role")
-                            
-                            # Update the event message and save to JSON
-                            await self._update_event_and_save(message, event, events)
-                            await message.add_reaction('✅')  # Add confirmation reaction
+                                logger.info(f"Added {player_name} to FillALL role")
+                                
+                                # Update the event message and save to JSON
+                                await self._update_event_and_save(message, event, events)
+                                await message.add_reaction('✅')  # Add confirmation reaction
+                            else:
+                                # This is a regular Fill role (not FillALL)
+                                # Add new entry with timestamp and comment
+                                if comment:
+                                    event['participants'][role_key].append((player_name, player_id, current_time, comment))
+                                else:
+                                    event['participants'][role_key].append((player_name, player_id, current_time))
+                                
+                                logger.info(f"Added {player_name} to Fill role")
+                                
+                                # Update the event message and save to JSON
+                                await self._update_event_and_save(message, event, events)
+                                await message.add_reaction('✅')  # Add confirmation reaction
                         else:
                             # Check if player is already signed up for another role (except Fill)
                             already_signed_up = False
                             player_current_role = None
                             for r_idx, r_name in enumerate(event['roles']):
-                                if r_name.lower() == "fill":
-                                    continue  # Skip Fill role
+                                if r_name.lower() == "fill" or r_name.lower() == "fillall":
+                                    continue  # Skip Fill and FillALL roles
                                 
                                 r_key = f"{r_idx}:{r_name}"
                                 if r_key in event.get('participants', {}):
@@ -169,29 +183,26 @@ class MyBot(discord.Client):
                                         break
                             
                             if already_signed_up:
-                                # Player is already signed up for another role
                                 logger.warning(f"{player_name} is already signed up for role {player_current_role}")
-                                await message.add_reaction('❌')  # Rejected reaction
-                                await message.channel.send(f"Sorry, you are already signed up for role '{player_current_role}'. You can only sign up for one role (except Fill). If you want to change your role, unregister first with `-{event['roles'].index(player_current_role)+1}` and then sign up for the new role. You can add a comment to note your alternative roles.")
+                                await message.channel.send(
+                                    f"Sorry, you are already signed up for role '{player_current_role}'. "
+                                    f"You can only sign up for one regular role. "
+                                    f"You can additionally sign up for FillALL. "
+                                    f"If you want to change your role, unregister first with `-` and then sign up for the new role. "
+                                    f"You can add a comment to note your alternative roles."
+                                )
                             else:
-                                # For regular roles, check if there's space
-                                if len(event['participants'][role_key]) < 3:  # Max 3 players per regular role
-                                    # Add new entry with timestamp and comment
-                                    if comment:
-                                        event['participants'][role_key].append((player_name, player_id, current_time, comment))
-                                    else:
-                                        event['participants'][role_key].append((player_name, player_id, current_time))
-                                    
-                                    logger.info(f"Added {player_name} to role {role_name}")
-                                    
-                                    # Update the event message and save to JSON
-                                    await self._update_event_and_save(message, event, events)
-                                    await message.add_reaction('✅')  # Add confirmation reaction
+                                # Add new entry with timestamp and comment
+                                if comment:
+                                    event['participants'][role_key].append((player_name, player_id, current_time, comment))
                                 else:
-                                    # Role already has three players
-                                    logger.warning(f"Role {role_name} already has 3 players, {player_name} cannot join")
-                                    await message.add_reaction('❌')  # Rejected reaction
-                                    await message.channel.send(f"Sorry, the role '{role_name}' already has the maximum of 3 players. Please select another role.")
+                                    event['participants'][role_key].append((player_name, player_id, current_time))
+                                
+                                logger.info(f"Added {player_name} to role {role_name}")
+                                
+                                # Update the event message and save to JSON
+                                await self._update_event_and_save(message, event, events)
+                                await message.add_reaction('✅')  # Add confirmation reaction
                 else:
                     logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
                     await message.channel.send(f"Invalid role number. Please select a number between 1 and {len(event['roles'])}.")
@@ -202,96 +213,78 @@ class MyBot(discord.Client):
             logger.error(f"Error processing role assignment: {e}")
             await message.channel.send(f"Error processing your request: {str(e)}")
 
-    async def _handle_unregister_all(self, message, event_title):
+    async def _handle_unregister(self, message, is_specific_role=False, role_index=None):
         try:
             # Load events from JSON
             events = load_upcoming_events()
             
             # Find the event that matches the thread name
-            event = next((e for e in events if e['title'] == event_title), None)
+            event = next((e for e in events if e['title'] == message.channel.name), None)
 
             if event:
                 player_name = message.author.name
+                player_id = str(message.author.id)
                 removed_count = 0
                 
-                # Check all roles and remove the player
-                if 'participants' in event:
-                    # Make a copy of keys to avoid modification during iteration
-                    role_keys = list(event['participants'].keys())
+                # If it's a general unregister from all roles (-)
+                if not is_specific_role:
+                    # Keep track of how many roles the player was removed from
+                    removed_count = 0
                     
-                    for role_key in role_keys:
-                        # Make a copy of participants list to safely modify
-                        participants = event['participants'][role_key].copy()
-                        
-                        for i, entry in enumerate(participants):
-                            # Check if entry has enough elements
-                            if len(entry) >= 1 and entry[0] == player_name:
-                                event['participants'][role_key].remove(entry)
-                                removed_count += 1
-                
-                if removed_count > 0:
-                    logger.info(f"Removed {player_name} from {removed_count} roles in event {event_title}")
+                    # Check all roles
+                    for r_idx, r_name in enumerate(event['roles']):
+                        r_key = f"{r_idx}:{r_name}"
+                        if r_key in event.get('participants', {}):
+                            # Check if player is in this role
+                            initial_count = len(event['participants'][r_key])
+                            event['participants'][r_key] = [p for p in event['participants'][r_key] if p[1] != player_id]
+                            removed_count += initial_count - len(event['participants'][r_key])
                     
-                    # Update the event message and save to JSON
-                    await self._update_event_and_save(message, event, events)
-                    await message.add_reaction('✅')  # Add confirmation reaction
+                    logger.info(f"Removed {player_name} from {removed_count} roles in event {event['title']}")
+                    
+                    # Only reply if player was actually removed from something
+                    if removed_count > 0:
+                        # Update the event message
+                        await self._update_event_and_save(message, event, events)
+                        await message.add_reaction('✅')  # Add confirmation reaction
+                    else:
+                        await message.add_reaction('❓')  # Player wasn't registered
                 else:
-                    logger.info(f"{player_name} was not registered for any roles in event {event_title}")
-                    await message.add_reaction('ℹ️')  # Info reaction
-            else:
-                logger.warning(f"No event found matching thread name: {event_title}")
-                await message.channel.send("No matching event found for this thread.")
-        except Exception as e:
-            logger.error(f"Error processing unregister: {e}")
-            await message.channel.send(f"Error processing your request: {str(e)}")
-
-    async def _handle_unregister_specific(self, message, event_title, role_number):
-        try:
-            role_index = role_number - 1
-            
-            # Load events from JSON
-            events = load_upcoming_events()
-            
-            # Find the event that matches the thread name
-            event = next((e for e in events if e['title'] == event_title), None)
-
-            if event:
-                if 0 <= role_index < len(event['roles']):
-                    role_name = event['roles'][role_index]
-                    player_name = message.author.name
-                    
-                    logger.info(f"Unregistering {player_name} from role {role_name} at index {role_index}")
-                    
-                    # Use role_index as part of the key for participants
-                    role_key = f"{role_index}:{role_name}"
-                    
-                    if 'participants' in event and role_key in event['participants']:
-                        # Find and remove the player from the role
-                        for i, entry in enumerate(event['participants'][role_key]):
-                            if entry[0] == player_name:  # Check player name (first element in tuple)
-                                event['participants'][role_key].pop(i)
-                                logger.info(f"Removed {player_name} from role {role_name} at index {role_index}")
+                    # This is a specific role unregister
+                    if 0 <= role_index < len(event['roles']):
+                        role_name = event['roles'][role_index]
+                        role_key = f"{role_index}:{role_name}"
+                        
+                        logger.info(f"Unregistering {player_name} from role {role_name} at index {role_index}")
+                        
+                        if role_key in event.get('participants', {}):
+                            # Find and remove the player from the role
+                            initial_count = len(event['participants'][role_key])
+                            event['participants'][role_key] = [p for p in event['participants'][role_key] if p[1] != player_id]
+                            removed_count = initial_count - len(event['participants'][role_key])
+                            
+                            if removed_count > 0:
+                                logger.info(f"Removed {player_name} from role {role_name}")
                                 
                                 # Update the event message and save to JSON
                                 await self._update_event_and_save(message, event, events)
                                 await message.add_reaction('✅')  # Add confirmation reaction
-                                return
-                        
-                        logger.info(f"{player_name} was not registered for role {role_name} at index {role_index}")
-                        await message.add_reaction('ℹ️')  # Info reaction
+                            else:
+                                logger.info(f"{player_name} was not registered for role {role_name}")
+                                await message.add_reaction('❓')  # Player wasn't registered
+                        else:
+                            logger.info(f"Role {role_name} has no participants")
+                            await message.add_reaction('❓')  # Info reaction
                     else:
-                        logger.info(f"Role {role_name} at index {role_index} has no participants")
-                        await message.add_reaction('ℹ️')  # Info reaction
-                else:
-                    logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
-                    await message.channel.send(f"Invalid role number. Please select a number between 1 and {len(event['roles'])}.")
+                        logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
+                        await message.channel.send(f"Invalid role number. Please select a number between 1 and {len(event['roles'])}.")
             else:
-                logger.warning(f"No event found matching thread name: {event_title}")
+                logger.warning(f"No event found matching thread name: {message.channel.name}")
                 await message.channel.send("No matching event found for this thread.")
         except Exception as e:
             logger.error(f"Error processing unregister: {e}")
             await message.channel.send(f"Error processing your request: {str(e)}")
-            
+
     async def _update_event_and_save(self, message, event, events):
         try:
             # Update the event message
@@ -429,38 +422,29 @@ class MyBot(discord.Client):
             fill_players_text = ""
 
             if fill_index is not None:
-                # Überprüfe, ob der Index gültig ist
-                if fill_index < len(event['roles']):
-                    fill_role = event['roles'][fill_index]
-                    fill_key = f"{fill_index}:{fill_role}"
-                    fill_participants = event.get('participants', {}).get(fill_key, [])
+                # Add Fill role header
+                fill_text = f"{fill_index+1}. {event['roles'][fill_index]}"
+                fill_players_text = ""
+                
+                # Get participants for Fill role
+                fill_key = f"{fill_index}:{event['roles'][fill_index]}"
+                fill_participants = event.get('participants', {}).get(fill_key, [])
+                
+                if fill_participants:
+                    # Sort participants by timestamp
+                    sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                     
-                    # Add Fill role header
-                    fill_text = f"{fill_index+1}. FillALL"  # Verwende die tatsächliche Position
-                    
-                    if fill_participants:
-                        # Sort participants by timestamp
-                        sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
-                        
-                        # List all Fill participants
-                        for p_data in sorted_fill:
-                            if len(p_data) >= 2:  # Make sure we have at least name and ID
-                                p_id = p_data[1]
-                                fill_players_text += f"<@{p_id}>"
-                                
-                                # Add comment if exists
-                                if len(p_data) >= 4 and p_data[3]:
-                                    fill_players_text += f" - {p_data[3]}"
-                                
-                                fill_players_text += "\n"
+                    # Für FillALL alle Teilnehmer anzeigen, keine Begrenzung auf einen Spieler
+                    for p_data in sorted_fill:
+                        if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
+                            p_id = p_data[1]
+                            fill_players_text += f"<@{p_id}>\n"
                 else:
-                    # Fill index ist außerhalb des gültigen Bereichs
-                    logger.warning(f"Fill index {fill_index} is out of range. Roles list has {len(event['roles'])} items.")
-                    fill_text = "FillALL"  # Zeige nur "FillALL" ohne Nummer
+                    fill_players_text = "-\n"
+                
+                # Add Fill role to embed
+                embed.add_field(name=fill_text, value=fill_players_text, inline=False)
 
-            # Add Fill section (non-inline to create a new row)
-            embed.add_field(name=fill_text, value=fill_players_text if fill_players_text else "\u200b", inline=False)
-            
             # No footer text as requested
             
             # Find the parent message of the thread
@@ -674,38 +658,29 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 fill_players_text = ""
 
                 if fill_index is not None:
-                    # Überprüfe, ob der Index gültig ist
-                    if fill_index < len(event.roles):
-                        fill_role = event.roles[fill_index]
-                        fill_key = f"{fill_index}:{fill_role}"
-                        fill_participants = getattr(event, 'participants', {}).get(fill_key, [])
+                    # Add Fill role header
+                    fill_text = f"{fill_index+1}. {roles[fill_index]}"
+                    fill_players_text = ""
+                    
+                    # Get participants for Fill role
+                    fill_key = f"{fill_index}:{roles[fill_index]}"
+                    fill_participants = getattr(event, 'participants', {}).get(fill_key, [])
+                    
+                    if fill_participants:
+                        # Sort participants by timestamp
+                        sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                         
-                        # Add Fill role header
-                        fill_text = f"{fill_index+1}. FillALL"  # Verwende die tatsächliche Position
-                        
-                        if fill_participants:
-                            # Sort participants by timestamp
-                            sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
-                            
-                            # List all Fill participants
-                            for p_data in sorted_fill:
-                                if len(p_data) >= 2:  # Make sure we have at least name and ID
-                                    p_id = p_data[1]
-                                    fill_players_text += f"<@{p_id}>"
-                                    
-                                    # Add comment if exists
-                                    if len(p_data) >= 4 and p_data[3]:
-                                        fill_players_text += f" - {p_data[3]}"
-                                    
-                                    fill_players_text += "\n"
+                        # Für FillALL alle Teilnehmer anzeigen, keine Begrenzung auf einen Spieler
+                        for p_data in sorted_fill:
+                            if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
+                                p_id = p_data[1]
+                                fill_players_text += f"<@{p_id}>\n"
                     else:
-                        # Fill index ist außerhalb des gültigen Bereichs
-                        logger.warning(f"Fill index {fill_index} is out of range. Roles list has {len(event.roles)} items.")
-                        fill_text = "FillALL"  # Zeige nur "FillALL" ohne Nummer
+                        fill_players_text = "-\n"
+                    
+                    # Add Fill role to embed
+                    embed.add_field(name=fill_text, value=fill_players_text, inline=False)
 
-                # Add Fill section (non-inline to create a new row)
-                embed.add_field(name=fill_text, value=fill_players_text if fill_players_text else "\u200b", inline=False)
-                
                 event_post = await channel.send(embed=embed)
                 
                 thread = await event_post.create_thread(name=event.title)
