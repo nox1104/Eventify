@@ -1,0 +1,370 @@
+{
+    "events": [
+        {
+            "title": "Testevent",
+            "date": "09.03.2025",
+            "time": "21:00",
+            "description": "Wir laden euch zu einem spannenden **5v5 Arena-Event** ein! Hier k\u00f6nnt ihr eure PvP-F\u00e4higkeiten unter Beweis stellen und gemeinsam mit eurem Team um den Sieg k\u00e4mpfen.  \n\n**Regeln & Ablauf:**  \n- Teams werden vor Ort eingeteilt  \n- Gear-Beschr\u00e4nkung: [IP-Grenze oder keine Begrenzung]  \n- Es wird im **Best-of-3**-Format gespielt  \n- Fairplay und respektvolles Verhalten sind Pflicht  \n\n**Empfehlungen:**  \n- PvP-Erfahrung ist hilfreich, aber keine Voraussetzung  \n- Bringt passende Ausr\u00fcstung und Verbrauchsg\u00fcter mit  \n\n**Belohnungen:**  \nF\u00fcr die Gewinner gibt es [Belohnung einf\u00fcgen], doch am wichtigsten sind Spa\u00df und gemeinsames Training!  \n\n\ud83d\udcdd **Anmeldung:** Reagiere mit \u2705 in `#event-anmeldung`. Wir freuen uns auf spannende K\u00e4mpfe und gute Stimmung!",
+            "roles": [
+                "Tank",
+                "Blight",
+                "LC",
+                "Werwolf",
+                "Badon",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503092100-d2247384",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1347886488393744478
+        },
+        {
+            "title": "toast essen",
+            "date": "08.03.2025",
+            "time": "13:00",
+            "description": "das wird bestimmt lecker",
+            "roles": [
+                "toast",
+                "butter",
+                "marmelade",
+                "tee",
+                "FillALL"
+            ],
+            "participants": {
+                "4:FillALL": [
+                    [
+                        "kambior",
+                        "1100064403526787083",
+                        1741429171.694784
+                    ]
+                ],
+                "2:marmelade": [],
+                "1:butter": [
+                    [
+                        "kambior",
+                        "1100064403526787083",
+                        1741429205.040541,
+                        "l\u00e4tta geht auch"
+                    ]
+                ],
+                "0:toast": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741429310.96029
+                    ]
+                ]
+            },
+            "event_id": "202503081300-c9186df6",
+            "caller_id": "1100064403526787083",
+            "caller_name": "kambior"
+        },
+        {
+            "title": "Das neue Feature feiern",
+            "date": "09.03.2025",
+            "time": "16:00",
+            "description": "So ein Listing sollte die Sache deutlich vereinfachen",
+            "roles": [
+                "(Wichtig)",
+                "Ich bin gl\u00fccklich",
+                "Na dann mal los",
+                "Die Hoffnung stirb zuletzt",
+                "(Geht auch)",
+                "Spielen",
+                "Spazieren",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503091600-7818c9a5",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104"
+        },
+        {
+            "title": "Weltboss",
+            "date": "11.03.2025",
+            "time": "20:00",
+            "description": "Weltboss halt",
+            "roles": [
+                "Ihr",
+                "kennt",
+                "eure",
+                "Rollen",
+                "also",
+                "los",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503112000-2c3ba2d8",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1347906328206508052
+        },
+        {
+            "title": "Gr\u00fcne Kisten",
+            "date": "09.03.2025",
+            "time": "18:00",
+            "description": "Ab Brecilien",
+            "roles": [
+                "Tank",
+                "Nature",
+                "DPS",
+                "DPS",
+                "DPS",
+                "FillALL"
+            ],
+            "participants": {
+                "1:Nature": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741431974.760788
+                    ]
+                ]
+            },
+            "event_id": "202503091800-9f0d08e7",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1347883644752101418
+        },
+        {
+            "title": "Gatherevent",
+            "date": "09.03.2025",
+            "time": "12:00",
+            "description": "**Anforderungen:**  \n- Mindest-IP: [Wert]  \n- PvE-Gear empfohlen  \n- Heiler und Tanks werden bevorzugt gesucht  \n- Discord-Pflicht f\u00fcr Absprachen  \n\n**Ablauf:**  \nWir starten gemeinsam vom Treffpunkt, bereiten uns kurz vor und ziehen dann z\u00fcgig ins Dungeon. W\u00e4hrend des Runs wird die Taktik \u00fcber Discord erkl\u00e4rt. Bitte bringt ausreichend Verbrauchsg\u00fcter mit und seid vorbereitet, euren Teil beizutragen.  \n\n**Belohnungen:**  \nNeben wertvoller Beute winken Materialien und andere Sch\u00e4tze der Avalonier.  \n\n\ud83d\udcdd **Anmeldung:** Bitte reagiert mit \u2705 in `#event-anmeldung`. Wir freuen uns auf eure Teilnahme!",
+            "roles": [
+                "Gatherer",
+                "Gatherer",
+                "Gatherer",
+                "Gatherer",
+                "Gatherer",
+                "Gatherer",
+                "Gatherer",
+                "Gatherer",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503091200-8e607607",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1347884706531770409
+        },
+        {
+            "title": "HCE",
+            "date": "10.03.2025",
+            "time": "18:00",
+            "description": "Wir planen einen gemeinsamen **HCE-Run** f\u00fcr erfahrene Spieler, die sich den h\u00e4rtesten PvE-Herausforderungen stellen wollen.  \n\n**\ud83d\udd39 Rollenverteilung:**  \n- **Tank** \u2013 F\u00fchrt die Gruppe und kontrolliert Gegner  \n- **Melee DPS** \u2013 Nahk\u00e4mpfer mit hohem Burst-Schaden  \n- **Ranged DPS** \u2013 Fernk\u00e4mpfer f\u00fcr sicheren, konstanten Schaden  \n- **Healer** \u2013 Verantwortlich f\u00fcr Heilung und Support  \n- **Support/Utility** \u2013 Crowd Control und Buffs  \n\n**\ud83d\udd38 Anforderungen:**  \n- Mindest-IP: **[Wert]**  \n- PvE-Erfahrung und Kenntnisse der HCE-Mechaniken  \n- Discord-Pflicht f\u00fcr Koordination  \n- Bringt ausreichend Verbrauchsg\u00fcter mit  \n\n**\ud83d\udd39 Ablauf:**  \nWir sammeln uns am Treffpunkt, pr\u00fcfen die Ausr\u00fcstung und starten dann koordiniert in die Expedition.  \n\n\ud83d\udcdd **Anmeldung:** Reagiere mit \u2705 in `#event-anmeldung` und gib deine bevorzugte Rolle an.  \n\n\ud83d\udd25 **Bereit f\u00fcr die Herausforderung? Der Kampf beginnt!**",
+            "roles": [
+                "Tank",
+                "Heal",
+                "Frost",
+                "Frost",
+                "Frost",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503101800-2f32d8ca",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1347888437587607572
+        },
+        {
+            "title": "Hellgates 2vs2",
+            "date": "10.03.2025",
+            "time": "16:00",
+            "description": "**\ud83d\udd39 Rollenverteilung 2v2):**  \n- **Tank** \u2013 F\u00fchrt die Gruppe und absorbiert Schaden  \n- **Bruiser** \u2013 Nahk\u00e4mpfer mit hoher Pr\u00e4senz im Kampf  \n- **Ranged DPS** \u2013 Konstanter Schaden aus der Ferne  \n- **Melee DPS** \u2013 Explosiver Schaden im Nahkampf  \n- **Healer** \u2013 H\u00e4lt das Team am Leben und sichert den Sieg  \n\n**\ud83d\udd38 Anforderungen:**  \n- Mindest-IP: **[Wert]**  \n- PvP-Gear und Erfahrung empfohlen  \n- Discord-Pflicht f\u00fcr Koordination  \n\n**\ud83d\udd39 Ablauf:**  \nWir starten gemeinsam vom Treffpunkt und bilden Teams vor Ort. Taktiken und Positionen werden im Discord besprochen.  \n\n\ud83d\udcdd **Anmeldung:** Reagiere mit \u2705 in `#event-anmeldung` und gib deine bevorzugte Rolle an.  \n\n\u2694\ufe0f **Werdet ihr als Sieger aus der H\u00f6lle zur\u00fcckkehren?** \ud83d\udd25",
+            "roles": [
+                "Blazing",
+                "Grailseeker",
+                "FillALL"
+            ],
+            "participants": {
+                "0:Blazing": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741432778.547065
+                    ]
+                ]
+            },
+            "event_id": "202503101600-dc7cf8ae",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1347891373205880907
+        },
+        {
+            "title": "Transport",
+            "date": "13.03.2025",
+            "time": "16:00",
+            "description": "Wir organisieren einen gemeinsamen **Transportlauf**, um wertvolle Waren sicher durch gef\u00e4hrliche Gebiete zu bringen. Mit vereinten Kr\u00e4ften sch\u00fctzen wir uns vor Angriffen und sorgen daf\u00fcr, dass alle ihr Ziel erreichen.  \n\n**\ud83d\udd39 Rollenverteilung:**  \n- **Transporter** \u2013 Spieler mit Ochsen/Mammuts zum Warentransport  \n- **Scouts** \u2013 Erkunden die Route und melden feindliche Aktivit\u00e4ten  \n- **Bodyguards** \u2013 PvP-K\u00e4mpfer zum Schutz der Gruppe  \n- **Heiler** \u2013 Unterst\u00fctzen die K\u00e4mpfer und Transporter  \n- **Nachz\u00fcgler** \u2013 Sichern die Nachhut und sammeln Versprengte ein  \n\n**\ud83d\udd38 Anforderungen:**  \n- Passendes Transport-Mount (Ochse/Mammut empfohlen)  \n- PvP-f\u00e4hige Ausr\u00fcstung f\u00fcr Eskorten  \n- Discord-Pflicht f\u00fcr Kommunikation  \n\n**\ud83d\udd39 Ablauf:**  \nWir starten gemeinsam vom Treffpunkt, legen sichere Routen fest und bewegen uns geschlossen als Gruppe.  \n\n\ud83d\udcdd **Anmeldung:** Reagiere mit \u2705 in `#event-anmeldung` und gib deine bevorzugte Rolle an.  \n\n\ud83d\udee1\ufe0f **Gemeinsam stark \u2013 f\u00fcr sichere Wege und volle Taschen!** \ud83d\udcb0",
+            "roles": [
+                "Transporter",
+                "Transporter",
+                "Transporter",
+                "Transporter",
+                "Transporter",
+                "Transporter",
+                "Scout",
+                "Scout",
+                "Scout",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503131600-b2b98a47",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1347892957176529016
+        },
+        {
+            "title": "Crafting",
+            "date": "14.03.2025",
+            "time": "17:00",
+            "description": "Wir laden euch herzlich zu unserem Crafting-Event ein! Gemeinsam wollen wir Materialien verarbeiten, Erfahrungen austauschen und unsere Produktionsf\u00e4higkeiten verbessern.  \n\nDas Event richtet sich an alle, die effizient craften m\u00f6chten \u2013 egal ob Anf\u00e4nger oder erfahrene Handwerker. Wir sammeln Ressourcen, tauschen Materialien und setzen gemeinsam Crafting-Journale ein, um den Ertrag zu maximieren. Bringt eure Fokus-Punkte mit, um den Profit noch weiter zu steigern.  \n\nW\u00e4hrend des Events geben erfahrene Spieler Tipps zur Optimierung eurer Herstellungsprozesse und zur Marktstrategie. So k\u00f6nnt ihr das Maximum aus euren Produkten herausholen.  \n\nTreffpunkt ist [Treffpunkt] am [Datum] um [Uhrzeit]. Meldet euch bitte mit \u2705 in `#event-anmeldung` an und gebt dabei euren bevorzugten Crafting-Bereich an.  \n\nWir freuen uns auf euch \u2013 gemeinsam steigern wir unsere Produktion und f\u00fcllen unsere Taschen! \ud83d\udcb0",
+            "roles": [
+                "Hier",
+                "wird",
+                "noch",
+                "die",
+                "M\u00f6glichkeit",
+                "implementiert",
+                "mit",
+                "einer",
+                "Eins",
+                "im Thread",
+                "teilzunehmen",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503141700-90bd7dad",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1347895279470383125
+        },
+        {
+            "title": "Galli",
+            "date": "10.03.2025",
+            "time": "19:00",
+            "description": "**\ud83d\udc1c Galli-Clearing-Event \u2013 Ameisenarmee im Anmarsch! \ud83d\udc1c**  \n\nSchnappt euch euer billigstes Gear und kommt mit uns nach **Galli**! Vom **Lymhurst-Portal** aus ziehen wir los und m\u00e4hen alles nieder, was uns in die Quere kommt \u2013 ganz ohne R\u00fccksicht auf Verluste.  \n\nDas Motto ist einfach: **Masse statt Klasse.** Kein teures Gear, kein kompliziertes Setup \u2013 einfach rein, rauf und r\u00fcber. Bringt euer g\u00fcnstigstes Shittergear mit und seid bereit, euch wie eine Armee von Ameisen durch die Gegnerhorden zu w\u00fchlen.  \n\nWir starten am [Datum] um [Uhrzeit] und sammeln uns am **Lymhurst-Portal**. Je mehr Leute, desto besser \u2013 also packt eure Freunde ein und seid dabei!  \n\n\ud83d\udcdd **Anmeldung:** Reagiere mit \u2705 in `#event-anmeldung`.  \n\nLasst uns Galli \u00fcberrennen \u2013 **wie die Ameisen!** \ud83d\udc1c\ud83d\udd25",
+            "roles": [
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "Irgendwas",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503101900-9d6773de",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1347897670676643844
+        },
+        {
+            "title": "blob blob",
+            "date": "09.03.2025",
+            "time": "19:30",
+            "description": "blob blob blob",
+            "roles": [
+                "gibt nur die 1",
+                "ich sagte NUR die 1",
+                "scheiss drauf",
+                "FillALL"
+            ],
+            "participants": {
+                "3:FillALL": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741435141.820861
+                    ],
+                    [
+                        "kranka",
+                        "325726431030280192",
+                        1741435180.203453
+                    ]
+                ],
+                "0:gibt nur die 1": [],
+                "2:scheiss drauf": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741435162.412828,
+                        "nein, ich schei\u00df drauf"
+                    ]
+                ]
+            },
+            "event_id": "202503091930-78707ae1",
+            "caller_id": "325726431030280192",
+            "caller_name": "kranka",
+            "message_id": 1347901357536968755
+        },
+        {
+            "title": "Rumlaufen",
+            "date": "11.03.2025",
+            "time": "18:00",
+            "description": "Einfach mal ein bisschen in der Gegend rumpimmeln",
+            "roles": [
+                "Tank",
+                "Heal",
+                "egal",
+                "egal",
+                "egal",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503111800-db87005d",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1347904779057107026
+        },
+        {
+            "title": "Blaue Kisten",
+            "date": "12.03.2025",
+            "time": "20:00",
+            "description": "Blaue Kisten mit zu vielen Menschen",
+            "roles": [
+                "(Core)",
+                "Stofftank",
+                "Plattenhealer",
+                "kein Schaden",
+                "Spirithunter",
+                "Occult",
+                "Support",
+                "(DPS)",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "Partyheal",
+                "(Bl\u00f6dsinn)",
+                "Zipfelklatscher",
+                "DefTank",
+                "Irgendwas",
+                "Orangenbl\u00e4tter",
+                "Cursed",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503122000-4d14825f",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1347908058310901780
+        }
+    ]
+}

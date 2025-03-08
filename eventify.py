@@ -580,6 +580,7 @@ class Event:
         self.datetime_obj = datetime_obj
         self.caller_id = caller_id  # Discord ID des Erstellers
         self.caller_name = caller_name  # Name des Erstellers
+        self.message_id = None  # Message ID des Event-Posts
         
         # Generiere eine eindeutige ID für das Event
         timestamp = datetime_obj.strftime("%Y%m%d%H%M") if datetime_obj else datetime.now().strftime("%Y%m%d%H%M")
@@ -601,7 +602,8 @@ class Event:
             "participants": self.participants,
             "event_id": self.event_id,  # Speichere die eindeutige ID
             "caller_id": self.caller_id,  # Speichere die ID des Erstellers
-            "caller_name": self.caller_name  # Speichere den Namen des Erstellers
+            "caller_name": self.caller_name,  # Speichere den Namen des Erstellers
+            "message_id": self.message_id  # Speichere die Message ID des Event-Posts
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
@@ -629,7 +631,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
     async def on_submit(self, interaction: discord.Interaction):
         print("on_submit method called.")
         try:
-            description = self.description_input.value
+        description = self.description_input.value
             # Get roles from input, filter out empty lines, and add the "Fill" role
             roles = [role.strip() for role in self.roles_input.value.splitlines() if role.strip()]
             
@@ -649,12 +651,12 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 roles.append(fill_role)
                 # Update the fill_index to match the new position
                 fill_index = len(roles) - 1
-            
-            event = Event(
-                title=self.title,
-                date=self.date,
-                time=self.time,
-                description=description,
+        
+        event = Event(
+            title=self.title,
+            date=self.date,
+            time=self.time,
+            description=description,
                 roles=roles,
                 datetime_obj=self.full_datetime,  # Pass the datetime object
                 caller_id=self.caller_id,  # Pass the caller ID
@@ -665,154 +667,249 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             save_event_to_json(event)
             print("Event saved to JSON.")
 
-            try:
-                # First respond to the interaction to close the modal
-                await interaction.response.send_message(f"Event '{self.title}' erfolgreich erstellt!", ephemeral=True)
-                
-                channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
-                
-                # Create embed with horizontal frames
-                embed = discord.Embed(title=f"__**{event.title}**__", color=0x0dceda)
-                
-                # Add caller information directly under the title
-                if event.caller_id:
-                    embed.add_field(name="Erstellt von", value=f"<@{event.caller_id}>", inline=False)
-                
-                # Add event details
-                embed.add_field(name="Date", value=event.date, inline=True)
-                embed.add_field(name="Time", value=event.time, inline=True)
-                
-                # Truncate description if it's too long (Discord limit is 1024 characters per field)
-                description_text = event.description
-                if len(description_text) > 1020:  # Leave room for ellipsis
-                    description_text = description_text[:1020] + "..."
-                embed.add_field(name="Description", value=description_text, inline=False)
-                
-                # Extrahiere reguläre Rollen (alles außer FillALL)
-                regular_roles = []
-                section_headers = []
-                for i, role in enumerate(roles):
-                    if i != fill_index:  # Alles außer die FillALL-Rolle
-                        # Prüfe, ob es sich um eine Abschnittsüberschrift handelt (Text in Klammern)
-                        if role.strip().startswith('(') and role.strip().endswith(')'):
-                            section_headers.append((i, role))
-                        else:
-                            regular_roles.append((i, role))
+            # Silently close the modal without sending a message
+            await interaction.response.defer()
 
-                # Erstellung des Inhalts für alle regulären Rollen
-                field_content = ""
-                current_section = None
-                role_counter = 1  # Counter for actual roles (excluding section headers)
-
-                # Gehe durch alle Rollen und Abschnittsüberschriften in der ursprünglichen Reihenfolge
-                all_items = section_headers + regular_roles
-                all_items.sort(key=lambda x: x[0])  # Sortiere nach dem ursprünglichen Index
-
-                for role_idx, role_name in all_items:
-                    # Prüfe, ob es sich um eine Abschnittsüberschrift handelt
-                    if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
-                        # Füge eine Leerzeile ein, wenn es nicht die erste Überschrift ist
-                        if field_content:
-                            field_content += "\n"
-                        # Remove parentheses from section header
-                        header_text = role_name.strip()[1:-1]  # Remove first and last character
-                        field_content += f"**{header_text}**\n"
+        channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
+            
+            # Create embed with horizontal frames
+            embed = discord.Embed(title=f"__**{event.title}**__", color=0x0dceda)
+            
+            # Add caller information directly under the title
+            if event.caller_id:
+                embed.add_field(name="Erstellt von", value=f"<@{event.caller_id}>", inline=False)
+            
+            # Add event details
+            embed.add_field(name="Date", value=event.date, inline=True)
+            embed.add_field(name="Time", value=event.time, inline=True)
+            
+            # Truncate description if it's too long (Discord limit is 1024 characters per field)
+            description_text = event.description
+            if len(description_text) > 1020:  # Leave room for ellipsis
+                description_text = description_text[:1020] + "..."
+            embed.add_field(name="Description", value=description_text, inline=False)
+            
+            # Extrahiere reguläre Rollen (alles außer FillALL)
+            regular_roles = []
+            section_headers = []
+            for i, role in enumerate(roles):
+                if i != fill_index:  # Alles außer die FillALL-Rolle
+                    # Prüfe, ob es sich um eine Abschnittsüberschrift handelt (Text in Klammern)
+                    if role.strip().startswith('(') and role.strip().endswith(')'):
+                        section_headers.append((i, role))
                     else:
-                        # Dies ist eine normale Rolle
-                        # Rolle und Teilnehmer anzeigen
-                        role_key = f"{role_idx}:{role_name}"
-                        # Sicherer Zugriff auf participants
-                        if isinstance(event, dict):
-                            participants = event.get('participants', {}).get(role_key, [])
-                        else:
-                            participants = getattr(event, 'participants', {}).get(role_key, [])
-                        
-                        if participants:
-                            # Sortiere Teilnehmer nach Zeitstempel und zeige nur den ersten
-                            sorted_participants = sorted(participants, key=lambda x: x[2] if len(x) > 2 else 0)
-                            p_data = sorted_participants[0]
-                            
-                            if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
-                                p_id = p_data[1]
-                                
-                                # Rolle und Spieler in einer Zeile
-                                field_content += f"{role_counter}. {role_name} <@{p_id}>"
-                                
-                                # Kommentar falls vorhanden
-                                if len(p_data) >= 4 and p_data[3]:
-                                    field_content += f" {p_data[3]}"
-                                
-                                field_content += "\n"
-                            else:
-                                field_content += f"{role_counter}. {role_name}\n"
-                        else:
-                            field_content += f"{role_counter}. {role_name}\n"
-                        
-                        # Increment the role counter for actual roles
-                        role_counter += 1
+                        regular_roles.append((i, role))
 
-                # Füge alle regulären Rollen als ein einziges Feld hinzu
-                if field_content:
-                    embed.add_field(name="\u200b", value=field_content, inline=False)
+            # Erstellung des Inhalts für alle regulären Rollen
+            field_content = ""
+            current_section = None
+            role_counter = 1  # Counter for actual roles (excluding section headers)
 
-                # Add Fill role section
-                fill_text = ""
-                fill_players_text = ""
+            # Gehe durch alle Rollen und Abschnittsüberschriften in der ursprünglichen Reihenfolge
+            all_items = section_headers + regular_roles
+            all_items.sort(key=lambda x: x[0])  # Sortiere nach dem ursprünglichen Index
 
-                if fill_index is not None:
-                    # Add Fill role header
-                    fill_text = f"{role_counter}. {roles[fill_index]}"
-                    fill_players_text = ""
-                    
-                    # Get participants for Fill role
-                    fill_key = f"{fill_index}:{roles[fill_index]}"
-                    
+            for role_idx, role_name in all_items:
+                # Prüfe, ob es sich um eine Abschnittsüberschrift handelt
+                if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
+                    # Füge eine Leerzeile ein, wenn es nicht die erste Überschrift ist
+                    if field_content:
+                        field_content += "\n"
+                    # Remove parentheses from section header
+                    header_text = role_name.strip()[1:-1]  # Remove first and last character
+                    field_content += f"**{header_text}**\n"
+                else:
+                    # Dies ist eine normale Rolle
+                    # Rolle und Teilnehmer anzeigen
+                    role_key = f"{role_idx}:{role_name}"
                     # Sicherer Zugriff auf participants
                     if isinstance(event, dict):
-                        fill_participants = event.get('participants', {}).get(fill_key, [])
+                        participants = event.get('participants', {}).get(role_key, [])
                     else:
-                        fill_participants = getattr(event, 'participants', {}).get(fill_key, [])
+                        participants = getattr(event, 'participants', {}).get(role_key, [])
                     
-                    if fill_participants:
-                        # Sort participants by timestamp
-                        sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                    if participants:
+                        # Sortiere Teilnehmer nach Zeitstempel und zeige nur den ersten
+                        sorted_participants = sorted(participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                        p_data = sorted_participants[0]
                         
-                        # Für FillALL alle Teilnehmer anzeigen, keine Begrenzung auf einen Spieler
-                        for p_data in sorted_fill:
-                            if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
-                                p_id = p_data[1]
-                                fill_players_text += f"<@{p_id}>\n"
+                        if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
+                            p_id = p_data[1]
+                            
+                            # Rolle und Spieler in einer Zeile
+                            field_content += f"{role_counter}. {role_name} <@{p_id}>"
+                            
+                            # Kommentar falls vorhanden
+                            if len(p_data) >= 4 and p_data[3]:
+                                field_content += f" {p_data[3]}"
+                            
+                            field_content += "\n"
+                        else:
+                            field_content += f"{role_counter}. {role_name}\n"
                     else:
-                        fill_players_text = ""
+                        field_content += f"{role_counter}. {role_name}\n"
                     
-                    # Add Fill role to embed
-                    embed.add_field(name=fill_text, value=fill_players_text, inline=False)
+                    # Increment the role counter for actual roles
+                    role_counter += 1
 
-                event_post = await channel.send(embed=embed)
+            # Füge alle regulären Rollen als ein einziges Feld hinzu
+            if field_content:
+                embed.add_field(name="\u200b", value=field_content, inline=False)
+
+            # Add Fill role section
+            fill_text = ""
+            fill_players_text = ""
+
+            if fill_index is not None:
+                # Add Fill role header
+                fill_text = f"{role_counter}. {roles[fill_index]}"
+                fill_players_text = ""
                 
-                thread = await event_post.create_thread(name=event.title)
-                await thread.send("Im [Benutzerhandbuch](<https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md>) findest du alle Infos, wie du dich für Rollen anmelden kannst und wie du ein Event erstellen kannst. \n\nWenn du Fragen hast, bitte melde dich bei <@778914224613228575>")
-                print("Event message and thread created.")
-            except Exception as e:
-                print(f"Error creating event message or thread: {e}")
-                # Since we already responded to the interaction, we can't use interaction.response again
-                try:
-                    # Try to send a follow-up message instead
-                    await interaction.followup.send("Ein Fehler ist beim Erstellen der Event-Nachricht oder des Threads aufgetreten.", ephemeral=True)
-                except:
-                    # If that fails too, log the error
-                    print("Could not send follow-up message.")
+                # Get participants for Fill role
+                fill_key = f"{fill_index}:{roles[fill_index]}"
+                
+                # Sicherer Zugriff auf participants
+                if isinstance(event, dict):
+                    fill_participants = event.get('participants', {}).get(fill_key, [])
+                else:
+                    fill_participants = getattr(event, 'participants', {}).get(fill_key, [])
+                
+                if fill_participants:
+                    # Sort participants by timestamp
+                    sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                    
+                    # Für FillALL alle Teilnehmer anzeigen, keine Begrenzung auf einen Spieler
+                    for p_data in sorted_fill:
+                        if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
+                            p_id = p_data[1]
+                            fill_players_text += f"<@{p_id}>\n"
+                else:
+                    fill_players_text = ""
+                
+                # Add Fill role to embed
+                embed.add_field(name=fill_text, value=fill_players_text, inline=False)
+
+            # Send the event post and create a thread
+            event_post = await channel.send(embed=embed)
+            thread = await event_post.create_thread(name=event.title)
+            
+            # Save the message ID
+            event.message_id = event_post.id
+            save_event_to_json(event)
+            
+            await thread.send("Im [Benutzerhandbuch](<https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md>) findest du alle Infos, wie du dich für Rollen anmelden kannst und wie du ein Event erstellen kannst. \n\nWenn du Fragen hast, bitte melde dich bei <@778914224613228575>")
+            print("Event message and thread created.")
+            
+            # Erstelle das Event Listing nach dem Erstellen des Events
+            await create_event_listing(interaction.guild)
+            
         except Exception as e:
-            print(f"Error in on_submit: {e}")
-            # Make sure we respond to the interaction to close the modal
+            print(f"Error creating event message or thread: {e}")
+            # Since we already responded to the interaction, we can't use interaction.response again
             try:
-                await interaction.response.send_message("Ein Fehler ist bei der Verarbeitung deiner Anfrage aufgetreten.", ephemeral=True)
+                # Try to send a follow-up message instead
+                await interaction.followup.send("Ein Fehler ist beim Erstellen der Event-Nachricht oder des Threads aufgetreten.", ephemeral=True)
             except:
-                # If we've already responded, try to send a follow-up
-                try:
-                    await interaction.followup.send("Ein Fehler ist bei der Verarbeitung deiner Anfrage aufgetreten.", ephemeral=True)
-                except:
-                    print("Could not send error message.")
+                # If that fails too, log the error
+                print("Could not send follow-up message.")
+
+async def create_event_listing(guild):
+    """Erstellt ein Event Listing mit allen anstehenden Events"""
+    try:
+        # Lade alle anstehenden Events
+        events = load_upcoming_events()
+        
+        if not events:
+            logger.info("No upcoming events to list.")
+            return
+        
+        # Get the guild ID for links
+        guild_id = guild.id
+        
+        # Sortiere Events nach Datum und Zeit
+        try:
+            # Sortiere nach dem datetime_obj, wenn vorhanden
+            events_with_datetime = []
+            for event in events:
+                # Versuche das Datum und die Zeit in ein datetime-Objekt zu konvertieren
+                if 'datetime_obj' in event and event['datetime_obj']:
+                    # Datetime_obj ist bereits als String gespeichert, konvertiere es zurück
+                    dt_str = event['datetime_obj']
+                    dt_obj = datetime.fromisoformat(dt_str)
+                    events_with_datetime.append((event, dt_obj))
+                else:
+                    # Fallback: Versuche aus dem Datum und der Zeit ein datetime-Objekt zu erstellen
+                    try:
+                        date_str = event['date']
+                        time_str = event['time']
+                        # Konvertiere deutsches Datumsformat (dd.mm.yyyy) in datetime
+                        day, month, year = map(int, date_str.split('.'))
+                        hour, minute = map(int, time_str.split(':'))
+                        dt_obj = datetime(year, month, day, hour, minute)
+                        events_with_datetime.append((event, dt_obj))
+                    except (ValueError, KeyError) as e:
+                        logger.error(f"Error parsing date/time for event {event.get('title', 'unknown')}: {e}")
+                        # Füge das Event mit dem aktuellen Zeitpunkt hinzu, damit es angezeigt wird
+                        events_with_datetime.append((event, datetime.now()))
+            
+            # Sortiere die Events nach Zeitpunkt
+            events_with_datetime.sort(key=lambda x: x[1])
+            sorted_events = [event for event, _ in events_with_datetime]
+        except Exception as e:
+            logger.error(f"Error sorting events: {e}")
+            sorted_events = events  # Fallback: Unsortierte Events
+        
+        # Gruppiere Events nach Datum
+        events_by_date = {}
+        for event in sorted_events:
+            date = event.get('date', 'Unbekanntes Datum')
+            if date not in events_by_date:
+                events_by_date[date] = []
+            events_by_date[date].append(event)
+        
+        # Erstelle den Embed
+        embed = discord.Embed(
+            title="\u200b",
+            color=0x0dceda  # Eventify Cyan
+        )
+
+        embed.set_thumbnail(url="https://raw.githubusercontent.com/nox1104/Eventify/main/pictures/Eventify_2.png")
+        
+        # Füge jedes Datum mit seinen Events hinzu
+        for date, date_events in events_by_date.items():
+            # Erstelle die Beschreibung für dieses Datum
+            date_description = ""
+            for event in date_events:
+                title = event.get('title', 'Unbekanntes Event')
+                time = event.get('time', '')
+                caller_id = event.get('caller_id', None)
+                message_id = event.get('message_id')
+                
+                # Füge Zeit, Ersteller und Titel hinzu
+                if caller_id:
+                    if message_id and message_id != "None" and message_id != None:
+                        date_description += f"{time} <@{caller_id}> [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
+                    else:
+                        date_description += f"{time} <@{caller_id}> {title}\n"
+                else:
+                    if message_id and message_id != "None" and message_id != None:
+                        date_description += f"{time} [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
+                    else:
+                        date_description += f"{time} {title}\n"
+            
+            # Füge das Feld mit diesem Datum hinzu
+            embed.add_field(
+                name=f"{date}",
+                value=date_description,
+                inline=False
+            )
+        
+        # Sende den Embed in den Event-Kanal
+        channel = guild.get_channel(CHANNEL_ID_EVENT)
+        await channel.send(embed=embed)
+        logger.info("Event listing created successfully.")
+    except Exception as e:
+        logger.error(f"Error creating event listing: {e}")
 
 bot = MyBot()
 
@@ -1049,35 +1146,35 @@ def save_events_to_json(events):
 async def create_event(interaction: discord.Interaction, title: str, date: str, time: str):
     try:
         # Parse date and time
-        parsed_date = parse_date(date)
-        parsed_time = parse_time(time)
-        
-        if not parsed_date or not parsed_time:
+    parsed_date = parse_date(date)
+    parsed_time = parse_time(time)
+
+    if not parsed_date or not parsed_time:
             await interaction.response.send_message("Ungültiges Datum oder Zeitformat! \nBitte verwende DDMMYYYY (31122025 für den 31.12.2025) für das Datum und HHMM (1300 für 13:00 Uhr) für die Zeit.", ephemeral=True)
             return
-        
+
         # Combine date and time into a datetime object
         full_datetime = datetime.combine(parsed_date, parsed_time)
         
         # Check if the date is in the future
         if full_datetime < datetime.now():
             await interaction.response.send_message("Das Datum muss in der Zukunft liegen.", ephemeral=True)
-            return
-            
+        return
+
         # Format date and time for display
-        formatted_date = parsed_date.strftime("%d.%m.%Y")
-        formatted_time = parsed_time.strftime("%H:%M")
-        
+    formatted_date = parsed_date.strftime("%d.%m.%Y")
+    formatted_time = parsed_time.strftime("%H:%M")
+
         # Create and show the modal
         modal = EventModal(
             title=title, 
             date=formatted_date, 
             time=formatted_time,
-            caller_id=str(interaction.user.id),  # Speichere die ID des Erstellers
-            caller_name=interaction.user.name  # Speichere den Namen des Erstellers
+            caller_id=str(interaction.user.id),
+            caller_name=interaction.user.name
         )
         modal.full_datetime = full_datetime  # Pass the datetime object to the modal
-        await interaction.response.send_modal(modal)
+    await interaction.response.send_modal(modal)
     except Exception as e:
         print(f"Error in create_event: {e}")
         await interaction.response.send_message(f"Ein Fehler ist aufgetreten: {str(e)}", ephemeral=True)
