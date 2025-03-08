@@ -377,8 +377,8 @@ class MyBot(discord.Client):
                 embed.add_field(name="Erstellt von", value=f"<@{event['caller_id']}>", inline=False)
             
             # Füge die Rollen-Mention als separates Feld hinzu, wenn vorhanden
-            if 'mention_role' in event and event['mention_role']:
-                embed.add_field(name="Für", value=f"<@&{event['mention_role'].id}>", inline=False)
+            if 'mention_role_id' in event and event['mention_role_id']:
+                embed.add_field(name="Für", value=f"<@&{event['mention_role_id']}>", inline=False)
             
             # Add event details
             embed.add_field(name="Date", value=event['date'], inline=True)
@@ -637,10 +637,6 @@ class EventModal(discord.ui.Modal, title="Eventify"):
         try:
             description = self.description_input.value
             
-            # Füge die Rollen-Mention am Anfang der Beschreibung hinzu, wenn eine Rolle angegeben wurde
-            if self.mention_role:
-                description = f"<@&{self.mention_role.id}>\n\n{description}"
-            
             # Get roles from input, filter out empty lines, and add the "Fill" role
             roles = [role.strip() for role in self.roles_input.value.splitlines() if role.strip()]
             
@@ -672,6 +668,10 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 caller_name=self.caller_name  # Pass the caller name
             )
 
+            # Speichere die Mention-Rolle ID separat im Event-Objekt
+            if self.mention_role:
+                event.mention_role_id = str(self.mention_role.id)
+            
             # Save the event to JSON
             save_event_to_json(event)
             print("Event saved to JSON.")
