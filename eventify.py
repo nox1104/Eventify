@@ -5,6 +5,7 @@ import os
 from datetime import datetime, time
 import json
 import logging
+import uuid  # Für die Generierung zufälliger IDs
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -315,28 +316,52 @@ class MyBot(discord.Client):
 
     async def _update_event_and_save(self, message, event, events):
         try:
-            # Update the event message
-            await self.update_event_message(message.channel, event)
-            logger.info("Updated event message")
+            # Find the event by ID if available, otherwise by title
+            event_id = event.get("event_id")
+            if event_id:
+                # Find the event in the events list by ID
+                for e in events:
+                    if e.get("event_id") == event_id:
+                        # Update the event
+                        e.update(event)
+                        break
+            else:
+                # Fallback to title for backward compatibility
+                for e in events:
+                    if e["title"] == event["title"]:
+                        # Update the event
+                        e.update(event)
+                        break
             
-            # Save updated events to JSON
+            # Save the updated events
             save_events_to_json(events)
-            logger.info("Saved updated events to JSON")
+            
+            # Update the event message
+            thread = message.channel
+            await self.update_event_message(thread, event)
+            
+            return True
         except Exception as e:
-            logger.error(f"Error updating event or saving to JSON: {e}")
-            await message.channel.send(f"Error updating event: {str(e)}")
+            logger.error(f"Error updating event: {e}")
+            await message.channel.send(f"Error updating event: {e}")
+            return False
 
     async def update_event_message(self, thread, event):
         try:
             logger.info(f"Updating event message for event: {event['title']}")
             
             # Create Discord Embed
-            embed = discord.Embed(title=event['title'], color=0x0dceda)
+            embed = discord.Embed(title=f"__**{event['title']}**__", color=0x0dceda)
             
             # Add event details
             embed.add_field(name="Date", value=event['date'], inline=True)
             embed.add_field(name="Time", value=event['time'], inline=True)
-            embed.add_field(name="Description", value=event['description'], inline=False)
+            
+            # Truncate description if it's too long (Discord limit is 1024 characters per field)
+            description = event['description']
+            if len(description) > 1020:  # Leave room for ellipsis
+                description = description[:1020] + "..."
+            embed.add_field(name="Description", value=description, inline=False)
             
             # Find the Fill role - case insensitive check
             fill_index = next((i for i, role in enumerate(event['roles']) if role.lower() in ["fill", "fillall"]), None)
@@ -373,6 +398,7 @@ class MyBot(discord.Client):
             # Erstellung des Inhalts für alle regulären Rollen
             field_content = ""
             current_section = None
+            role_counter = 1  # Counter for actual roles (excluding section headers)
 
             # Gehe durch alle Rollen und Abschnittsüberschriften in der ursprünglichen Reihenfolge
             all_items = section_headers + regular_roles
@@ -384,12 +410,18 @@ class MyBot(discord.Client):
                     # Füge eine Leerzeile ein, wenn es nicht die erste Überschrift ist
                     if field_content:
                         field_content += "\n"
-                    field_content += f"**{role_name}**\n"
+                    # Remove parentheses from section header
+                    header_text = role_name.strip()[1:-1]  # Remove first and last character
+                    field_content += f"**{header_text}**\n"
                 else:
                     # Dies ist eine normale Rolle
                     # Rolle und Teilnehmer anzeigen
                     role_key = f"{role_idx}:{role_name}"
-                    participants = event.get('participants', {}).get(role_key, [])
+                    # Sicherer Zugriff auf participants
+                    if isinstance(event, dict):
+                        participants = event.get('participants', {}).get(role_key, [])
+                    else:
+                        participants = getattr(event, 'participants', {}).get(role_key, [])
                     
                     if participants:
                         # Sortiere Teilnehmer nach Zeitstempel und zeige nur den ersten
@@ -400,7 +432,7 @@ class MyBot(discord.Client):
                             p_id = p_data[1]
                             
                             # Rolle und Spieler in einer Zeile
-                            field_content += f"{role_idx+1}. {role_name} <@{p_id}>"
+                            field_content += f"{role_counter}. {role_name} <@{p_id}>"
                             
                             # Kommentar falls vorhanden
                             if len(p_data) >= 4 and p_data[3]:
@@ -408,9 +440,12 @@ class MyBot(discord.Client):
                             
                             field_content += "\n"
                         else:
-                            field_content += f"{role_idx+1}. {role_name} -\n"
+                            field_content += f"{role_counter}. {role_name}\n"
                     else:
-                        field_content += f"{role_idx+1}. {role_name} -\n"
+                        field_content += f"{role_counter}. {role_name}\n"
+                    
+                    # Increment the role counter for actual roles
+                    role_counter += 1
 
             # Füge alle regulären Rollen als ein einziges Feld hinzu
             if field_content:
@@ -422,12 +457,17 @@ class MyBot(discord.Client):
 
             if fill_index is not None:
                 # Add Fill role header
-                fill_text = f"{fill_index+1}. {event['roles'][fill_index]}"
+                fill_text = f"{role_counter}. {event['roles'][fill_index]}"
                 fill_players_text = ""
                 
                 # Get participants for Fill role
                 fill_key = f"{fill_index}:{event['roles'][fill_index]}"
-                fill_participants = event.get('participants', {}).get(fill_key, [])
+                
+                # Sicherer Zugriff auf participants
+                if isinstance(event, dict):
+                    fill_participants = event.get('participants', {}).get(fill_key, [])
+                else:
+                    fill_participants = getattr(event, 'participants', {}).get(fill_key, [])
                 
                 if fill_participants:
                     # Sort participants by timestamp
@@ -439,7 +479,7 @@ class MyBot(discord.Client):
                             p_id = p_data[1]
                             fill_players_text += f"<@{p_id}>\n"
                 else:
-                    fill_players_text = "-\n"
+                    fill_players_text = ""
                 
                 # Add Fill role to embed
                 embed.add_field(name=fill_text, value=fill_players_text, inline=False)
@@ -513,8 +553,17 @@ class Event:
         self.time = time
         self.description = description
         self.roles = roles
-        self.datetime = datetime_obj  # Store the datetime object
-        self.participants = {}  # Dictionary for participants and their roles
+        self.participants = {}
+        self.datetime_obj = datetime_obj
+        
+        # Generiere eine eindeutige ID für das Event
+        timestamp = datetime_obj.strftime("%Y%m%d%H%M") if datetime_obj else datetime.datetime.now().strftime("%Y%m%d%H%M")
+        random_string = str(uuid.uuid4())[:8]  # Verwende die ersten 8 Zeichen der UUID
+        self.event_id = f"{timestamp}-{random_string}"
+    
+    def get(self, attr, default=None):
+        """Emulates dictionary-like get method to maintain compatibility."""
+        return getattr(self, attr, default)
     
     def to_dict(self):
         """Convert the event to a dictionary for JSON serialization"""
@@ -524,8 +573,8 @@ class Event:
             "time": self.time,
             "description": self.description,
             "roles": self.roles,
-            "datetime": self.datetime.isoformat() if self.datetime else None,
-            "participants": self.participants
+            "participants": self.participants,
+            "event_id": self.event_id  # Speichere die eindeutige ID
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
@@ -552,8 +601,8 @@ class EventModal(discord.ui.Modal, title="Eventify"):
         print("on_submit method called.")
         try:
             description = self.description_input.value
-            # Get roles from input and add the "Fill" role
-            roles = [role.strip() for role in self.roles_input.value.splitlines()]
+            # Get roles from input, filter out empty lines, and add the "Fill" role
+            roles = [role.strip() for role in self.roles_input.value.splitlines() if role.strip()]
             
             # Find the Fill role - case insensitive check
             fill_index = next((i for i, role in enumerate(roles) if role.lower() in ["fill", "fillall"]), None)
@@ -592,12 +641,17 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
                 
                 # Create embed with horizontal frames
-                embed = discord.Embed(title=event.title, color=0x0dceda)  # Geänderte Embed-Farbe
+                embed = discord.Embed(title=f"__**{event.title}**__", color=0x0dceda)
                 
                 # Add event details
                 embed.add_field(name="Date", value=event.date, inline=True)
                 embed.add_field(name="Time", value=event.time, inline=True)
-                embed.add_field(name="Description", value=event.description, inline=False)
+                
+                # Truncate description if it's too long (Discord limit is 1024 characters per field)
+                description_text = event.description
+                if len(description_text) > 1020:  # Leave room for ellipsis
+                    description_text = description_text[:1020] + "..."
+                embed.add_field(name="Description", value=description_text, inline=False)
                 
                 # Extrahiere reguläre Rollen (alles außer FillALL)
                 regular_roles = []
@@ -613,6 +667,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 # Erstellung des Inhalts für alle regulären Rollen
                 field_content = ""
                 current_section = None
+                role_counter = 1  # Counter for actual roles (excluding section headers)
 
                 # Gehe durch alle Rollen und Abschnittsüberschriften in der ursprünglichen Reihenfolge
                 all_items = section_headers + regular_roles
@@ -624,12 +679,18 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                         # Füge eine Leerzeile ein, wenn es nicht die erste Überschrift ist
                         if field_content:
                             field_content += "\n"
-                        field_content += f"**{role_name}**\n"
+                        # Remove parentheses from section header
+                        header_text = role_name.strip()[1:-1]  # Remove first and last character
+                        field_content += f"**{header_text}**\n"
                     else:
                         # Dies ist eine normale Rolle
                         # Rolle und Teilnehmer anzeigen
                         role_key = f"{role_idx}:{role_name}"
-                        participants = event.get('participants', {}).get(role_key, [])
+                        # Sicherer Zugriff auf participants
+                        if isinstance(event, dict):
+                            participants = event.get('participants', {}).get(role_key, [])
+                        else:
+                            participants = getattr(event, 'participants', {}).get(role_key, [])
                         
                         if participants:
                             # Sortiere Teilnehmer nach Zeitstempel und zeige nur den ersten
@@ -640,7 +701,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                                 p_id = p_data[1]
                                 
                                 # Rolle und Spieler in einer Zeile
-                                field_content += f"{role_idx+1}. {role_name} <@{p_id}>"
+                                field_content += f"{role_counter}. {role_name} <@{p_id}>"
                                 
                                 # Kommentar falls vorhanden
                                 if len(p_data) >= 4 and p_data[3]:
@@ -648,9 +709,12 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                                 
                                 field_content += "\n"
                             else:
-                                field_content += f"{role_idx+1}. {role_name} -\n"
+                                field_content += f"{role_counter}. {role_name}\n"
                         else:
-                            field_content += f"{role_idx+1}. {role_name} -\n"
+                            field_content += f"{role_counter}. {role_name}\n"
+                        
+                        # Increment the role counter for actual roles
+                        role_counter += 1
 
                 # Füge alle regulären Rollen als ein einziges Feld hinzu
                 if field_content:
@@ -662,12 +726,17 @@ class EventModal(discord.ui.Modal, title="Eventify"):
 
                 if fill_index is not None:
                     # Add Fill role header
-                    fill_text = f"{fill_index+1}. {roles[fill_index]}"
+                    fill_text = f"{role_counter}. {roles[fill_index]}"
                     fill_players_text = ""
                     
                     # Get participants for Fill role
                     fill_key = f"{fill_index}:{roles[fill_index]}"
-                    fill_participants = event.get('participants', {}).get(fill_key, [])
+                    
+                    # Sicherer Zugriff auf participants
+                    if isinstance(event, dict):
+                        fill_participants = event.get('participants', {}).get(fill_key, [])
+                    else:
+                        fill_participants = getattr(event, 'participants', {}).get(fill_key, [])
                     
                     if fill_participants:
                         # Sort participants by timestamp
@@ -679,7 +748,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                                 p_id = p_data[1]
                                 fill_players_text += f"<@{p_id}>\n"
                     else:
-                        fill_players_text = "-\n"
+                        fill_players_text = ""
                     
                     # Add Fill role to embed
                     embed.add_field(name=fill_text, value=fill_players_text, inline=False)
@@ -746,82 +815,200 @@ def parse_time(time_str: str):
         return None
 
 def save_event_to_json(event):
-    """Save an event to the JSON file"""
-    # Try to load existing events
-    events = []
-    if os.path.exists(EVENTS_JSON_FILE):
-        try:
-            with open(EVENTS_JSON_FILE, 'r') as f:
-                events = json.load(f)
-        except json.JSONDecodeError:
-            # If the file is corrupted, start with an empty list
-            events = []
-
-    # Clean up old events before adding new one
-    events = clean_old_events(events)
-    
-    # Add the new event - prüfe, ob es ein Event-Objekt oder ein Dictionary ist
-    if hasattr(event, 'to_dict'):
-        # Es ist ein Event-Objekt
-        events.append(event.to_dict())
-    else:
-        # Es ist bereits ein Dictionary
-        events.append(event)
-    
-    # Save back to the file
-    with open(EVENTS_JSON_FILE, 'w') as f:
-        json.dump(events, f, indent=4)
+    try:
+        # Check if file exists, create it if not
+        if not os.path.exists(EVENTS_JSON_FILE):
+            with open(EVENTS_JSON_FILE, 'w') as f:
+                json.dump({"events": []}, f, indent=4)
+        
+        # Load existing events
+        with open(EVENTS_JSON_FILE, 'r') as f:
+            try:
+                events_data = json.load(f)
+            except json.JSONDecodeError:
+                # File is corrupted, reset it
+                logger.error(f"JSON file is corrupted. Resetting {EVENTS_JSON_FILE}")
+                events_data = {"events": []}
+        
+        # Validate format
+        if not isinstance(events_data, dict) or "events" not in events_data:
+            events_data = {"events": []}
+        
+        # Clean old events (past events)
+        events_data = clean_old_events(events_data)
+        
+        # Prüfe, ob das Event bereits existiert anhand der event_id
+        event_exists = False
+        event_id = None
+        
+        # Extrahiere die event_id
+        if isinstance(event, dict):
+            event_id = event.get("event_id")
+        else:
+            event_id = getattr(event, "event_id", None)
+        
+        # Wenn keine event_id vorhanden ist (für ältere Events), generiere eine
+        if not event_id:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M")
+            random_string = str(uuid.uuid4())[:8]
+            event_id = f"{timestamp}-{random_string}"
+            
+            if isinstance(event, dict):
+                event["event_id"] = event_id
+            else:
+                event.event_id = event_id
+        
+        # Suche nach dem Event anhand der ID
+        for i, e in enumerate(events_data["events"]):
+            if e.get("event_id") == event_id:
+                # Update existing event
+                if hasattr(event, 'to_dict'):
+                    events_data["events"][i] = event.to_dict()
+                else:
+                    events_data["events"][i] = event
+                event_exists = True
+                break
+        
+        # Wenn das Event nicht gefunden wurde, suche nach dem Titel (für Abwärtskompatibilität)
+        if not event_exists:
+            for i, e in enumerate(events_data["events"]):
+                if e["title"] == (event["title"] if isinstance(event, dict) else event.title):
+                    # Update existing event
+                    if hasattr(event, 'to_dict'):
+                        events_data["events"][i] = event.to_dict()
+                    else:
+                        events_data["events"][i] = event
+                    event_exists = True
+                    break
+                
+        # If event doesn't exist, add it
+        if not event_exists:
+            if hasattr(event, 'to_dict'):
+                events_data["events"].append(event.to_dict())
+            else:
+                events_data["events"].append(event)
+        
+        # Save back to file
+        with open(EVENTS_JSON_FILE, 'w') as f:
+            json.dump(events_data, f, indent=4)
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error saving event to JSON: {e}")
+        return False
 
 def clean_old_events(events_data):
-    """Remove events that have already passed"""
-    if not events_data:
-        return []
-    
+    """Remove events that are in the past"""
     now = datetime.now()
-    current_events = []
     
-    for event_data in events_data:
-        # Keep events only if they have a valid datetime and it's in the future
-        if event_data.get('datetime'):
+    # Ensure the events_data has the expected format
+    if not isinstance(events_data, dict) or "events" not in events_data:
+        # Convert from old format to new format if needed
+        if isinstance(events_data, list):
+            events_data = {"events": events_data}
+        else:
+            events_data = {"events": []}
+    
+    # Filter out past events
+    future_events = []
+    for event in events_data["events"]:
+        # Check if event has a datetime field
+        if "datetime" in event and event["datetime"]:
             try:
-                event_datetime = datetime.fromisoformat(event_data['datetime'])
-                if event_datetime > now:
-                    current_events.append(event_data)
+                event_dt = datetime.fromisoformat(event["datetime"])
+                if event_dt > now:
+                    future_events.append(event)
             except (ValueError, TypeError):
-                # Skip events with invalid datetime format
-                pass
+                # If datetime parsing fails, keep the event
+                future_events.append(event)
+        else:
+            # If no datetime, keep the event
+            future_events.append(event)
     
-    return current_events
+    events_data["events"] = future_events
+    return events_data
 
 def load_upcoming_events():
-    """Load all upcoming events from the JSON file"""
+    """Load upcoming events from the JSON file"""
     if not os.path.exists(EVENTS_JSON_FILE):
+        # Create the file with an empty events list if it doesn't exist
+        with open(EVENTS_JSON_FILE, 'w') as f:
+            json.dump({"events": []}, f, indent=4)
         return []
     
     try:
-        with open(EVENTS_JSON_FILE, 'r') as f:
-            events_data = json.load(f)
-        
-        # Clean up the file while we're at it
-        cleaned_events = clean_old_events(events_data)
-        
-        # If we removed any events, update the file
-        if len(cleaned_events) < len(events_data):
+        # Check if file is empty
+        if os.path.getsize(EVENTS_JSON_FILE) == 0:
+            # File is empty, initialize with empty events list
             with open(EVENTS_JSON_FILE, 'w') as f:
-                json.dump(cleaned_events, f, indent=4)
+                json.dump({"events": []}, f, indent=4)
+            return []
+            
+        with open(EVENTS_JSON_FILE, 'r') as f:
+            try:
+                events_data = json.load(f)
+            except json.JSONDecodeError:
+                # File is corrupted, reset it
+                logger.error(f"JSON file is corrupted. Resetting {EVENTS_JSON_FILE}")
+                with open(EVENTS_JSON_FILE, 'w') as f:
+                    json.dump({"events": []}, f, indent=4)
+                return []
         
-        # Sort by datetime
-        cleaned_events.sort(key=lambda x: datetime.fromisoformat(x['datetime']))
-        return cleaned_events
-    
+        # Handle different data formats
+        if isinstance(events_data, dict) and "events" in events_data:
+            events = events_data["events"]
+        elif isinstance(events_data, list):
+            # Old format, convert it
+            events = events_data
+            # Save in new format
+            with open(EVENTS_JSON_FILE, 'w') as f:
+                json.dump({"events": events}, f, indent=4)
+        else:
+            # Invalid format, return empty list and reset file
+            logger.error(f"Invalid JSON format in {EVENTS_JSON_FILE}. Resetting file.")
+            events = []
+            with open(EVENTS_JSON_FILE, 'w') as f:
+                json.dump({"events": []}, f, indent=4)
+        
+        # Clean old events
+        events_data = {"events": events}
+        cleaned_data = clean_old_events(events_data)
+        
+        return cleaned_data["events"]
     except Exception as e:
-        print(f"Error loading events: {e}")
+        logger.error(f"Error loading upcoming events: {e}")
+        # Reset the file in case of error
+        try:
+            with open(EVENTS_JSON_FILE, 'w') as f:
+                json.dump({"events": []}, f, indent=4)
+        except Exception as write_error:
+            logger.error(f"Error resetting events file: {write_error}")
         return []
 
 def save_events_to_json(events):
-    """Save all events to the JSON file"""
-    with open(EVENTS_JSON_FILE, 'w') as f:
-        json.dump(events, f, indent=4)
+    """Save events to JSON file"""
+    try:
+        # Ensure we have the right format
+        if isinstance(events, list):
+            events_data = {"events": events}
+        elif isinstance(events, dict) and "events" in events:
+            events_data = events
+        else:
+            events_data = {"events": []}
+            logger.error("Invalid events format for save_events_to_json")
+        
+        with open(EVENTS_JSON_FILE, 'w') as f:
+            json.dump(events_data, f, indent=4)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving events to JSON: {e}")
+        # Try to reset the file in case of severe corruption
+        try:
+            with open(EVENTS_JSON_FILE, 'w') as f:
+                json.dump({"events": []}, f, indent=4)
+        except Exception as write_error:
+            logger.error(f"Error resetting events file: {write_error}")
+        return False
 
 @bot.tree.command(name="eventify", description="Starte ein neues Event")
 async def create_event(interaction: discord.Interaction, title: str, date: str, time: str):
