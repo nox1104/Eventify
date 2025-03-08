@@ -1218,7 +1218,7 @@ async def create_event(interaction: discord.Interaction, title: str, date: str, 
 
 @bot.tree.command(name="remind", description="Sende eine Erinnerung an alle eingetragenen Teilnehmer (nur für Event-Ersteller)")
 @app_commands.guild_only()
-async def remind_participants(interaction: discord.Interaction):
+async def remind_participants(interaction: discord.Interaction, message: str = None):
     try:
         # Prüfe ob der Befehl in einem Thread ausgeführt wird
         if not isinstance(interaction.channel, discord.Thread):
@@ -1257,27 +1257,24 @@ async def remind_participants(interaction: discord.Interaction):
             try:
                 user = await interaction.client.fetch_user(int(participant_id))
                 if user:
-                    message = (
+                    reminder_message = (
                         f"**Erinnerung an Event: {event['title']}**\n"
                         f"Datum: {event['date']}\n"
-                        f"Uhrzeit: {event['time']}\n\n"
+                        f"Uhrzeit: {event['time']}\n"
                     )
-                    if event_link:
-                        message += f"\n🔗 [Zum Event]({event_link})"
                     
-                    await user.send(message)
+                    # Füge die benutzerdefinierte Nachricht hinzu, wenn vorhanden
+                    if message:
+                        reminder_message += f"\n{message}\n"
+                    
+                    if event_link:
+                        reminder_message += f"\n🔗 [Zum Event]({event_link})"
+                    
+                    await user.send(reminder_message)
                     success_count += 1
             except Exception as e:
                 logger.error(f"Failed to send reminder to user {participant_id}: {e}")
-                failed_count += 1
-
-        # Sende Bestätigung
-        await interaction.response.send_message(
-            f"✅ Erinnerungen versendet!\n"
-            f"Erfolgreich: {success_count}\n"
-            f"Fehlgeschlagen: {failed_count}",
-            ephemeral=True
-        )
+                
 
     except Exception as e:
         logger.error(f"Error in remind_participants: {e}")
@@ -1285,5 +1282,179 @@ async def remind_participants(interaction: discord.Interaction):
             "Ein Fehler ist beim Versenden der Erinnerungen aufgetreten.", 
             ephemeral=True
         )
+
+@bot.tree.command(name="add", description="Füge einen Teilnehmer zu einer Rolle hinzu (nur für Event-Ersteller)")
+@app_commands.guild_only()
+async def add_participant(
+    interaction: discord.Interaction, 
+    user: discord.Member, 
+    role_number: int, 
+    comment: str = None
+):
+    try:
+        # Prüfe ob der Befehl in einem Thread ausgeführt wird
+        if not isinstance(interaction.channel, discord.Thread):
+            await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
+            return
+
+        # Lade das Event
+        events = load_upcoming_events()
+        event = next((e for e in events if e['title'] == interaction.channel.name), None)
+
+        if not event:
+            await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
+            return
+
+        # Prüfe ob der Benutzer der Event-Ersteller ist
+        if str(interaction.user.id) != event.get('caller_id'):
+            await interaction.response.send_message("Nur der Event-Ersteller kann Teilnehmer hinzufügen.", ephemeral=True)
+            return
+        
+        # Umwandlung der angezeigten Rollennummer zu tatsächlichem Index
+        actual_role_index = bot.role_number_to_index(event, role_number)
+        
+        if actual_role_index < 0:
+            await interaction.response.send_message(f"Ungültige Rollennummer: {role_number}", ephemeral=True)
+            return
+            
+        # Erhalte Rollennamen
+        role_name = event['roles'][actual_role_index]
+        role_key = f"{actual_role_index}:{role_name}"
+        
+        # Initialisiere participants dict falls nötig
+        if 'participants' not in event:
+            event['participants'] = {}
+            
+        if role_key not in event['participants']:
+            event['participants'][role_key] = []
+            
+        # Prüfe ob der Teilnehmer bereits für diese Rolle eingetragen ist
+        player_name = user.display_name
+        player_id = str(user.id)
+        current_time = datetime.now().timestamp()
+        
+        existing_entry = next((i for i, entry in enumerate(event['participants'][role_key]) 
+                              if entry[1] == player_id), None)
+                              
+        if existing_entry is not None:
+            # Teilnehmer ist bereits eingetragen, aktualisiere nur den Kommentar wenn vorhanden
+            if comment:
+                existing_data = event['participants'][role_key][existing_entry]
+                if len(existing_data) >= 4:
+                    event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
+                else:
+                    event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
+                
+                await interaction.response.send_message(f"Kommentar für {player_name} in Rolle {role_name} aktualisiert.", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"{player_name} ist bereits für Rolle {role_name} eingetragen.", ephemeral=True)
+        else:
+            # Prüfe, ob der Teilnehmer bereits für eine andere Rolle eingetragen ist
+            is_fill_role = role_name.lower() == "fill" or role_name.lower() == "fillall"
+            
+            if not is_fill_role:
+                # Für normale Rollen: Prüfe ob der Spieler bereits in einer anderen Rolle ist
+                for r_idx, r_name in enumerate(event['roles']):
+                    if r_name.lower() == "fill" or r_name.lower() == "fillall":
+                        continue  # Ignoriere Fill-Rollen
+                        
+                    r_key = f"{r_idx}:{r_name}"
+                    if r_key in event.get('participants', {}):
+                        for entry_idx, entry in enumerate(event['participants'][r_key]):
+                            if entry[1] == player_id:
+                                # Entferne den Spieler aus der alten Rolle
+                                event['participants'][r_key].pop(entry_idx)
+                                break
+            
+            # Füge den Spieler zur neuen Rolle hinzu
+            if comment:
+                event['participants'][role_key].append((player_name, player_id, current_time, comment))
+            else:
+                event['participants'][role_key].append((player_name, player_id, current_time))
+                
+            await interaction.response.send_message(f"{player_name} wurde zu Rolle {role_name} hinzugefügt.", ephemeral=True)
+            
+        # Update the event
+        save_event_to_json(event)
+        await bot.update_event_message(interaction.channel, event)
+        
+    except Exception as e:
+        logger.error(f"Error in add_participant: {e}")
+        await interaction.response.send_message("Ein Fehler ist beim Hinzufügen des Teilnehmers aufgetreten.", ephemeral=True)
+
+@bot.tree.command(name="remove", description="Entferne einen Teilnehmer aus einer oder allen Rollen (nur für Event-Ersteller)")
+@app_commands.guild_only()
+async def remove_participant(
+    interaction: discord.Interaction, 
+    user: discord.Member, 
+    role_number: int = None
+):
+    try:
+        # Prüfe ob der Befehl in einem Thread ausgeführt wird
+        if not isinstance(interaction.channel, discord.Thread):
+            await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
+            return
+
+        # Lade das Event
+        events = load_upcoming_events()
+        event = next((e for e in events if e['title'] == interaction.channel.name), None)
+
+        if not event:
+            await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
+            return
+
+        # Prüfe ob der Benutzer der Event-Ersteller ist
+        if str(interaction.user.id) != event.get('caller_id'):
+            await interaction.response.send_message("Nur der Event-Ersteller kann Teilnehmer entfernen.", ephemeral=True)
+            return
+            
+        player_id = str(user.id)
+        player_name = user.display_name
+        removed_count = 0
+        
+        # Wenn keine Rollennummer angegeben, entferne aus allen Rollen
+        if role_number is None:
+            for r_idx, r_name in enumerate(event['roles']):
+                r_key = f"{r_idx}:{r_name}"
+                if r_key in event.get('participants', {}):
+                    initial_count = len(event['participants'][r_key])
+                    event['participants'][r_key] = [p for p in event['participants'][r_key] if p[1] != player_id]
+                    removed_count += initial_count - len(event['participants'][r_key])
+                    
+            if removed_count > 0:
+                await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt.", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"{player_name} war für keine Rolle eingetragen.", ephemeral=True)
+        else:
+            # Entferne aus einer spezifischen Rolle
+            actual_role_index = bot.role_number_to_index(event, role_number)
+            
+            if actual_role_index < 0:
+                await interaction.response.send_message(f"Ungültige Rollennummer: {role_number}", ephemeral=True)
+                return
+                
+            role_name = event['roles'][actual_role_index]
+            role_key = f"{actual_role_index}:{role_name}"
+            
+            if role_key in event.get('participants', {}):
+                initial_count = len(event['participants'][role_key])
+                event['participants'][role_key] = [p for p in event['participants'][role_key] if p[1] != player_id]
+                removed_count = initial_count - len(event['participants'][role_key])
+                
+                if removed_count > 0:
+                    await interaction.response.send_message(f"{player_name} wurde aus Rolle {role_name} entfernt.", ephemeral=True)
+                else:
+                    await interaction.response.send_message(f"{player_name} war nicht für Rolle {role_name} eingetragen.", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"Rolle {role_name} hat keine Teilnehmer.", ephemeral=True)
+        
+        # Aktualisiere das Event nur wenn etwas geändert wurde
+        if removed_count > 0:
+            save_event_to_json(event)
+            await bot.update_event_message(interaction.channel, event)
+            
+    except Exception as e:
+        logger.error(f"Error in remove_participant: {e}")
+        await interaction.response.send_message("Ein Fehler ist beim Entfernen des Teilnehmers aufgetreten.", ephemeral=True)
 
 bot.run(DISCORD_TOKEN)

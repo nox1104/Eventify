@@ -54,14 +54,36 @@ Als Event-Ersteller kannst du allen eingetragenen Teilnehmern eine Erinnerung sc
 
 1. Gehe in den Event-Thread
 2. Verwende den Slash-Befehl `/remind`
+   - Optional kannst du eine zusätzliche Nachricht mit `message:` hinzufügen
+   - Beispiel: `/remind message: Denkt an eure Buffs und Tränke!`
 3. Der Bot sendet dann:
    - Eine private Nachricht an alle eingetragenen Teilnehmer mit:
      - Event-Titel
      - Datum und Uhrzeit
+     - Deine zusätzliche Nachricht (falls angegeben)
      - Link zum Event
    - Eine Bestätigung an dich, wie viele Erinnerungen erfolgreich versendet wurden
 
 Nur der Event-Ersteller kann diesen Befehl verwenden.
+
+### Teilnehmer verwalten (für Event-Ersteller)
+
+Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
+
+#### Teilnehmer hinzufügen:
+1. Verwende im Event-Thread den Befehl `/add_participant`
+2. Gib folgende Parameter ein:
+   - `user`: Der Discord-Benutzer, den du hinzufügen möchtest (per Autocomplete)
+   - `role_number`: Die Nummer der Rolle, z.B. 1 für die erste Rolle
+   - `comment` (optional): Ein Kommentar, der neben dem Namen angezeigt wird
+
+#### Teilnehmer entfernen:
+1. Verwende im Event-Thread den Befehl `/remove_participant`
+2. Gib folgende Parameter ein:
+   - `user`: Der Discord-Benutzer, den du entfernen möchtest (per Autocomplete)
+   - `role_number` (optional): Die Nummer der Rolle. Wenn nicht angegeben, wird der Teilnehmer aus allen Rollen entfernt
+
+Nur der Event-Ersteller kann diese Befehle verwenden.
 
 ### Rollenformatierung
 
@@ -80,6 +102,15 @@ Nur der Event-Ersteller kann diesen Befehl verwenden.
 - Im Thread kannst du weitere Informationen teilen und mit den Teilnehmern kommunizieren
 - Das Event wird automatisch in der Event-Liste angezeigt
 - Dein Name wird als Ersteller unter dem Titel des Events angezeigt
+
+### Nutzung von Links in Discord
+
+Um Links in Discord klickbar zu machen, verwende die folgende Markdown-Syntax:
+
+- **Klickbarer Link**: `[Linktext](https://example.com)`
+- `[builds](https://docs.google.com/spreadsheets/d/1pNt74V...)`
+- `[Bildbeschreibung](https://de.wikipedia.org/wiki/Fliegender_Fisch_(Sternbild)#/media/Datei:Uranometria_Pavo_et_al.png)`
+- Achte darauf, dass keine Leerzeichen zwischen den Klammern sind
 
 ---
 
@@ -119,3 +150,4 @@ oder mit Kommentar:
 ```
 -
 ```
+
