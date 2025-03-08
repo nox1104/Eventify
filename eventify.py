@@ -200,26 +200,43 @@ class MyBot(discord.Client):
                             # Check if player is already signed up for another role (except Fill)
                             already_signed_up = False
                             player_current_role = None
+                            player_current_role_key = None
+                            
                             for r_idx, r_name in enumerate(event['roles']):
                                 if r_name.lower() == "fill" or r_name.lower() == "fillall":
                                     continue  # Skip Fill and FillALL roles
                                 
                                 r_key = f"{r_idx}:{r_name}"
                                 if r_key in event.get('participants', {}):
-                                    if any(entry[1] == player_id for entry in event['participants'][r_key]):
-                                        already_signed_up = True
-                                        player_current_role = r_name
+                                    for entry_idx, entry in enumerate(event['participants'][r_key]):
+                                        if entry[1] == player_id:
+                                            already_signed_up = True
+                                            player_current_role = r_name
+                                            player_current_role_key = r_key
+                                            player_current_entry_idx = entry_idx
+                                            break
+                                    if already_signed_up:
                                         break
                             
                             if already_signed_up:
-                                logger.warning(f"{player_name} is already signed up for role {player_current_role}")
-                                await message.channel.send(
-                                    f"Sorry, you are already signed up for role '{player_current_role}'. "
-                                    f"You can only sign up for one regular role. "
-                                    f"You can additionally sign up for FillALL. "
-                                    f"If you want to change your role, unregister first with `-` and then sign up for the new role. "
-                                    f"You can add a comment to note your alternative roles."
-                                )
+                                # Automatisch von der vorherigen Rolle abmelden
+                                logger.info(f"Automatically unregistering {player_name} from role {player_current_role}")
+                                
+                                # Entferne den Spieler von der vorherigen Rolle
+                                event['participants'][player_current_role_key].pop(player_current_entry_idx)
+                                
+                                # Füge den Spieler zur neuen Rolle hinzu
+                                if comment:
+                                    event['participants'][role_key].append((player_name, player_id, current_time, comment))
+                                else:
+                                    event['participants'][role_key].append((player_name, player_id, current_time))
+                                
+                                logger.info(f"Added {player_name} to role {role_name}")
+                                
+                                # Update the event message and save to JSON
+                                await self._update_event_and_save(message, event, events)
+                                await message.add_reaction('✅')  # Add confirmation reaction
+                                await message.channel.send(f"Du wurdest automatisch von der Rolle '{player_current_role}' abgemeldet und für '{role_name}' angemeldet.")
                             else:
                                 # Add new entry with timestamp and comment
                                 if comment:
