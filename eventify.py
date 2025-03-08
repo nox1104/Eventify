@@ -631,7 +631,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
     async def on_submit(self, interaction: discord.Interaction):
         print("on_submit method called.")
         try:
-        description = self.description_input.value
+            description = self.description_input.value
             # Get roles from input, filter out empty lines, and add the "Fill" role
             roles = [role.strip() for role in self.roles_input.value.splitlines() if role.strip()]
             
@@ -651,12 +651,12 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 roles.append(fill_role)
                 # Update the fill_index to match the new position
                 fill_index = len(roles) - 1
-        
-        event = Event(
-            title=self.title,
-            date=self.date,
-            time=self.time,
-            description=description,
+            
+            event = Event(
+                title=self.title,
+                date=self.date,
+                time=self.time,
+                description=description,
                 roles=roles,
                 datetime_obj=self.full_datetime,  # Pass the datetime object
                 caller_id=self.caller_id,  # Pass the caller ID
@@ -670,7 +670,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             # Silently close the modal without sending a message
             await interaction.response.defer()
 
-        channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
+            channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
             
             # Create embed with horizontal frames
             embed = discord.Embed(title=f"__**{event.title}**__", color=0x0dceda)
@@ -797,7 +797,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             event.message_id = event_post.id
             save_event_to_json(event)
             
-            await thread.send("Im [Benutzerhandbuch](<https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md>) findest du alle Infos, wie du dich für Rollen anmelden kannst und wie du ein Event erstellen kannst. \n\nWenn du Fragen hast, bitte melde dich bei <@778914224613228575>")
+            await thread.send("Im [Benutzerhandbuch](<https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md>) findest du alle Infos, wie du dich für Rollen anmelden kannst und wie du ein Event erstellen kannst. \n\nWenn du Fragen hast, melde dich bei <@778914224613228575>")
             print("Event message and thread created.")
             
             # Erstelle das Event Listing nach dem Erstellen des Events
@@ -808,10 +808,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             # Since we already responded to the interaction, we can't use interaction.response again
             try:
                 # Try to send a follow-up message instead
-                await interaction.followup.send("Ein Fehler ist beim Erstellen der Event-Nachricht oder des Threads aufgetreten.", ephemeral=True)
-            except:
-                # If that fails too, log the error
-                print("Could not send follow-up message.")
+                await interaction.followup.send(f"Ein Fehler ist aufgetreten: {str(e)}", ephemeral=True)
+            except Exception as follow_up_error:
+                print(f"Couldn't send follow-up error message: {follow_up_error}")
 
 async def create_event_listing(guild):
     """Erstellt ein Event Listing mit allen anstehenden Events"""
@@ -869,11 +868,9 @@ async def create_event_listing(guild):
         
         # Erstelle den Embed
         embed = discord.Embed(
-            title="\u200b",
+            title="Eventübersicht",
             color=0x0dceda  # Eventify Cyan
         )
-
-        embed.set_thumbnail(url="https://raw.githubusercontent.com/nox1104/Eventify/main/pictures/Eventify_2.png")
         
         # Füge jedes Datum mit seinen Events hinzu
         for date, date_events in events_by_date.items():
@@ -1043,19 +1040,59 @@ def clean_old_events(events_data):
     
     # Filter out past events
     future_events = []
+    removed_count = 0
+    
     for event in events_data["events"]:
-        # Check if event has a datetime field
-        if "datetime" in event and event["datetime"]:
+        keep_event = True
+        
+        # Check if event has datetime_obj field (new format)
+        if "datetime_obj" in event and event["datetime_obj"]:
             try:
-                event_dt = datetime.fromisoformat(event["datetime"])
-                if event_dt > now:
-                    future_events.append(event)
+                event_dt = datetime.fromisoformat(event["datetime_obj"])
+                if event_dt <= now:
+                    keep_event = False
+                    removed_count += 1
             except (ValueError, TypeError):
-                # If datetime parsing fails, keep the event
-                future_events.append(event)
-        else:
-            # If no datetime, keep the event
+                # If datetime parsing fails, try to parse from date and time
+                pass
+        
+        # If no datetime_obj or parsing failed, try to parse from date and time fields
+        if keep_event and "date" in event and "time" in event:
+            try:
+                # Parse date (format: DD.MM.YYYY)
+                if "." in event["date"]:
+                    day, month, year = map(int, event["date"].split("."))
+                else:
+                    # Try to parse without dots (DDMMYYYY)
+                    date_str = event["date"]
+                    day = int(date_str[:2])
+                    month = int(date_str[2:4])
+                    year = int(date_str[4:])
+                
+                # Parse time (format: HH:MM)
+                if ":" in event["time"]:
+                    hour, minute = map(int, event["time"].split(":"))
+                else:
+                    # Try to parse without colon (HHMM)
+                    time_str = event["time"]
+                    hour = int(time_str[:2])
+                    minute = int(time_str[2:])
+                
+                # Create datetime object
+                event_dt = datetime(year, month, day, hour, minute)
+                
+                # Keep only future events
+                if event_dt <= now:
+                    keep_event = False
+                    removed_count += 1
+            except (ValueError, TypeError, IndexError) as e:
+                logger.warning(f"Failed to parse date/time for event: {event.get('title', 'unknown')}, error: {e}")
+        
+        if keep_event:
             future_events.append(event)
+    
+    if removed_count > 0:
+        logger.info(f"Removed {removed_count} past events")
     
     events_data["events"] = future_events
     return events_data
@@ -1146,11 +1183,11 @@ def save_events_to_json(events):
 async def create_event(interaction: discord.Interaction, title: str, date: str, time: str):
     try:
         # Parse date and time
-    parsed_date = parse_date(date)
-    parsed_time = parse_time(time)
+        parsed_date = parse_date(date)
+        parsed_time = parse_time(time)
 
-    if not parsed_date or not parsed_time:
-            await interaction.response.send_message("Ungültiges Datum oder Zeitformat! \nBitte verwende DDMMYYYY (31122025 für den 31.12.2025) für das Datum und HHMM (1300 für 13:00 Uhr) für die Zeit.", ephemeral=True)
+        if not parsed_date or not parsed_time:
+            await interaction.response.send_message("Ungültiges Datum oder ungültige Zeit. Bitte verwende die Formate DD.MM.YYYY und HH:MM.", ephemeral=True)
             return
 
         # Combine date and time into a datetime object
@@ -1159,11 +1196,11 @@ async def create_event(interaction: discord.Interaction, title: str, date: str, 
         # Check if the date is in the future
         if full_datetime < datetime.now():
             await interaction.response.send_message("Das Datum muss in der Zukunft liegen.", ephemeral=True)
-        return
+            return
 
         # Format date and time for display
-    formatted_date = parsed_date.strftime("%d.%m.%Y")
-    formatted_time = parsed_time.strftime("%H:%M")
+        formatted_date = parsed_date.strftime("%d.%m.%Y")
+        formatted_time = parsed_time.strftime("%H:%M")
 
         # Create and show the modal
         modal = EventModal(
@@ -1171,12 +1208,82 @@ async def create_event(interaction: discord.Interaction, title: str, date: str, 
             date=formatted_date, 
             time=formatted_time,
             caller_id=str(interaction.user.id),
-            caller_name=interaction.user.name
+            caller_name=interaction.user.display_name
         )
         modal.full_datetime = full_datetime  # Pass the datetime object to the modal
-    await interaction.response.send_modal(modal)
+        await interaction.response.send_modal(modal)
     except Exception as e:
         print(f"Error in create_event: {e}")
         await interaction.response.send_message(f"Ein Fehler ist aufgetreten: {str(e)}", ephemeral=True)
+
+@bot.tree.command(name="remind", description="Sende eine Erinnerung an alle eingetragenen Teilnehmer (nur für Event-Ersteller)")
+@app_commands.guild_only()
+async def remind_participants(interaction: discord.Interaction):
+    try:
+        # Prüfe ob der Befehl in einem Thread ausgeführt wird
+        if not isinstance(interaction.channel, discord.Thread):
+            await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
+            return
+
+        # Lade das Event
+        events = load_upcoming_events()
+        event = next((e for e in events if e['title'] == interaction.channel.name), None)
+
+        if not event:
+            await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
+            return
+
+        # Prüfe ob der Benutzer der Event-Ersteller ist
+        if str(interaction.user.id) != event.get('caller_id'):
+            await interaction.response.send_message("Nur der Event-Ersteller kann Erinnerungen versenden.", ephemeral=True)
+            return
+
+        # Erstelle den Event-Link
+        message_id = event.get('message_id')
+        guild_id = interaction.guild.id
+        event_link = f"https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}" if message_id else None
+
+        # Sammle alle einzigartigen Teilnehmer
+        participant_ids = set()
+        for role_key, participants in event.get('participants', {}).items():
+            for participant in participants:
+                if len(participant) >= 2:  # Stelle sicher, dass wir ID haben
+                    participant_ids.add(participant[1])  # participant[1] ist die Discord ID
+
+        # Sende DMs an alle Teilnehmer
+        success_count = 0
+        failed_count = 0
+        for participant_id in participant_ids:
+            try:
+                user = await interaction.client.fetch_user(int(participant_id))
+                if user:
+                    message = (
+                        f"**Erinnerung an Event: {event['title']}**\n"
+                        f"Datum: {event['date']}\n"
+                        f"Uhrzeit: {event['time']}\n\n"
+                    )
+                    if event_link:
+                        message += f"\n🔗 [Zum Event]({event_link})"
+                    
+                    await user.send(message)
+                    success_count += 1
+            except Exception as e:
+                logger.error(f"Failed to send reminder to user {participant_id}: {e}")
+                failed_count += 1
+
+        # Sende Bestätigung
+        await interaction.response.send_message(
+            f"✅ Erinnerungen versendet!\n"
+            f"Erfolgreich: {success_count}\n"
+            f"Fehlgeschlagen: {failed_count}",
+            ephemeral=True
+        )
+
+    except Exception as e:
+        logger.error(f"Error in remind_participants: {e}")
+        await interaction.response.send_message(
+            "Ein Fehler ist beim Versenden der Erinnerungen aufgetreten.", 
+            ephemeral=True
+        )
 
 bot.run(DISCORD_TOKEN)

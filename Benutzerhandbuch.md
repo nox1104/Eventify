@@ -48,6 +48,21 @@ Als Event-Ersteller kannst du neue Events planen und verwalten. Hier ist, wie du
      - Leerzeilen werden ignoriert
      - Mit Text in Klammern, z.B. "(Core)" setzt man Abschnittsüberschriften
 
+### Teilnehmer erinnern
+
+Als Event-Ersteller kannst du allen eingetragenen Teilnehmern eine Erinnerung schicken:
+
+1. Gehe in den Event-Thread
+2. Verwende den Slash-Befehl `/remind`
+3. Der Bot sendet dann:
+   - Eine private Nachricht an alle eingetragenen Teilnehmer mit:
+     - Event-Titel
+     - Datum und Uhrzeit
+     - Link zum Event
+   - Eine Bestätigung an dich, wie viele Erinnerungen erfolgreich versendet wurden
+
+Nur der Event-Ersteller kann diesen Befehl verwenden.
+
 ### Rollenformatierung
 
 - **Normale Rollen**: Einfach den Namen der Rolle eingeben (z.B. "Tank", "Heiler", "DPS")

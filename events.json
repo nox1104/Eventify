@@ -2,63 +2,39 @@
     "events": [
         {
             "title": "Testevent",
-            "date": "09.03.2025",
-            "time": "21:00",
-            "description": "Wir laden euch zu einem spannenden **5v5 Arena-Event** ein! Hier k\u00f6nnt ihr eure PvP-F\u00e4higkeiten unter Beweis stellen und gemeinsam mit eurem Team um den Sieg k\u00e4mpfen.  \n\n**Regeln & Ablauf:**  \n- Teams werden vor Ort eingeteilt  \n- Gear-Beschr\u00e4nkung: [IP-Grenze oder keine Begrenzung]  \n- Es wird im **Best-of-3**-Format gespielt  \n- Fairplay und respektvolles Verhalten sind Pflicht  \n\n**Empfehlungen:**  \n- PvP-Erfahrung ist hilfreich, aber keine Voraussetzung  \n- Bringt passende Ausr\u00fcstung und Verbrauchsg\u00fcter mit  \n\n**Belohnungen:**  \nF\u00fcr die Gewinner gibt es [Belohnung einf\u00fcgen], doch am wichtigsten sind Spa\u00df und gemeinsames Training!  \n\n\ud83d\udcdd **Anmeldung:** Reagiere mit \u2705 in `#event-anmeldung`. Wir freuen uns auf spannende K\u00e4mpfe und gute Stimmung!",
+            "date": "12.03.2025",
+            "time": "13:00",
+            "description": "__\ud83d\udcc5 Datum:__ **[Trage dein Eventdatum ein]**  \n__\ud83d\udd52 Uhrzeit:__ **[Trage deine Eventzeit ein]**  \n__\ud83d\udccd Treffpunkt:__ **[Startgebiet einf\u00fcgen]**  \n__\ud83d\udee1\ufe0f Empfohlene Ausr\u00fcstung:__ **T8+ Gear, Avalonian-Waffen bevorzugt**  \n\n__**Event Details:**__  \nWir begeben uns in die gef\u00e4hrlichen **Avalonischen Dungeons**, wo m\u00e4chtige Bosse und wertvolle Beute auf uns warten! Bereitet euch auf knallharte K\u00e4mpfe und taktisches Gameplay vor.  \n\n__**Anforderungen:**__  \n- \u2705 **Mindest-IP:** _1300+_  \n- \u2705 **Discord-Pflicht** f\u00fcr Kommunikation  \n- \u2705 **Heiler & Tanks** werden bevorzugt gesucht  \n\n__**Ablaufplan:**__  \n> - **Sammlung & Ausr\u00fcstungscheck**  \n> - **Anreise zum Dungeon** (Zonen-Sicherheit beachten)  \n> - **Koordinierter Bosskampf** \u2013 Taktiken werden im Discord erkl\u00e4rt  \n> - **Loot-Verteilung** (Fair-Share-System)  \n\n__**Ziele:**__  \n- \ud83c\udfc6 **Bosse besiegen**  \n- \ud83d\udcb0 **Hochwertige Avalonische Beute sichern**  \n- \ud83c\udf89 **Spa\u00df und Teamwork erleben**  \n\n\ud83d\udcdd **Anmeldung:**  \n- Reagiere mit \u2705 in `#event-anmeldung` im Discord.  \n- **Sei p\u00fcnktlich und vorbereitet \u2013 auf geht\u2019s zur Eroberung der Avalonier!** \ud83c\udff9",
             "roles": [
-                "Tank",
-                "Blight",
-                "LC",
-                "Werwolf",
-                "Badon",
+                "(Core)",
+                "Stofftank",
+                "Plattenhealer",
+                "kein Schaden",
+                "Spirithunter",
+                "Occult",
+                "Support",
+                "(DPS)",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "Partyheal",
+                "(Bl\u00f6dsinn)",
+                "Zipfelklatscher",
+                "DefTank",
+                "Irgendwas",
+                "Orangenbl\u00e4tter",
+                "Cursed",
                 "FillALL"
             ],
             "participants": {},
-            "event_id": "202503092100-d2247384",
+            "event_id": "202503121300-f39d2ac6",
             "caller_id": "778914224613228575",
             "caller_name": "nox1104",
-            "message_id": 1347886488393744478
-        },
-        {
-            "title": "toast essen",
-            "date": "08.03.2025",
-            "time": "13:00",
-            "description": "das wird bestimmt lecker",
-            "roles": [
-                "toast",
-                "butter",
-                "marmelade",
-                "tee",
-                "FillALL"
-            ],
-            "participants": {
-                "4:FillALL": [
-                    [
-                        "kambior",
-                        "1100064403526787083",
-                        1741429171.694784
-                    ]
-                ],
-                "2:marmelade": [],
-                "1:butter": [
-                    [
-                        "kambior",
-                        "1100064403526787083",
-                        1741429205.040541,
-                        "l\u00e4tta geht auch"
-                    ]
-                ],
-                "0:toast": [
-                    [
-                        "nox1104",
-                        "778914224613228575",
-                        1741429310.96029
-                    ]
-                ]
-            },
-            "event_id": "202503081300-c9186df6",
-            "caller_id": "1100064403526787083",
-            "caller_name": "kambior"
+            "message_id": 1347916332384915538
         },
         {
             "title": "Das neue Feature feiern",
@@ -78,7 +54,8 @@
             "participants": {},
             "event_id": "202503091600-7818c9a5",
             "caller_id": "778914224613228575",
-            "caller_name": "nox1104"
+            "caller_name": "nox1104",
+            "message_id": 1347879880095825964
         },
         {
             "title": "Weltboss",
@@ -264,9 +241,18 @@
                 "Irgendwas",
                 "Irgendwas",
                 "Irgendwas",
+                "Irgendwas",
                 "FillALL"
             ],
-            "participants": {},
+            "participants": {
+                "0:Irgendwas": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741438770.240367
+                    ]
+                ]
+            },
             "event_id": "202503101900-9d6773de",
             "caller_id": "778914224613228575",
             "caller_name": "nox1104",
