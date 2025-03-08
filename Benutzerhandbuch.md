@@ -102,9 +102,5 @@ oder mit Kommentar:
 
 ### Abmelden
 ```
-!unregister
-```
-oder
-```
 -
 ```
