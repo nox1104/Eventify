@@ -810,7 +810,37 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             event.message_id = event_post.id
             save_event_to_json(event)
             
-            await thread.send("Im [Benutzerhandbuch](<https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md>) findest du alle Infos, wie du dich für Rollen anmelden kannst und wie du ein Event erstellen kannst. \n\nWenn du Fragen hast, melde dich bei <@778914224613228575>")
+            welcome_embed = discord.Embed(
+                title="Das Event wurde erfolgreich erstellt.",
+                description="Hier findest du alle wichtigen Informationen:",
+                color=0x0dceda  # Eventify Cyan
+            )
+
+            welcome_embed.add_field(
+                name="Benutzerhandbuch",
+                value="Im [Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md) findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
+                inline=False
+            )
+
+            welcome_embed.add_field(
+                name="Teilnehmer-Tipps",
+                value="**Anmelden**: Schreibe einfach die Nummer der gewünschten Rolle\n"
+                      "**Abmelden**: Schreibe `-` (von allen Rollen) oder `-X` (von Rolle X)\n"
+                      "**Kommentar hinzufügen**: Schreibe nach der Rollennummer deinen Kommentar (mh, dps)",
+                inline=False
+            )
+
+            welcome_embed.add_field(
+                name="Event-Ersteller Befehle",
+                value="• `/remind` - Erinnerung an alle Teilnehmer senden\n"
+                      "• `/add` - Teilnehmer zu einer Rolle hinzufügen\n"
+                      "• `/remove` - Teilnehmer aus Rollen entfernen",
+                inline=False
+            )
+
+            welcome_embed.set_footer(text="Bei Fragen kontaktiere <@778914224613228575>")
+
+            await thread.send(embed=welcome_embed)
             print("Event message and thread created.")
             
             # Erstelle das Event Listing nach dem Erstellen des Events
@@ -1172,9 +1202,13 @@ def save_events_to_json(events):
     try:
         # Ensure we have the right format
         if isinstance(events, list):
-            events_data = {"events": events}
+            # Sortiere die Events nach event_id
+            sorted_events = sorted(events, key=lambda x: x.get('event_id', ''))
+            events_data = {"events": sorted_events}
         elif isinstance(events, dict) and "events" in events:
-            events_data = events
+            # Sortiere die Events nach event_id
+            sorted_events = sorted(events["events"], key=lambda x: x.get('event_id', ''))
+            events_data = {"events": sorted_events}
         else:
             events_data = {"events": []}
             logger.error("Invalid events format for save_events_to_json")
@@ -1408,7 +1442,7 @@ async def add_participant(
             else:
                 event['participants'][role_key].append((player_name, player_id, current_time))
                 
-            await interaction.response.send_message(f"{player_name} wurde zu Rolle {role_name} hinzugefügt.", ephemeral=True)
+            await interaction.response.send_message(f"{player_name} wurde zu Rolle \"{role_name}\" hinzugefügt.")
             
             # Informiere den Teilnehmer über die Rollenzuweisung
             try:
@@ -1493,7 +1527,7 @@ async def remove_participant(
                 except Exception as e:
                     logger.error(f"Failed to send DM to user {user.id}: {e}")
                 
-                await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt.", ephemeral=True)
+                await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt.")
             else:
                 await interaction.response.send_message(f"{player_name} war für keine Rolle eingetragen.", ephemeral=True)
         else:
@@ -1529,9 +1563,9 @@ async def remove_participant(
                     except Exception as e:
                         logger.error(f"Failed to send DM to user {user.id}: {e}")
                     
-                    await interaction.response.send_message(f"{player_name} wurde aus Rolle {role_name} entfernt.", ephemeral=True)
+                    await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt.")
                 else:
-                    await interaction.response.send_message(f"{player_name} war nicht für Rolle {role_name} eingetragen.", ephemeral=True)
+                    await interaction.response.send_message(f"{player_name} war nicht für Rolle \"{role_name}\" eingetragen.")
             else:
                 await interaction.response.send_message(f"Rolle {role_name} hat keine Teilnehmer.", ephemeral=True)
         

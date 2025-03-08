@@ -26,6 +26,20 @@ Als Volan kannst du dich für Events anmelden und abmelden. Hier ist, wie du den
 2. Schreibe oder `-`, um dich von allen Rollen abzumelden
 3. Oder schreibe `-X`, wobei X die Nummer der Rolle ist, von der du dich abmelden möchtest
 
+### Rollen vorschlagen
+
+Als Teilnehmer kannst du zusätzliche Rollen für ein Event vorschlagen:
+
+1. Verwende im Event-Thread den Befehl `/propose`
+2. Gib den Namen der neuen Rolle ein:
+   - `role_name`: Der Name der Rolle, die du vorschlagen möchtest
+
+Der Event-Ersteller erhält dann eine Nachricht mit deinem Vorschlag und kann diesen:
+- Annehmen: Die Rolle wird vor der FillALL-Rolle zum Event hinzugefügt
+- Ablehnen: Die Rolle wird nicht hinzugefügt
+
+Du erhältst eine Benachrichtigung, wenn dein Vorschlag angenommen oder abgelehnt wurde.
+
 ---
 
 ## Für Event-Ersteller
@@ -125,22 +139,6 @@ Um Links in Discord klickbar zu machen, verwende die folgende Markdown-Syntax:
 - `[builds](https://docs.google.com/spreadsheets/d/1pNt74V...)`
 - `[Bildbeschreibung](https://de.wikipedia.org/wiki/Fliegender_Fisch_(Sternbild)#/media/Datei:Uranometria_Pavo_et_al.png)`
 - Achte darauf, dass keine Leerzeichen zwischen den Klammern sind
-
-### Rollen vorschlagen
-
-Als Teilnehmer kannst du zusätzliche Rollen für ein Event vorschlagen:
-
-1. Verwende im Event-Thread den Befehl `/propose`
-2. Gib den Namen der neuen Rolle ein:
-   - `role_name`: Der Name der Rolle, die du vorschlagen möchtest
-
-Der Event-Ersteller erhält dann eine Nachricht mit deinem Vorschlag und kann diesen:
-- Annehmen: Die Rolle wird vor der FillALL-Rolle zum Event hinzugefügt
-- Ablehnen: Die Rolle wird nicht hinzugefügt
-
-Du erhältst eine Benachrichtigung, wenn dein Vorschlag angenommen oder abgelehnt wurde.
-
----
 
 ## Beispiele
 

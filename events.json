@@ -3,7 +3,7 @@
         {
             "title": "Testevent",
             "date": "15.03.2025",
-            "time": "16:00",
+            "time": "18:00",
             "description": "__\ud83d\udcc5 Datum:__ **[Trage dein Eventdatum ein]**  \n__\ud83d\udd52 Uhrzeit:__ **[Trage deine Eventzeit ein]**  \n__\ud83d\udccd Treffpunkt:__ **[Startgebiet einf\u00fcgen]**  \n__\ud83d\udee1\ufe0f Empfohlene Ausr\u00fcstung:__ **T8+ Gear, Avalonian-Waffen bevorzugt**  \n\n__**Event Details:**__  \nWir begeben uns in die gef\u00e4hrlichen **Avalonischen Dungeons**, wo m\u00e4chtige Bosse und wertvolle Beute auf uns warten! Bereitet euch auf knallharte K\u00e4mpfe und taktisches Gameplay vor.  \n\n__**Anforderungen:**__  \n- \u2705 **Mindest-IP:** _1300+_  \n- \u2705 **Discord-Pflicht** f\u00fcr Kommunikation  \n- \u2705 **Heiler & Tanks** werden bevorzugt gesucht  \n\n__**Ablaufplan:**__  \n> - **Sammlung & Ausr\u00fcstungscheck**  \n> - **Anreise zum Dungeon** (Zonen-Sicherheit beachten)  \n> - **Koordinierter Bosskampf** \u2013 Taktiken werden im Discord erkl\u00e4rt  \n> - **Loot-Verteilung** (Fair-Share-System)  \n\n__**Ziele:**__  \n- \ud83c\udfc6 **Bosse besiegen**  \n- \ud83d\udcb0 **Hochwertige Avalonische Beute sichern**  \n- \ud83c\udf89 **Spa\u00df und Teamwork erleben**  \n\n\ud83d\udcdd **Anmeldung:**  \n- Reagiere mit \u2705 in `#event-anmeldung` im Discord.  \n- **Sei p\u00fcnktlich und vorbereitet \u2013 auf geht\u2019s zur Eroberung der Avalonier!** \ud83c\udff9",
             "roles": [
                 "(Core)",
@@ -31,10 +31,10 @@
                 "FillALL"
             ],
             "participants": {},
-            "event_id": "202503151600-7cb03e05",
+            "event_id": "202503151800-7d3e2a49",
             "caller_id": "778914224613228575",
             "caller_name": "nox1104",
-            "message_id": 1347971552859394172
+            "message_id": 1348021043431866508
         },
         {
             "title": "Das neue Feature feiern",
@@ -259,7 +259,16 @@
                         "778914224613228575",
                         1741438770.240367
                     ]
-                ]
+                ],
+                "1:Irgendwas": [
+                    [
+                        "Leandin",
+                        "995236463220371467",
+                        1741461749.790063,
+                        "oder irgendwas"
+                    ]
+                ],
+                "2:Irgendwas": []
             },
             "event_id": "202503101900-9d6773de",
             "caller_id": "778914224613228575",
@@ -379,6 +388,14 @@
                         1741452717.065966,
                         "oder werwolf"
                     ]
+                ],
+                "18:DefTank": [
+                    [
+                        "testname",
+                        "325726431030280192",
+                        1741454859.327289,
+                        "MH"
+                    ]
                 ]
             },
             "event_id": "202503122000-4d14825f",
@@ -469,6 +486,39 @@
             "caller_id": "778914224613228575",
             "caller_name": "nox1104",
             "message_id": 1347962738550378529
+        },
+        {
+            "title": "Artefakte pressen",
+            "date": "15.03.2025",
+            "time": "17:00",
+            "description": "langweilig, aber muss halt",
+            "roles": [
+                "5er Runen",
+                "6er Runen",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503151700-11c0ed3b",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1348017715297652878
+        },
+        {
+            "title": "In der Bank stehen",
+            "date": "12.03.2025",
+            "time": "16:00",
+            "description": "einfach mal ausspannen",
+            "roles": [
+                "Auf dem Pferd",
+                "Zu Fu\u00df",
+                "Aur einem Battlemount",
+                "FillALL"
+            ],
+            "participants": {},
+            "event_id": "202503121600-48d761d2",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1348022184005861399
         }
     ]
 }
