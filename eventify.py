@@ -167,7 +167,6 @@ class MyBot(discord.Client):
                                 event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
                             await self._update_event_and_save(message, event, events)
                             await message.add_reaction('✅')  # Add confirmation reaction
-                            logger.info(f"Updated comment for {player_name} in role {role_name}")
                         else:
                             # Just acknowledge if no comment to update
                             logger.info(f"{player_name} already assigned to role {role_name} at index {role_index}")
@@ -376,6 +375,10 @@ class MyBot(discord.Client):
             # Add caller information directly under the title
             if 'caller_id' in event and event['caller_id']:
                 embed.add_field(name="Erstellt von", value=f"<@{event['caller_id']}>", inline=False)
+            
+            # Füge die Rollen-Mention als separates Feld hinzu, wenn vorhanden
+            if 'mention_role' in event and event['mention_role']:
+                embed.add_field(name="Für", value=f"<@&{event['mention_role'].id}>", inline=False)
             
             # Add event details
             embed.add_field(name="Date", value=event['date'], inline=True)
@@ -607,7 +610,7 @@ class Event:
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
-    def __init__(self, title: str, date: str, time: str, caller_id: str, caller_name: str):
+    def __init__(self, title: str, date: str, time: str, caller_id: str, caller_name: str, mention_role: discord.Role = None):
         super().__init__()
 
         self.description_input = discord.ui.TextInput(label="Beschreibung", style=discord.TextStyle.paragraph,
@@ -627,11 +630,17 @@ class EventModal(discord.ui.Modal, title="Eventify"):
         self.full_datetime = None  # Storage for the datetime object
         self.caller_id = caller_id  # Discord ID des Erstellers
         self.caller_name = caller_name  # Name des Erstellers
+        self.mention_role = mention_role
 
     async def on_submit(self, interaction: discord.Interaction):
         print("on_submit method called.")
         try:
             description = self.description_input.value
+            
+            # Füge die Rollen-Mention am Anfang der Beschreibung hinzu, wenn eine Rolle angegeben wurde
+            if self.mention_role:
+                description = f"<@&{self.mention_role.id}>\n\n{description}"
+            
             # Get roles from input, filter out empty lines, and add the "Fill" role
             roles = [role.strip() for role in self.roles_input.value.splitlines() if role.strip()]
             
@@ -678,6 +687,10 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             # Add caller information directly under the title
             if event.caller_id:
                 embed.add_field(name="Erstellt von", value=f"<@{event.caller_id}>", inline=False)
+            
+            # Füge die Rollen-Mention als separates Feld hinzu, wenn vorhanden
+            if self.mention_role:
+                embed.add_field(name="Für", value=f"<@&{self.mention_role.id}>", inline=False)
             
             # Add event details
             embed.add_field(name="Date", value=event.date, inline=True)
@@ -1180,7 +1193,13 @@ def save_events_to_json(events):
         return False
 
 @bot.tree.command(name="eventify", description="Starte ein neues Event")
-async def create_event(interaction: discord.Interaction, title: str, date: str, time: str):
+async def create_event(
+    interaction: discord.Interaction, 
+    title: str, 
+    date: str, 
+    time: str,
+    mention_role: discord.Role = None  # Neuer optionaler Parameter
+):
     try:
         # Parse date and time
         parsed_date = parse_date(date)
@@ -1208,9 +1227,10 @@ async def create_event(interaction: discord.Interaction, title: str, date: str, 
             date=formatted_date, 
             time=formatted_time,
             caller_id=str(interaction.user.id),
-            caller_name=interaction.user.display_name
+            caller_name=interaction.user.display_name,
+            mention_role=mention_role  # Übergebe die Rolle an das Modal
         )
-        modal.full_datetime = full_datetime  # Pass the datetime object to the modal
+        modal.full_datetime = full_datetime
         await interaction.response.send_modal(modal)
     except Exception as e:
         print(f"Error in create_event: {e}")
@@ -1456,5 +1476,110 @@ async def remove_participant(
     except Exception as e:
         logger.error(f"Error in remove_participant: {e}")
         await interaction.response.send_message("Ein Fehler ist beim Entfernen des Teilnehmers aufgetreten.", ephemeral=True)
+
+@bot.tree.command(name="propose", description="Schlage eine neue Rolle für das Event vor")
+@app_commands.guild_only()
+async def propose_role(interaction: discord.Interaction, role_name: str):
+    try:
+        # Prüfe ob der Befehl in einem Thread ausgeführt wird
+        if not isinstance(interaction.channel, discord.Thread):
+            await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
+            return
+
+        # Lade das Event
+        events = load_upcoming_events()
+        event = next((e for e in events if e['title'] == interaction.channel.name), None)
+
+        if not event:
+            await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
+            return
+        
+        # Prüfe, ob die Rolle bereits existiert
+        if role_name in event['roles']:
+            await interaction.response.send_message(f"Die Rolle '{role_name}' existiert bereits in diesem Event.", ephemeral=True)
+            return
+        
+        # Erstelle die Bestätigungskomponenten
+        class RoleProposalView(discord.ui.View):
+            def __init__(self, proposer_id, proposed_role):
+                super().__init__(timeout=86400)  # 24 Stunden Timeout
+                self.proposer_id = proposer_id
+                self.proposed_role = proposed_role
+                
+            @discord.ui.button(label="Annehmen", style=discord.ButtonStyle.green)
+            async def accept_button(self, button_interaction: discord.Interaction, button: discord.ui.Button):
+                # Prüfe, ob der Reagierende der Event-Ersteller ist
+                if str(button_interaction.user.id) != event.get('caller_id'):
+                    await button_interaction.response.send_message("Nur der Event-Ersteller kann diesen Vorschlag annehmen.", ephemeral=True)
+                    return
+                
+                # Finde die FillALL-Rolle
+                fill_index = next((i for i, role in enumerate(event['roles']) if role.lower() in ["fill", "fillall"]), None)
+                
+                if fill_index is None:
+                    # Falls keine FillALL-Rolle gefunden wird, füge sie am Ende hinzu
+                    event['roles'].append(self.proposed_role)
+                else:
+                    # Füge die neue Rolle vor der FillALL-Rolle ein
+                    event['roles'].insert(fill_index, self.proposed_role)
+                
+                # Update event und speichere
+                save_event_to_json(event)
+                
+                # Update das Event-Message
+                await bot.update_event_message(interaction.channel, event)
+                
+                # Deaktiviere alle Buttons
+                for child in self.children:
+                    child.disabled = True
+                
+                # Aktualisiere die Nachricht mit deaktivierten Buttons
+                await button_interaction.response.edit_message(content=f"✅ Rolle '{self.proposed_role}' wurde zum Event hinzugefügt!", view=self)
+                
+                # Bestätige dem Vorschlagenden
+                proposer = await button_interaction.guild.fetch_member(self.proposer_id)
+                if proposer:
+                    try:
+                        await proposer.send(f"Dein Rollenvorschlag '{self.proposed_role}' für das Event '{event['title']}' wurde angenommen!")
+                    except:
+                        pass  # Ignoriere Fehler falls DMs deaktiviert sind
+            
+            @discord.ui.button(label="Ablehnen", style=discord.ButtonStyle.red)
+            async def reject_button(self, button_interaction: discord.Interaction, button: discord.ui.Button):
+                # Prüfe, ob der Reagierende der Event-Ersteller ist
+                if str(button_interaction.user.id) != event.get('caller_id'):
+                    await button_interaction.response.send_message("Nur der Event-Ersteller kann diesen Vorschlag ablehnen.", ephemeral=True)
+                    return
+                
+                # Deaktiviere alle Buttons
+                for child in self.children:
+                    child.disabled = True
+                
+                # Aktualisiere die Nachricht mit deaktivierten Buttons
+                await button_interaction.response.edit_message(content=f"❌ Rollenvorschlag '{self.proposed_role}' wurde abgelehnt.", view=self)
+                
+                # Informiere den Vorschlagenden
+                proposer = await button_interaction.guild.fetch_member(self.proposer_id)
+                if proposer:
+                    try:
+                        await proposer.send(f"Dein Rollenvorschlag '{self.proposed_role}' für das Event '{event['title']}' wurde abgelehnt.")
+                    except:
+                        pass  # Ignoriere Fehler falls DMs deaktiviert sind
+        
+        # Erstelle die View mit den Buttons
+        view = RoleProposalView(interaction.user.id, role_name)
+        
+        # Sende Vorschlagsnachricht mit Buttons
+        caller_mention = f"<@{event['caller_id']}>" if event.get('caller_id') else "Event-Ersteller"
+        
+        await interaction.response.send_message(
+            f"{caller_mention}, {interaction.user.mention} schlägt eine neue Rolle vor: **{role_name}**\n"
+            f"Möchtest du diese Rolle zum Event hinzufügen?",
+            view=view
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in propose_role: {e}")
+        await interaction.response.send_message("Ein Fehler ist beim Vorschlagen der Rolle aufgetreten.", ephemeral=True)
 
 bot.run(DISCORD_TOKEN)

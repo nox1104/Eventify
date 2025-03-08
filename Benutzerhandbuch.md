@@ -38,11 +38,13 @@ Als Event-Ersteller kannst du neue Events planen und verwalten. Hier ist, wie du
    - `title`: Der Titel deines Events
    - `date`: Das Datum im Format DDMMYYYY (z.B. 31122025 für den 31.12.2025) oder DD.MM.YYYY
    - `time`: Die Uhrzeit im Format HHMM (z.B. 1300 für 13:00 Uhr)
+   - `mention_role` (optional): Die Discord-Rolle, die beim Event erwähnt werden soll
 
 3. Nach dem Absenden öffnet sich ein Modal, in dem du folgende Informationen eingeben kannst:
    - **Beschreibung**: 
      - Detaillierte Informationen zum Event
-     - 1020 Zeichen Platz, danach wird der Text mit "..." abgeschnitten (Discord erlaubt uns hier leider nicht mehr)
+     - Falls eine Rolle ausgewählt wurde, wird diese automatisch am Anfang der Beschreibung erwähnt
+     - 1020 Zeichen Platz, danach wird der Text mit "..." abgeschnitten
    - **Rollen**: 
      - Liste der verfügbaren Rollen, eine pro Zeile
      - Leerzeilen werden ignoriert
@@ -112,42 +114,28 @@ Um Links in Discord klickbar zu machen, verwende die folgende Markdown-Syntax:
 - `[Bildbeschreibung](https://de.wikipedia.org/wiki/Fliegender_Fisch_(Sternbild)#/media/Datei:Uranometria_Pavo_et_al.png)`
 - Achte darauf, dass keine Leerzeichen zwischen den Klammern sind
 
+### Rollen vorschlagen
+
+Als Teilnehmer kannst du zusätzliche Rollen für ein Event vorschlagen:
+
+1. Verwende im Event-Thread den Befehl `/propose`
+2. Gib den Namen der neuen Rolle ein:
+   - `role_name`: Der Name der Rolle, die du vorschlagen möchtest
+
+Der Event-Ersteller erhält dann eine Nachricht mit deinem Vorschlag und kann diesen:
+- Annehmen: Die Rolle wird vor der FillALL-Rolle zum Event hinzugefügt
+- Ablehnen: Die Rolle wird nicht hinzugefügt
+
+Du erhältst eine Benachrichtigung, wenn dein Vorschlag angenommen oder abgelehnt wurde.
+
 ---
 
 ## Beispiele
 
 ### Event erstellen
 ```
-/eventify title: Ava Dungeon date: 31122025 time: 1900
+/eventify title: Ava Dungeon date: 31122025 time: 1900 mention_role: @Tank
 ```
 
 ### Rollen-Liste Beispiel
 ```
-(Core)
-Tank
-Heiler
-Damage
-(Support)
-Arcane
-Frost
-Nature
-(DPS)
-DPS
-DPS
-DPS
-```
-
-### Für eine Rolle anmelden
-```
-1
-```
-oder mit Kommentar:
-```
-1 Komme 5 Minuten später
-```
-
-### Abmelden
-```
--
-```
-
