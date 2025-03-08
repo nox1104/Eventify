@@ -1207,7 +1207,7 @@ def save_events_to_json(events):
             events_data = {"events": sorted_events}
         elif isinstance(events, dict) and "events" in events:
             # Sortiere die Events nach event_id
-            sorted_events = sorted(events["events"], key=lambda x: x.get('event_id', ''))
+            sorted_events = sorted(events['events'], key=lambda x: x.get('event_id', ''))
             events_data = {"events": sorted_events}
         else:
             events_data = {"events": []}
