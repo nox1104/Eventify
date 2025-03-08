@@ -8,8 +8,9 @@ Als Volan kannst du dich für Events anmelden und abmelden. Hier ist, wie du den
 
 1. Gehe in den Event-Thread
 2. Schreibe die Nummer der Rolle, für die du dich anmelden möchtest (z.B. `1` für die erste Rolle)
-3. Optional kannst du einen Kommentar hinzufügen, indem du nach der Nummer einen Text schreibst (z.B. `1 Komme etwas später` oder `15 mh, irh`)
-   - @-Zeichen in Kommentaren werden automatisch entfernt, um Discord-Mentions zu vermeiden
+3. Optional kannst du einen Kommentar hinzufügen, indem du nach der Nummer einen Text schreibst 
+   - z.B. `1 Komme etwas später` oder `15 mh, irh`
+   - @-Zeichen in Kommentaren werden automatisch entfernt, um Discord-erwähnungen zu vermeiden
 4. Wenn du bereits für eine andere Rolle angemeldet bist, wirst du automatisch von dieser abgemeldet und für die neue Rolle angemeldet
 
 ### Für FillALL anmelden
@@ -78,14 +79,25 @@ Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
    - `user`: Der Discord-Benutzer, den du hinzufügen möchtest (per Autocomplete)
    - `role_number`: Die Nummer der Rolle, z.B. 1 für die erste Rolle
    - `comment` (optional): Ein Kommentar, der neben dem Namen angezeigt wird
+3. Der hinzugefügte Teilnehmer erhält automatisch eine private Nachricht mit:
+   - Event-Titel
+   - Zugewiesene Rolle
+   - Datum und Uhrzeit
+   - Kommentar (falls angegeben)
+   - Link zum Event
 
 #### Teilnehmer entfernen:
 1. Verwende im Event-Thread den Befehl `/remove`
 2. Gib folgende Parameter ein:
    - `user`: Der Discord-Benutzer, den du entfernen möchtest (per Autocomplete)
    - `role_number` (optional): Die Nummer der Rolle. Wenn nicht angegeben, wird der Teilnehmer aus allen Rollen entfernt
+3. Der entfernte Teilnehmer erhält automatisch eine private Nachricht mit:
+   - Event-Titel
+   - Entfernte Rolle(n)
+   - Datum und Uhrzeit
+   - Link zum Event
 
-Nur der Event-Ersteller kann diese Befehle verwenden.
+Nur der Event-Ersteller kann diese Befehle verwenden. Die automatischen DM-Benachrichtigungen helfen den Teilnehmern, über Änderungen ihrer Rollenzuweisung informiert zu bleiben.
 
 ### Rollenformatierung
 
