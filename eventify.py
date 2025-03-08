@@ -133,6 +133,8 @@ class MyBot(discord.Client):
                     if ' ' in message.content:
                         # The comment is everything after the first space
                         comment = message.content.split(' ', 1)[1].strip()
+                        # Entferne alle @-Zeichen aus dem Kommentar
+                        comment = comment.replace('@', '')
                     else:
                         comment = ""
                     

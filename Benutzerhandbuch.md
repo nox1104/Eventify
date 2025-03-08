@@ -15,7 +15,7 @@ Als Event-Ersteller kannst du neue Events planen und verwalten. Hier ist, wie du
 3. Nach dem Absenden öffnet sich ein Modal, in dem du folgende Informationen eingeben kannst:
    - **Beschreibung**: 
      - Detaillierte Informationen zum Event
-     - 1020 Zeichen Platz, danach wird der Text mit "..." abgeschnitten
+     - 1020 Zeichen Platz, danach wird der Text mit "..." abgeschnitten (Discord erlaubt uns hier leider nicht mehr)
    - **Rollen**: 
      - Liste der verfügbaren Rollen, eine pro Zeile
      - Leerzeilen werden ignoriert
@@ -48,6 +48,7 @@ Als Volan kannst du dich für Events anmelden und abmelden. Hier ist, wie du den
 1. Gehe in den Event-Thread
 2. Schreibe die Nummer der Rolle, für die du dich anmelden möchtest (z.B. `1` für die erste Rolle)
 3. Optional kannst du einen Kommentar hinzufügen, indem du nach der Nummer einen Text schreibst (z.B. `1 Komme etwas später` oder `15 mh, irh`)
+   - @-Zeichen in Kommentaren werden automatisch entfernt, um Discord-Mentions zu vermeiden
 4. Wenn du bereits für eine andere Rolle angemeldet bist, wirst du automatisch von dieser abgemeldet und für die neue Rolle angemeldet
 
 ### Für FillALL anmelden

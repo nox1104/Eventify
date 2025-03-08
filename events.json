@@ -1,0 +1,63 @@
+{
+    "events": [
+        {
+            "title": "Testevent zur Version 0.2.2",
+            "date": "08.03.2025",
+            "time": "11:00",
+            "description": "__\ud83d\udcc5 Datum:__ **[Trage dein Eventdatum ein]**  \n__\ud83d\udd52 Uhrzeit:__ **[Trage deine Eventzeit ein]**  \n__\ud83d\udccd Treffpunkt:__ **[Startgebiet einf\u00fcgen]**  \n__\ud83d\udee1\ufe0f Empfohlene Ausr\u00fcstung:__ **T8+ Gear, Avalonian-Waffen bevorzugt**  \n\n__**Event Details:**__  \nWir begeben uns in die gef\u00e4hrlichen **Avalonischen Dungeons**, wo m\u00e4chtige Bosse und wertvolle Beute auf uns warten! Bereitet euch auf knallharte K\u00e4mpfe und taktisches Gameplay vor.  \n\n__**Anforderungen:**__  \n- \u2705 **Mindest-IP:** _1300+_  \n- \u2705 **Discord-Pflicht** f\u00fcr Kommunikation  \n- \u2705 **Heiler & Tanks** werden bevorzugt gesucht  \n\n__**Ablaufplan:**__  \n> - **Sammlung & Ausr\u00fcstungscheck**  \n> - **Anreise zum Dungeon** (Zonen-Sicherheit beachten)  \n> - **Koordinierter Bosskampf** \u2013 Taktiken werden im Discord erkl\u00e4rt  \n> - **Loot-Verteilung** (Fair-Share-System)  \n\n__**Ziele:**__  \n- \ud83c\udfc6 **Bosse besiegen**  \n- \ud83d\udcb0 **Hochwertige Avalonische Beute sichern**  \n- \ud83c\udf89 **Spa\u00df und Teamwork erleben**  \n\n\ud83d\udcdd **Anmeldung:**  \n- Reagiere mit \u2705 in `#event-anmeldung` im Discord.  \n- **Sei p\u00fcnktlich und vorbereitet \u2013 auf geht\u2019s zur Eroberung der Avalonier!** \ud83c\udff9",
+            "roles": [
+                "(Core)",
+                "Stofftank",
+                "Plattenhealer",
+                "keinSchaden",
+                "Spirithunter",
+                "Occult",
+                "Support",
+                "(DPS)",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "DPS",
+                "Partyheal",
+                "(Bl\u00f6dsinn)",
+                "Zipfelklatscher",
+                "DefTank",
+                "Irgendwas",
+                "Orangenbl\u00e4tter",
+                "Cursed",
+                "FillALL"
+            ],
+            "participants": {
+                "25:Zipfelklatscher": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741418693.17363,
+                        "oder kein Schaden"
+                    ]
+                ],
+                "30:FillALL": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741418698.250886
+                    ]
+                ]
+            },
+            "event_id": "202503081100-ad004180",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104"
+        }
+    ]
+}
