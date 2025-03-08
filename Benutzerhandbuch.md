@@ -1,4 +1,31 @@
-# Eventify Bot - Benutzerhandbuch
+# Eventify - Benutzerhandbuch
+
+## Für Volans (Teilnehmer)
+
+Als Volan kannst du dich für Events anmelden und abmelden. Hier ist, wie du den Bot nutzen kannst:
+
+### Für eine Rolle anmelden
+
+1. Gehe in den Event-Thread
+2. Schreibe die Nummer der Rolle, für die du dich anmelden möchtest (z.B. `1` für die erste Rolle)
+3. Optional kannst du einen Kommentar hinzufügen, indem du nach der Nummer einen Text schreibst (z.B. `1 Komme etwas später` oder `15 mh, irh`)
+   - @-Zeichen in Kommentaren werden automatisch entfernt, um Discord-Mentions zu vermeiden
+4. Wenn du bereits für eine andere Rolle angemeldet bist, wirst du automatisch von dieser abgemeldet und für die neue Rolle angemeldet
+
+### Für FillALL anmelden
+
+1. Gehe in den Event-Thread
+2. Schreibe die Nummer der FillALL-Rolle (normalerweise die letzte Nummer in der Liste)
+3. Du wirst als flexibler Teilnehmer eingetragen und kannst bei Bedarf verschiedene Rollen übernehmen
+4. Die FillALL-Anmeldung bleibt bestehen, auch wenn du dich für eine andere Rolle an- oder abmeldest
+
+### Von einer Rolle abmelden
+
+1. Gehe in den Event-Thread
+2. Schreibe oder `-`, um dich von allen Rollen abzumelden
+3. Oder schreibe `-X`, wobei X die Nummer der Rolle ist, von der du dich abmelden möchtest
+
+---
 
 ## Für Event-Ersteller
 
@@ -39,35 +66,7 @@ Als Event-Ersteller kannst du neue Events planen und verwalten. Hier ist, wie du
 - Das Event wird automatisch in der Event-Liste angezeigt
 - Dein Name wird als Ersteller unter dem Titel des Events angezeigt
 
-## Für Volans (Teilnehmer)
-
-Als Volan kannst du dich für Events anmelden und abmelden. Hier ist, wie du den Bot nutzen kannst:
-
-### Für eine Rolle anmelden
-
-1. Gehe in den Event-Thread
-2. Schreibe die Nummer der Rolle, für die du dich anmelden möchtest (z.B. `1` für die erste Rolle)
-3. Optional kannst du einen Kommentar hinzufügen, indem du nach der Nummer einen Text schreibst (z.B. `1 Komme etwas später` oder `15 mh, irh`)
-   - @-Zeichen in Kommentaren werden automatisch entfernt, um Discord-Mentions zu vermeiden
-4. Wenn du bereits für eine andere Rolle angemeldet bist, wirst du automatisch von dieser abgemeldet und für die neue Rolle angemeldet
-
-### Für FillALL anmelden
-
-1. Gehe in den Event-Thread
-2. Schreibe die Nummer der FillALL-Rolle (normalerweise die letzte Nummer in der Liste)
-3. Du wirst als flexibler Teilnehmer eingetragen und kannst bei Bedarf verschiedene Rollen übernehmen
-4. Die FillALL-Anmeldung bleibt bestehen, auch wenn du dich für eine andere Rolle an- oder abmeldest
-
-### Von einer Rolle abmelden
-
-1. Gehe in den Event-Thread
-2. Schreibe oder `-`, um dich von allen Rollen abzumelden
-3. Oder schreibe `-X`, wobei X die Nummer der Rolle ist, von der du dich abmelden möchtest
-
-### Event-Übersicht (geplant)
-
-- Alle anstehenden Events werden im Event-Listing-Kanal angezeigt
-- Klicke auf den Thread-Link, um direkt zum Event zu gelangen
+---
 
 ## Beispiele
 

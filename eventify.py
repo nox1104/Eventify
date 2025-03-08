@@ -80,7 +80,8 @@ class MyBot(discord.Client):
                         # Anmeldung mit dem tatsächlichen Rollenindex verarbeiten
                         await self._handle_role_signup(message, event_title, actual_role_index + 1)
                     else:
-                        await message.channel.send(f"Invalid role number. Please select a number between 1 and {len(event['roles'])}.")
+                        # Nur Logging, keine Nachricht an den Benutzer
+                        logger.warning(f"Invalid role number: {display_role_number}. Event has {len(event['roles'])} roles.")
             
             # Check for unregister all roles with "-"
             elif message.content.strip() == "-":
@@ -99,7 +100,8 @@ class MyBot(discord.Client):
                     # Abmeldung mit dem tatsächlichen Rollenindex verarbeiten
                     await self._handle_unregister(message, True, actual_role_index)
                 else:
-                    await message.channel.send(f"Invalid role number. Please select a number between 1 and {len(event['roles'])}.")
+                    # Nur Logging, keine Nachricht an den Benutzer
+                    logger.warning(f"Invalid role number: {display_role_number}. Event has {len(event['roles'])} roles.")
         else:
             logger.debug("Message is not in a thread.")
 
@@ -238,7 +240,6 @@ class MyBot(discord.Client):
                                 # Update the event message and save to JSON
                                 await self._update_event_and_save(message, event, events)
                                 await message.add_reaction('✅')  # Add confirmation reaction
-                                await message.channel.send(f"Du wurdest automatisch von der Rolle '{player_current_role}' abgemeldet und für '{role_name}' angemeldet.")
                             else:
                                 # Add new entry with timestamp and comment
                                 if comment:
@@ -253,13 +254,13 @@ class MyBot(discord.Client):
                                 await message.add_reaction('✅')  # Add confirmation reaction
                 else:
                     logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
-                    await message.channel.send(f"Invalid role number. Please select a number between 1 and {len(event['roles'])}.")
+                    # Keine Nachricht an den Benutzer
             else:
                 logger.warning(f"No event found matching thread name: {event_title}")
-                await message.channel.send("No matching event found for this thread.")
+                await message.channel.send("Kein passendes Event für diesen Thread gefunden.")
         except Exception as e:
             logger.error(f"Error processing role assignment: {e}")
-            await message.channel.send(f"Error processing your request: {str(e)}")
+            await message.channel.send(f"Fehler bei der Verarbeitung deiner Anfrage: {str(e)}")
 
     async def _handle_unregister(self, message, is_specific_role=False, role_index=None):
         try:
@@ -325,13 +326,13 @@ class MyBot(discord.Client):
                             await message.add_reaction('❓')  # Info reaction
                     else:
                         logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
-                        await message.channel.send(f"Invalid role number. Please select a number between 1 and {len(event['roles'])}.")
+                        # Keine Nachricht an den Benutzer
             else:
                 logger.warning(f"No event found matching thread name: {message.channel.name}")
-                await message.channel.send("No matching event found for this thread.")
+                await message.channel.send("Kein passendes Event für diesen Thread gefunden.")
         except Exception as e:
             logger.error(f"Error processing unregister: {e}")
-            await message.channel.send(f"Error processing your request: {str(e)}")
+            await message.channel.send(f"Fehler bei der Verarbeitung deiner Anfrage: {str(e)}")
 
     async def _update_event_and_save(self, message, event, events):
         try:
@@ -362,7 +363,7 @@ class MyBot(discord.Client):
             return True
         except Exception as e:
             logger.error(f"Error updating event: {e}")
-            await message.channel.send(f"Error updating event: {e}")
+            await message.channel.send(f"Fehler beim Aktualisieren des Events: {e}")
             return False
 
     async def update_event_message(self, thread, event):
@@ -527,13 +528,12 @@ class MyBot(discord.Client):
                 return True
             except Exception as e:
                 logger.error(f"Error finding or editing message: {e}")
-                # If we can't find the message to edit, send a new one in the thread
-                await thread.send("Could not update the original post. Here's the updated information:")
+                await thread.send("Konnte den ursprünglichen Beitrag nicht aktualisieren. Hier sind die aktualisierten Informationen:")
                 await thread.send(embed=embed)
                 return False
         except Exception as e:
             logger.error(f"Error in update_event_message: {e}")
-            await thread.send(f"Error updating event message: {str(e)}")
+            await thread.send(f"Fehler beim Aktualisieren der Event-Nachricht: {str(e)}")
             return False
 
     def role_number_to_index(self, event, role_number):
@@ -667,7 +667,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
 
             try:
                 # First respond to the interaction to close the modal
-                await interaction.response.send_message(f"Event '{self.title}' created successfully!", ephemeral=True)
+                await interaction.response.send_message(f"Event '{self.title}' erfolgreich erstellt!", ephemeral=True)
                 
                 channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
                 
@@ -791,14 +791,14 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 event_post = await channel.send(embed=embed)
                 
                 thread = await event_post.create_thread(name=event.title)
-                await thread.send("Instructions for the event will be posted here.")
+                await thread.send("Im [Benutzerhandbuch](<https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md>) findest du alle Infos, wie du dich für Rollen anmelden kannst und wie du ein Event erstellen kannst. \n\nWenn du Fragen hast, bitte melde dich bei <@778914224613228575>")
                 print("Event message and thread created.")
             except Exception as e:
                 print(f"Error creating event message or thread: {e}")
                 # Since we already responded to the interaction, we can't use interaction.response again
                 try:
                     # Try to send a follow-up message instead
-                    await interaction.followup.send("An error occurred while creating the event message or thread.", ephemeral=True)
+                    await interaction.followup.send("Ein Fehler ist beim Erstellen der Event-Nachricht oder des Threads aufgetreten.", ephemeral=True)
                 except:
                     # If that fails too, log the error
                     print("Could not send follow-up message.")
@@ -806,11 +806,11 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             print(f"Error in on_submit: {e}")
             # Make sure we respond to the interaction to close the modal
             try:
-                await interaction.response.send_message("An error occurred while processing your request.", ephemeral=True)
+                await interaction.response.send_message("Ein Fehler ist bei der Verarbeitung deiner Anfrage aufgetreten.", ephemeral=True)
             except:
                 # If we've already responded, try to send a follow-up
                 try:
-                    await interaction.followup.send("An error occurred while processing your request.", ephemeral=True)
+                    await interaction.followup.send("Ein Fehler ist bei der Verarbeitung deiner Anfrage aufgetreten.", ephemeral=True)
                 except:
                     print("Could not send error message.")
 
