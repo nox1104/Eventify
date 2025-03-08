@@ -71,14 +71,14 @@ Nur der Event-Ersteller kann diesen Befehl verwenden.
 Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
 
 #### Teilnehmer hinzufügen:
-1. Verwende im Event-Thread den Befehl `/add_participant`
+1. Verwende im Event-Thread den Befehl `/add`
 2. Gib folgende Parameter ein:
    - `user`: Der Discord-Benutzer, den du hinzufügen möchtest (per Autocomplete)
    - `role_number`: Die Nummer der Rolle, z.B. 1 für die erste Rolle
    - `comment` (optional): Ein Kommentar, der neben dem Namen angezeigt wird
 
 #### Teilnehmer entfernen:
-1. Verwende im Event-Thread den Befehl `/remove_participant`
+1. Verwende im Event-Thread den Befehl `/remove`
 2. Gib folgende Parameter ein:
    - `user`: Der Discord-Benutzer, den du entfernen möchtest (per Autocomplete)
    - `role_number` (optional): Die Nummer der Rolle. Wenn nicht angegeben, wird der Teilnehmer aus allen Rollen entfernt
