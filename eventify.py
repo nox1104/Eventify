@@ -370,6 +370,10 @@ class MyBot(discord.Client):
             # Create Discord Embed
             embed = discord.Embed(title=f"__**{event['title']}**__", color=0x0dceda)
             
+            # Add caller information directly under the title
+            if 'caller_id' in event and event['caller_id']:
+                embed.add_field(name="Erstellt von", value=f"<@{event['caller_id']}>", inline=False)
+            
             # Add event details
             embed.add_field(name="Date", value=event['date'], inline=True)
             embed.add_field(name="Time", value=event['time'], inline=True)
@@ -564,7 +568,7 @@ class MyBot(discord.Client):
             return -1
 
 class Event:
-    def __init__(self, title, date, time, description, roles, datetime_obj=None):
+    def __init__(self, title, date, time, description, roles, datetime_obj=None, caller_id=None, caller_name=None):
         self.title = title
         self.date = date
         self.time = time
@@ -572,9 +576,11 @@ class Event:
         self.roles = roles
         self.participants = {}
         self.datetime_obj = datetime_obj
+        self.caller_id = caller_id  # Discord ID des Erstellers
+        self.caller_name = caller_name  # Name des Erstellers
         
         # Generiere eine eindeutige ID für das Event
-        timestamp = datetime_obj.strftime("%Y%m%d%H%M") if datetime_obj else datetime.datetime.now().strftime("%Y%m%d%H%M")
+        timestamp = datetime_obj.strftime("%Y%m%d%H%M") if datetime_obj else datetime.now().strftime("%Y%m%d%H%M")
         random_string = str(uuid.uuid4())[:8]  # Verwende die ersten 8 Zeichen der UUID
         self.event_id = f"{timestamp}-{random_string}"
     
@@ -591,11 +597,13 @@ class Event:
             "description": self.description,
             "roles": self.roles,
             "participants": self.participants,
-            "event_id": self.event_id  # Speichere die eindeutige ID
+            "event_id": self.event_id,  # Speichere die eindeutige ID
+            "caller_id": self.caller_id,  # Speichere die ID des Erstellers
+            "caller_name": self.caller_name  # Speichere den Namen des Erstellers
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
-    def __init__(self, title: str, date: str, time: str):
+    def __init__(self, title: str, date: str, time: str, caller_id: str, caller_name: str):
         super().__init__()
 
         self.description_input = discord.ui.TextInput(label="Beschreibung", style=discord.TextStyle.paragraph,
@@ -613,6 +621,8 @@ class EventModal(discord.ui.Modal, title="Eventify"):
         self.date = date
         self.time = time
         self.full_datetime = None  # Storage for the datetime object
+        self.caller_id = caller_id  # Discord ID des Erstellers
+        self.caller_name = caller_name  # Name des Erstellers
 
     async def on_submit(self, interaction: discord.Interaction):
         print("on_submit method called.")
@@ -644,7 +654,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 time=self.time,
                 description=description,
                 roles=roles,
-                datetime_obj=self.full_datetime  # Pass the datetime object
+                datetime_obj=self.full_datetime,  # Pass the datetime object
+                caller_id=self.caller_id,  # Pass the caller ID
+                caller_name=self.caller_name  # Pass the caller name
             )
 
             # Save the event to JSON
@@ -659,6 +671,10 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 
                 # Create embed with horizontal frames
                 embed = discord.Embed(title=f"__**{event.title}**__", color=0x0dceda)
+                
+                # Add caller information directly under the title
+                if event.caller_id:
+                    embed.add_field(name="Erstellt von", value=f"<@{event.caller_id}>", inline=False)
                 
                 # Add event details
                 embed.add_field(name="Date", value=event.date, inline=True)
@@ -866,7 +882,7 @@ def save_event_to_json(event):
         
         # Wenn keine event_id vorhanden ist (für ältere Events), generiere eine
         if not event_id:
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M")
+            timestamp = datetime.now().strftime("%Y%m%d%H%M")
             random_string = str(uuid.uuid4())[:8]
             event_id = f"{timestamp}-{random_string}"
             
@@ -1045,13 +1061,19 @@ async def create_event(interaction: discord.Interaction, title: str, date: str, 
         if full_datetime < datetime.now():
             await interaction.response.send_message("Das Datum muss in der Zukunft liegen.", ephemeral=True)
             return
-        
+            
         # Format date and time for display
         formatted_date = parsed_date.strftime("%d.%m.%Y")
         formatted_time = parsed_time.strftime("%H:%M")
         
         # Create and show the modal
-        modal = EventModal(title, formatted_date, formatted_time)
+        modal = EventModal(
+            title=title, 
+            date=formatted_date, 
+            time=formatted_time,
+            caller_id=str(interaction.user.id),  # Speichere die ID des Erstellers
+            caller_name=interaction.user.name  # Speichere den Namen des Erstellers
+        )
         modal.full_datetime = full_datetime  # Pass the datetime object to the modal
         await interaction.response.send_modal(modal)
     except Exception as e:
