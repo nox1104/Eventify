@@ -354,7 +354,24 @@
                 "Cursed",
                 "FillALL"
             ],
-            "participants": {},
+            "participants": {
+                "1:Stofftank": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741452240.87933,
+                        "PH"
+                    ]
+                ],
+                "2:Plattenhealer": [
+                    [
+                        "yukina",
+                        "691201457025712168",
+                        1741452277.758156,
+                        "oder halt tank"
+                    ]
+                ]
+            },
             "event_id": "202503122000-4d14825f",
             "caller_id": "778914224613228575",
             "caller_name": "nox1104",

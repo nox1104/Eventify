@@ -1368,6 +1368,22 @@ async def add_participant(
                 await interaction.response.send_message(f"Kommentar für {player_name} in Rolle {role_name} aktualisiert.", ephemeral=True)
             else:
                 await interaction.response.send_message(f"{player_name} ist bereits für Rolle {role_name} eingetragen.", ephemeral=True)
+            
+            # Informiere den Teilnehmer über die Kommentaraktualisierung
+            try:
+                event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                dm_message = (
+                    f"**Update zu Event: {event['title']}**\n"
+                    f"Der Eventersteller hat deinen Kommentar für die Rolle {role_name} aktualisiert.\n"
+                    f"Datum: {event['date']}\n"
+                    f"Uhrzeit: {event['time']}\n"
+                    f"Neuer Kommentar: {comment}\n"
+                    f"\n🔗 [Zum Event]({event_link})"
+                )
+                await user.send(dm_message)
+            except Exception as e:
+                logger.error(f"Failed to send DM to user {user.id}: {e}")
+                
         else:
             # Prüfe, ob der Teilnehmer bereits für eine andere Rolle eingetragen ist
             is_fill_role = role_name.lower() == "fill" or role_name.lower() == "fillall"
@@ -1394,6 +1410,23 @@ async def add_participant(
                 
             await interaction.response.send_message(f"{player_name} wurde zu Rolle {role_name} hinzugefügt.", ephemeral=True)
             
+            # Informiere den Teilnehmer über die Rollenzuweisung
+            try:
+                event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                dm_message = (
+                    f"**Du wurdest einem Event hinzugefügt: {event['title']}**\n"
+                    f"Rolle: {role_name}\n"
+                    f"Datum: {event['date']}\n"
+                    f"Uhrzeit: {event['time']}\n"
+                )
+                if comment:
+                    dm_message += f"Kommentar: {comment}\n"
+                dm_message += f"\n🔗 [Zum Event]({event_link})"
+                
+                await user.send(dm_message)
+            except Exception as e:
+                logger.error(f"Failed to send DM to user {user.id}: {e}")
+        
         # Update the event
         save_event_to_json(event)
         await bot.update_event_message(interaction.channel, event)
@@ -1434,14 +1467,32 @@ async def remove_participant(
         
         # Wenn keine Rollennummer angegeben, entferne aus allen Rollen
         if role_number is None:
+            # Sammle die Namen der Rollen, aus denen der Teilnehmer entfernt wurde
+            removed_roles = []
             for r_idx, r_name in enumerate(event['roles']):
                 r_key = f"{r_idx}:{r_name}"
                 if r_key in event.get('participants', {}):
+                    if any(p[1] == player_id for p in event['participants'][r_key]):
+                        removed_roles.append(r_name)
                     initial_count = len(event['participants'][r_key])
                     event['participants'][r_key] = [p for p in event['participants'][r_key] if p[1] != player_id]
                     removed_count += initial_count - len(event['participants'][r_key])
-                    
+            
             if removed_count > 0:
+                # Informiere den Teilnehmer über die Entfernung aus allen Rollen
+                try:
+                    event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                    dm_message = (
+                        f"**Du wurdest aus einem Event entfernt: {event['title']}**\n"
+                        f"Du wurdest aus folgenden Rollen entfernt: {', '.join(removed_roles)}\n"
+                        f"Datum: {event['date']}\n"
+                        f"Uhrzeit: {event['time']}\n"
+                        f"\n🔗 [Zum Event]({event_link})"
+                    )
+                    await user.send(dm_message)
+                except Exception as e:
+                    logger.error(f"Failed to send DM to user {user.id}: {e}")
+                
                 await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt.", ephemeral=True)
             else:
                 await interaction.response.send_message(f"{player_name} war für keine Rolle eingetragen.", ephemeral=True)
@@ -1458,10 +1509,26 @@ async def remove_participant(
             
             if role_key in event.get('participants', {}):
                 initial_count = len(event['participants'][role_key])
+                # Prüfe erst, ob der Spieler in der Rolle ist
+                was_in_role = any(p[1] == player_id for p in event['participants'][role_key])
                 event['participants'][role_key] = [p for p in event['participants'][role_key] if p[1] != player_id]
                 removed_count = initial_count - len(event['participants'][role_key])
                 
                 if removed_count > 0:
+                    # Informiere den Teilnehmer über die Entfernung aus der spezifischen Rolle
+                    try:
+                        event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                        dm_message = (
+                            f"**Du wurdest aus einer Rolle entfernt: {event['title']}**\n"
+                            f"Rolle: {role_name}\n"
+                            f"Datum: {event['date']}\n"
+                            f"Uhrzeit: {event['time']}\n"
+                            f"\n🔗 [Zum Event]({event_link})"
+                        )
+                        await user.send(dm_message)
+                    except Exception as e:
+                        logger.error(f"Failed to send DM to user {user.id}: {e}")
+                    
                     await interaction.response.send_message(f"{player_name} wurde aus Rolle {role_name} entfernt.", ephemeral=True)
                 else:
                     await interaction.response.send_message(f"{player_name} war nicht für Rolle {role_name} eingetragen.", ephemeral=True)
