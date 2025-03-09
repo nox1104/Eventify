@@ -1941,9 +1941,10 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
         
         # Erstelle die Bestätigungskomponenten
         class RoleProposalView(discord.ui.View):
-            def __init__(self, proposer_id, proposed_role):
+            def __init__(self, proposer_id, proposer_name, proposed_role):
                 super().__init__(timeout=86400)  # 24 Stunden Timeout
                 self.proposer_id = proposer_id
+                self.proposer_name = proposer_name
                 self.proposed_role = proposed_role
                 
             @discord.ui.button(label="Annehmen", style=discord.ButtonStyle.green)
@@ -1956,33 +1957,83 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 # Finde die FillALL-Rolle
                 fill_index = next((i for i, role in enumerate(event['roles']) if role.lower() in ["fill", "fillall"]), None)
                 
+                # Stelle sicher, dass fill_index einen Wert hat
                 if fill_index is None:
-                    # Falls keine FillALL-Rolle gefunden wird, füge sie am Ende hinzu
+                    # Falls keine FillALL-Rolle gefunden wird, füge die neue Rolle am Ende hinzu
                     event['roles'].append(self.proposed_role)
+                    new_role_index = len(event['roles']) - 1
                 else:
                     # Füge die neue Rolle vor der FillALL-Rolle ein
                     event['roles'].insert(fill_index, self.proposed_role)
+                    new_role_index = fill_index
+                    # FillALL-Index aktualisieren, da wir eine Rolle davor eingefügt haben
+                    fill_index += 1
+                
+                # Erstelle role_key für die neue Rolle
+                new_role_key = f"{new_role_index}:{self.proposed_role}"
+                
+                # Initialisiere participants dict für die neue Rolle falls nötig
+                if 'participants' not in event:
+                    event['participants'] = {}
+                if new_role_key not in event['participants']:
+                    event['participants'][new_role_key] = []
+                
+                # Automatisch den Vorschlagenden in die neue Rolle eintragen
+                dm_sent = False
+                proposer_id = str(self.proposer_id)
+                proposer_name = self.proposer_name
+                current_time = datetime.now().timestamp()
+                
+                # Prüfe, ob der User bereits in einer anderen Rolle ist (außer FillALL)
+                for r_idx, r_name in enumerate(event['roles']):
+                    if r_name.lower() == "fill" or r_name.lower() == "fillall":
+                        continue  # Ignoriere Fill-Rollen
+                    
+                    r_key = f"{r_idx}:{r_name}"
+                    if r_key in event.get('participants', {}):
+                        for entry_idx, entry in enumerate(event['participants'][r_key]):
+                            if entry[1] == proposer_id:
+                                # Entferne den Spieler aus der alten Rolle
+                                event['participants'][r_key].pop(entry_idx)
+                                break
+                
+                # Füge den Spieler zur neuen Rolle hinzu
+                event['participants'][new_role_key].append((proposer_name, proposer_id, current_time))
                 
                 # Update event und speichere
                 save_event_to_json(event)
                 
                 # Update das Event-Message
-                await bot.update_event_message(interaction.channel, event)
+                await bot.update_event_message(button_interaction.channel, event)
                 
                 # Deaktiviere alle Buttons
                 for child in self.children:
                     child.disabled = True
                 
-                # Aktualisiere die Nachricht mit deaktivierten Buttons
-                await button_interaction.response.edit_message(content=f"✅ Rolle '{self.proposed_role}' wurde zum Event hinzugefügt!", view=self)
+                # Informiere den Vorschlagenden
+                try:
+                    proposer = await button_interaction.guild.fetch_member(self.proposer_id)
+                    if proposer:
+                        event_link = f"https://discord.com/channels/{button_interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                        dm_message = (
+                            f"**Dein Rollenvorschlag '{self.proposed_role}' wurde angenommen!**\n"
+                            f"Event: {event['title']}\n"
+                            f"Datum: {event['date']}\n"
+                            f"Uhrzeit: {event['time']}\n"
+                            f"Du wurdest automatisch in diese Rolle eingetragen.\n"
+                            f"\n🔗 [Zum Event]({event_link})"
+                        )
+                        await proposer.send(dm_message)
+                        dm_sent = True
+                except Exception as e:
+                    logger.error(f"Failed to send DM to proposer {self.proposer_id}: {e}")
                 
-                # Bestätige dem Vorschlagenden
-                proposer = await button_interaction.guild.fetch_member(self.proposer_id)
-                if proposer:
-                    try:
-                        await proposer.send(f"Dein Rollenvorschlag '{self.proposed_role}' für das Event '{event['title']}' wurde angenommen!")
-                    except:
-                        pass  # Ignoriere Fehler falls DMs deaktiviert sind
+                # Aktualisiere die Nachricht mit deaktivierten Buttons und DM-Info
+                dm_info = " und hat eine DM erhalten" if dm_sent else ""
+                await button_interaction.response.edit_message(
+                    content=f"✅ Rolle '{self.proposed_role}' wurde zum Event hinzugefügt! {self.proposer_name} wurde automatisch auf die neue Rolle umgebucht{dm_info}.", 
+                    view=self
+                )
             
             @discord.ui.button(label="Ablehnen", style=discord.ButtonStyle.red)
             async def reject_button(self, button_interaction: discord.Interaction, button: discord.ui.Button):
@@ -1995,19 +2046,25 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 for child in self.children:
                     child.disabled = True
                 
-                # Aktualisiere die Nachricht mit deaktivierten Buttons
-                await button_interaction.response.edit_message(content=f"❌ Rollenvorschlag '{self.proposed_role}' wurde abgelehnt.", view=self)
-                
                 # Informiere den Vorschlagenden
-                proposer = await button_interaction.guild.fetch_member(self.proposer_id)
-                if proposer:
-                    try:
+                dm_sent = False
+                try:
+                    proposer = await button_interaction.guild.fetch_member(self.proposer_id)
+                    if proposer:
                         await proposer.send(f"Dein Rollenvorschlag '{self.proposed_role}' für das Event '{event['title']}' wurde abgelehnt.")
-                    except:
-                        pass  # Ignoriere Fehler falls DMs deaktiviert sind
+                        dm_sent = True
+                except Exception as e:
+                    logger.error(f"Failed to send DM to proposer {self.proposer_id}: {e}")
+                
+                # Aktualisiere die Nachricht mit deaktivierten Buttons und DM-Info
+                dm_info = " und hat eine DM erhalten" if dm_sent else ""
+                await button_interaction.response.edit_message(
+                    content=f"❌ Rollenvorschlag '{self.proposed_role}' wurde abgelehnt. {self.proposer_name} wurde informiert{dm_info}.", 
+                    view=self
+                )
         
         # Erstelle die View mit den Buttons
-        view = RoleProposalView(interaction.user.id, role_name)
+        view = RoleProposalView(interaction.user.id, interaction.user.display_name, role_name)
         
         # Sende Vorschlagsnachricht mit Buttons
         caller_mention = f"<@{event['caller_id']}>" if event.get('caller_id') else "Event-Ersteller"
