@@ -53,14 +53,22 @@ Mit dem Befehl `/eventify` kannst du ein neues Event erstellen. Folgende Paramet
 - `title`: Der Titel des Events
 - `date`: Das Datum des Events im Format TT.MM.JJJJ
 - `time`: Die Uhrzeit des Events im Format HH:mm
-- `description`: Die Beschreibung des Events
+- `description` (optional): Die Beschreibung des Events (mit \n für Zeilenumbrüche)
+- `roles` (optional): Liste der Rollen, getrennt durch \n (oder "none" für Teilnehmer-only Modus)
 - `mention_role` (optional): Eine Rolle, die beim Event erwähnt werden soll
 - `image_url` (optional): Ein Link zu einem Bild, das im Event angezeigt werden soll
   - Das Bild wird unter der Beschreibung angezeigt
   - Unterstützte Bildformate: PNG, JPG, GIF
   - Der Link muss direkt zum Bild führen
 
-3. Nach dem Absenden öffnet sich ein Modal, in dem du folgende Informationen eingeben kannst:
+Du hast zwei Möglichkeiten, ein Event zu erstellen:
+
+1. **Schnelles Erstellen mit allen Parametern**: Gib alle Informationen direkt an, inklusive Beschreibung und Rollen
+   ```
+  /eventify title: date: time: description: Wöchentlicher Raid\nBringt Buffs und Flasks mit\nSeid pünktlich! roles: Tank\nHealer\nDPS\nRanged DPS
+   ```
+
+2. **Modal-Formular**: Wenn du `description` und `roles` weglässt, öffnet sich ein Formular:
    - **Beschreibung**: 
      - Detaillierte Informationen zum Event
      - Falls eine Rolle ausgewählt wurde, wird diese automatisch am Anfang der Beschreibung erwähnt
@@ -129,6 +137,9 @@ Nur der Event-Ersteller kann diese Befehle verwenden. Die automatischen PN-Benac
   - Diese Rolle wird immer ans Ende der Liste verschoben
   - Spieler können sich für FillALL zusätzlich zu einer normalen Rolle anmelden
 - **Leere Zeilen**: Werden ignoriert und haben keinen Einfluss auf die Nummerierung
+- **Zeilenumbrüche im Direktmodus**: Verwende `\n` für Zeilenumbrüche bei der direkten Eingabe über den `/eventify` Befehl
+  - Beispiel für Rollen: `roles: Tank\nHealer\nDPS`
+  - Beispiel für Beschreibung: `description: Zeile 1\nZeile 2\nZeile 3`
 
 ### Event verwalten
 
@@ -169,13 +180,17 @@ Aufgrund der Discord-Beschränkung, dass Nachrichten älter als 14 Tage nicht me
 - Der Bot alte Event-Posts automatisch entfernen kann
 - Keine "verwaisten" Event-Posts zurückbleiben
 
-Events, die weiter in der Zukunft liegen, sollten erst später erstellt werden, um die automatische Kanalpflege zu gewährleisten.
 
 ## Beispiele
 
-### Event erstellen
+### Normales Event erstellen
 ```
-/eventify title: Ava Dungeon date: 31122025 time: 1900 mention_role: @Tank image_url: https://example.com/ava-dungeon-builds.png
+/eventify title: date: time: description: Wöchentlicher Raid\nBringt Buffs und Flasks mit\nSeid pünktlich! roles: Tank\nHealer\nDPS\nRanged DPS
+```
+
+### Event im Nur-Teilnehmer Modus erstellen
+```
+/eventify title: date: time: description: Monatliches Meeting\nThemen:\n- Gildenbank\n- Events\n- Sonstiges roles: none
 ```
 
 ### Rollen-Liste Beispiel
