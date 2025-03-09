@@ -169,7 +169,7 @@ class MyBot(discord.Client):
             if event:
                 logger.info(f"Found matching event: {event['title']}")
                 
-                # Prüfen, ob wir im participant_only_mode sind
+                # Check if we're in participant_only_mode
                 is_participant_only = event.get('participant_only_mode', False)
                 
                 # Check if this is the "Fill" role by name instead of position
@@ -177,9 +177,12 @@ class MyBot(discord.Client):
                 if 0 <= role_index < len(event['roles']):
                     is_fill_role = event['roles'][role_index].lower() == "fill" or event['roles'][role_index].lower() == "fillall"
                 
-                # Im participant_only_mode behandeln wir die Teilnehmer-Rolle wie FillALL
+                # In participant_only_mode, treat the participant role like Fill (but NOT like FillALL)
+                # This allows comments in participant_only_mode
                 if is_participant_only:
                     is_fill_role = True
+                    # Don't set FillALL to allow comments
+                    is_fillall_role = False
                 
                 if 0 <= role_index < len(event['roles']):
                     role_name = event['roles'][role_index]
@@ -192,7 +195,7 @@ class MyBot(discord.Client):
                     if ' ' in message.content:
                         # The comment is everything after the first space
                         comment = message.content.split(' ', 1)[1].strip()
-                        # Entferne alle @-Zeichen aus dem Kommentar
+                        # Remove all @ characters from comments
                         comment = comment.replace('@', '')
                     else:
                         comment = ""
@@ -231,8 +234,11 @@ class MyBot(discord.Client):
                     else:
                         # For Fill role, no limit on players and can be added even if already registered for another role
                         if is_fill_role:
-                            # Check if the role is specifically FillALL
-                            is_fillall_role = event['roles'][role_index].lower() == "fillall"
+                            # Check if the role is specifically FillALL (not for participant_only_mode)
+                            if not is_participant_only:
+                                is_fillall_role = event['roles'][role_index].lower() == "fillall"
+                            else:
+                                is_fillall_role = False  # In participant_only_mode we allow comments
                             
                             # For FillALL, we ignore comments and allow multiple roles
                             if is_fillall_role:
@@ -244,14 +250,14 @@ class MyBot(discord.Client):
                                 await self._update_event_and_save(message, event, events)
                                 await message.add_reaction('✅')  # Add confirmation reaction
                             else:
-                                # This is a regular Fill role (not FillALL)
+                                # This is a regular Fill role (not FillALL) or participant_only_mode
                                 # Add new entry with timestamp and comment
                                 if comment:
                                     event['participants'][role_key].append((player_name, player_id, current_time, comment))
                                 else:
                                     event['participants'][role_key].append((player_name, player_id, current_time))
                                 
-                                logger.info(f"Added {player_name} to Fill role")
+                                logger.info(f"Added {player_name} to Fill role or participant_only_mode")
                                 
                                 # Update the event message and save to JSON
                                 await self._update_event_and_save(message, event, events)
@@ -279,13 +285,13 @@ class MyBot(discord.Client):
                                         break
                             
                             if already_signed_up:
-                                # Automatisch von der vorherigen Rolle abmelden
+                                # Automatically unregister from previous role
                                 logger.info(f"Automatically unregistering {player_name} from role {player_current_role}")
                                 
-                                # Entferne den Spieler von der vorherigen Rolle
+                                # Remove player from previous role
                                 event['participants'][player_current_role_key].pop(player_current_entry_idx)
                                 
-                                # Füge den Spieler zur neuen Rolle hinzu
+                                # Add player to new role
                                 if comment:
                                     event['participants'][role_key].append((player_name, player_id, current_time, comment))
                                 else:
@@ -310,7 +316,7 @@ class MyBot(discord.Client):
                                 await message.add_reaction('✅')  # Add confirmation reaction
                 else:
                     logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
-                    # Keine Nachricht an den Benutzer
+                    # No message to user
             else:
                 logger.warning(f"No event found matching thread name: {event_title}")
                 await message.channel.send("Kein passendes Event für diesen Thread gefunden.")
@@ -491,20 +497,26 @@ class MyBot(discord.Client):
                     role_name = roles[0]
                     role_key = f"{role_idx}:{role_name}"
                     
-                    # WICHTIG: Exakt so wie bei FillALL implementieren
-                    # 1. Rollenname und Nummer zusammensetzen
+                    # Rollenname und Nummer zusammensetzen
                     participant_title = f"1. {role_name}"
                     
-                    # 2. Teilnehmerliste abrufen
+                    # Teilnehmerliste abrufen
                     role_participants = participants.get(role_key, [])
                     
-                    # 3. Wenn Teilnehmer vorhanden sind, formatiere sie genau wie bei FillALL
+                    # Wenn Teilnehmer vorhanden sind, formatiere sie mit Kommentaren (anders als bei FillALL)
                     if role_participants:
                         # Sortiere Teilnehmer nach Zeitstempel
                         sorted_participants = sorted(role_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                         
-                        # EXAKT wie bei FillALL - alle Teilnehmer anzeigen
-                        participants_text = "\n".join([f"<@{p[1]}>" for p in sorted_participants if len(p) >= 2])
+                        # Mit Kommentaren anzeigen (anders als bei FillALL)
+                        participants_text = ""
+                        for p in sorted_participants:
+                            if len(p) >= 2:
+                                # Prüfen, ob ein Kommentar vorhanden ist
+                                if len(p) >= 4 and p[3]:
+                                    participants_text += f"<@{p[1]}> - {p[3]}\n"
+                                else:
+                                    participants_text += f"<@{p[1]}>\n"
                         
                         # Füge das Feld hinzu
                         embed.add_field(name=participant_title, value=participants_text or "\u200b", inline=False)
@@ -884,14 +896,14 @@ class Event:
         self.roles = roles
         self.participants = {}
         self.datetime_obj = datetime_obj
-        self.caller_id = caller_id  # Discord ID des Erstellers
-        self.caller_name = caller_name  # Name des Erstellers
-        self.message_id = None  # Message ID des Event-Posts
-        self.participant_only_mode = participant_only_mode  # Flag für den Teilnehmer-only-Modus
+        self.caller_id = caller_id  # Discord ID of the creator
+        self.caller_name = caller_name  # Name of the creator
+        self.message_id = None  # Message ID of the event post
+        self.participant_only_mode = participant_only_mode  # Flag for participant-only mode
         
-        # Generiere eine eindeutige ID für das Event
+        # Generate a unique ID for the event
         timestamp = datetime_obj.strftime("%Y%m%d%H%M") if datetime_obj else datetime.now().strftime("%Y%m%d%H%M")
-        random_string = str(uuid.uuid4())[:8]  # Verwende die ersten 8 Zeichen der UUID
+        random_string = str(uuid.uuid4())[:8]  # Use first 8 characters of UUID
         self.event_id = f"{timestamp}-{random_string}"
     
     def get(self, attr, default=None):
@@ -907,11 +919,11 @@ class Event:
             "description": self.description,
             "roles": self.roles,
             "participants": self.participants,
-            "event_id": self.event_id,  # Speichere die eindeutige ID
-            "caller_id": self.caller_id,  # Speichere die ID des Erstellers
-            "caller_name": self.caller_name,  # Speichere den Namen des Erstellers
-            "message_id": self.message_id,  # Speichere die Message ID des Event-Posts
-            "participant_only_mode": self.participant_only_mode  # Speichere das Flag für den Teilnehmer-only-Modus
+            "event_id": self.event_id,  # Store the unique ID
+            "caller_id": self.caller_id,  # Store the creator's ID
+            "caller_name": self.caller_name,  # Store the creator's name
+            "message_id": self.message_id,  # Store the event post's message ID
+            "participant_only_mode": self.participant_only_mode  # Store the flag for participant-only mode
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
@@ -985,11 +997,11 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 participant_only_mode=is_participant_only_mode
             )
 
-            # Speichere die Mention-Rolle ID separat im Event-Objekt
+            # Store the mention role ID separately in the event object
             if self.mention_role:
                 event.mention_role_id = str(self.mention_role.id)
                 
-            # Füge die Bild-URL hinzu, wenn vorhanden
+            # Add the image URL if available
             if self.image_url:
                 event.image_url = self.image_url
                 
@@ -1009,7 +1021,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             if event.caller_id:
                 embed.add_field(name="Erstellt von", value=f"<@{event.caller_id}>", inline=False)
             
-            # Füge die Rollen-Mention als separates Feld hinzu, wenn vorhanden
+            # Add the mention role as a separate field if it exists
             if self.mention_role:
                 embed.add_field(name="Für", value=f"<@&{self.mention_role.id}>", inline=False)
             
@@ -1023,7 +1035,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 description_text = description_text[:1020] + "..."
             embed.add_field(name="Description", value=description_text, inline=False)
             
-            # Extrahiere reguläre Rollen (alles außer FillALL)
+            # Extract regular roles (everything except FillALL)
             regular_roles = []
             section_headers = []
             for i, role in enumerate(roles):
@@ -1034,36 +1046,36 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                     else:
                         regular_roles.append((i, role))
 
-            # Erstellung des Inhalts für alle regulären Rollen
+            # Creation of the content for all regular roles
             field_content = ""
             current_section = None
             role_counter = 1  # Counter for actual roles (excluding section headers)
 
-            # Gehe durch alle Rollen und Abschnittsüberschriften in der ursprünglichen Reihenfolge
+            # Go through all roles and section headers in the original order
             all_items = section_headers + regular_roles
-            all_items.sort(key=lambda x: x[0])  # Sortiere nach dem ursprünglichen Index
+            all_items.sort(key=lambda x: x[0])  # Sort by the original index
 
             for role_idx, role_name in all_items:
-                # Prüfe, ob es sich um eine Abschnittsüberschrift handelt
+                # Check if it's a section header
                 if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
-                    # Füge eine Leerzeile ein, wenn es nicht die erste Überschrift ist
+                    # Add a line break if it's not the first header
                     if field_content:
                         field_content += "\n"
                     # Remove parentheses from section header
                     header_text = role_name.strip()[1:-1]  # Remove first and last character
                     field_content += f"**{header_text}**\n"
                 else:
-                    # Dies ist eine normale Rolle
-                    # Rolle und Teilnehmer anzeigen
+                    # This is a normal role
+                    # Show role and participants
                     role_key = f"{role_idx}:{role_name}"
-                    # Sicherer Zugriff auf participants
+                    # Safe access to participants
                     if isinstance(event, dict):
                         participants = event.get('participants', {}).get(role_key, [])
                     else:
                         participants = getattr(event, 'participants', {}).get(role_key, [])
                     
                     if participants:
-                        # Sortiere Teilnehmer nach Zeitstempel und zeige nur den ersten
+                        # Sort participants by timestamp and show only the first
                         sorted_participants = sorted(participants, key=lambda x: x[2] if len(x) > 2 else 0)
                         p_data = sorted_participants[0]
                         
@@ -1086,7 +1098,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                     # Increment the role counter for actual roles
                     role_counter += 1
 
-            # Füge alle regulären Rollen als ein einziges Feld hinzu
+            # Add all regular roles as a single field
             if field_content:
                 embed.add_field(name="\u200b", value=field_content, inline=False)
 
@@ -1102,7 +1114,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 # Get participants for Fill role
                 fill_key = f"{fill_index}:{roles[fill_index]}"
                 
-                # Sicherer Zugriff auf participants
+                # Safe access to participants
                 if isinstance(event, dict):
                     fill_participants = event.get('participants', {}).get(fill_key, [])
                 else:
@@ -1112,9 +1124,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                     # Sort participants by timestamp
                     sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                     
-                    # Für FillALL alle Teilnehmer anzeigen, keine Begrenzung auf einen Spieler
+                    # For FillALL show all participants, no limit on one player
                     for p_data in sorted_fill:
-                        if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
+                        if len(p_data) >= 2:  # Ensure we have at least name and ID
                             p_id = p_data[1]
                             fill_players_text += f"<@{p_id}>\n"
                 else:
@@ -1139,7 +1151,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
 
             welcome_embed.add_field(
                 name="Benutzerhandbuch",
-                value="Im [Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md) findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
+                value="Im ❗[Benutzerhandbuch]❗(https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md) findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
                 inline=False
             )
 
@@ -1165,7 +1177,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             await thread.send(embed=welcome_embed)
             print("Event message and thread created.")
             
-            # Erstelle das Event Listing nach dem Erstellen des Events
+            # Create the event listing after the event is created
             await create_event_listing(interaction.guild)
             
         except Exception as e:
@@ -1180,7 +1192,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
 async def create_event_listing(guild):
     """Erstellt ein Event Listing mit allen anstehenden Events"""
     try:
-        # Lade alle anstehenden Events
+        # Load all upcoming events
         events = load_upcoming_events()
         
         if not events:
@@ -1195,44 +1207,44 @@ async def create_event_listing(guild):
             logger.error(f"Event channel not found in guild {guild.name}")
             return
         
-        # Filtere Events, bei denen kein entsprechender Event-Post mehr existiert
+        # Filter events where no corresponding event post exists
         valid_events = []
         for event in events:
             message_id = event.get("message_id")
             
-            # Überspringe Events ohne message_id
+            # Skip events without message_id
             if not message_id:
-                logger.warning(f"Event {event.get('title')} hat keine message_id und wird übersprungen.")
+                logger.warning(f"Event {event.get('title')} has no message_id and will be skipped.")
                 continue
                 
-            # Prüfe, ob der Event-Post noch existiert
+            # Check if the event post still exists
             try:
                 await event_channel.fetch_message(int(message_id))
-                # Wenn kein Fehler, füge das Event zur gültigen Liste hinzu
+                # If no error, add the event to the valid list
                 valid_events.append(event)
             except (discord.NotFound, discord.HTTPException, ValueError) as e:
                 logger.warning(f"Event-Post für '{event.get('title')}' (ID: {message_id}) existiert nicht mehr: {e}")
                 # Hier könnte man das Event auch aus der JSON entfernen
                 continue
         
-        # Aktualisiere die events.json, um verwaiste Events zu entfernen
+        # Update the events.json to remove orphaned events
         if len(valid_events) < len(events):
-            logger.info(f"Entferne {len(events) - len(valid_events)} verwaiste Events aus der JSON.")
+            logger.info(f"Remove {len(events) - len(valid_events)} orphaned events from the JSON.")
             save_events_to_json(valid_events)
         
         if not valid_events:
-            logger.info("Keine gültigen Events mit existierenden Posts gefunden.")
+            logger.info("No valid events with existing posts found.")
             return
         
-        # Verwende nur die gültigen Events für die Übersicht
+        # Use only valid events for the overview
         events = valid_events
         
         # Sortiere Events nach Datum und Zeit
         try:
-            # Sortiere nach dem datetime_obj, wenn vorhanden
+            # Sortebym datetime_ob,ifna hilabldn
             events_with_datetime = []
             for event in events:
-                # Versuche das Datum und die Zeit in ein datetime-Objekt zu konvertieren
+                # Try to convert date and time to a datetime object
                 if 'datetime_obj' in event and event['datetime_obj']:
                     # Datetime_obj ist bereits als String gespeichert, konvertiere es zurück
                     dt_str = event['datetime_obj']
@@ -1243,40 +1255,40 @@ async def create_event_listing(guild):
                     try:
                         date_str = event['date']
                         time_str = event['time']
-                        # Konvertiere deutsches Datumsformat (dd.mm.yyyy) in datetime
+                        # Convert German date format (dd.mm.yyyy) to datetime
                         day, month, year = map(int, date_str.split('.'))
                         hour, minute = map(int, time_str.split(':'))
                         dt_obj = datetime(year, month, day, hour, minute)
                         events_with_datetime.append((event, dt_obj))
                     except (ValueError, KeyError) as e:
                         logger.error(f"Error parsing date/time for event {event.get('title', 'unknown')}: {e}")
-                        # Füge das Event mit dem aktuellen Zeitpunkt hinzu, damit es angezeigt wird
+                        # Add the event with the current timestamp so it is displayed
                         events_with_datetime.append((event, datetime.now()))
             
-            # Sortiere die Events nach Zeitpunkt
+            # Sort the events by timestamp
             events_with_datetime.sort(key=lambda x: x[1])
             sorted_events = [event for event, _ in events_with_datetime]
         except Exception as e:
             logger.error(f"Error sorting events: {e}")
             sorted_events = events  # Fallback: Unsortierte Events
         
-        # Gruppiere Events nach Datum
+        # Group events by date
         events_by_date = {}
         for event in sorted_events:
-            date = event.get('date', 'Unbekanntes Datum')
+            date = event.get('date', 'Unknown date')
             if date not in events_by_date:
                 events_by_date[date] = []
             events_by_date[date].append(event)
         
-        # Erstelle den Embed
+        # Create the embed
         embed = discord.Embed(
-            title="Eventübersicht",
+            title="Event overview",
             color=0x0dceda  # Eventify Cyan
         )
         
-        # Füge jedes Datum mit seinen Events hinzu
+        # Add each date with its events
         for date, date_events in events_by_date.items():
-            # Erstelle die Beschreibung für dieses Datum
+            # Create the description for this date
             date_description = ""
             for event in date_events:
                 title = event.get('title', 'Unbekanntes Event')
@@ -1284,7 +1296,7 @@ async def create_event_listing(guild):
                 caller_id = event.get('caller_id', None)
                 message_id = event.get('message_id')
                 
-                # Füge Zeit, Ersteller und Titel hinzu
+                # Add time, caller and title
                 if caller_id:
                     if message_id and message_id != "None" and message_id != None:
                         date_description += f"{time} <@{caller_id}> [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
@@ -1296,14 +1308,14 @@ async def create_event_listing(guild):
                     else:
                         date_description += f"{time} {title}\n"
             
-            # Füge das Feld mit diesem Datum hinzu
+            # Add the field with this date
             embed.add_field(
                 name=f"{date}",
                 value=date_description,
                 inline=False
             )
         
-        # Sende den Embed in den Event-Kanal
+        # Send the embed to the event channel
         channel = guild.get_channel(CHANNEL_ID_EVENT)
         await channel.send(embed=embed)
         logger.info("Event listing created successfully.")
@@ -1368,17 +1380,17 @@ def save_event_to_json(event):
         # Clean old events (past events)
         events_data = clean_old_events(events_data)
         
-        # Prüfe, ob das Event bereits existiert anhand der event_id
+        # Check if the event already exists by the event_id
         event_exists = False
         event_id = None
         
-        # Extrahiere die event_id
+        # Extract the event_id
         if isinstance(event, dict):
             event_id = event.get("event_id")
         else:
             event_id = getattr(event, "event_id", None)
         
-        # Wenn keine event_id vorhanden ist (für ältere Events), generiere eine
+        # If no event_id is present (for older events), generate one
         if not event_id:
             timestamp = datetime.now().strftime("%Y%m%d%H%M")
             random_string = str(uuid.uuid4())[:8]
@@ -1389,7 +1401,7 @@ def save_event_to_json(event):
             else:
                 event.event_id = event_id
         
-        # Suche nach dem Event anhand der ID
+        # Search for the event by the ID
         for i, e in enumerate(events_data["events"]):
             if e.get("event_id") == event_id:
                 # Update existing event
@@ -1400,7 +1412,7 @@ def save_event_to_json(event):
                 event_exists = True
                 break
         
-        # Wenn das Event nicht gefunden wurde, suche nach dem Titel (für Abwärtskompatibilität)
+        # If the event is not found, search for the title (for backwards compatibility)
         if not event_exists:
             for i, e in enumerate(events_data["events"]):
                 if e["title"] == (event["title"] if isinstance(event, dict) else event.title):
@@ -1561,11 +1573,11 @@ def save_events_to_json(events):
     try:
         # Ensure we have the right format
         if isinstance(events, list):
-            # Sortiere die Events nach event_id
+            # Sort the events by event_id
             sorted_events = sorted(events, key=lambda x: x.get('event_id', ''))
             events_data = {"events": sorted_events}
         elif isinstance(events, dict) and "events" in events:
-            # Sortiere die Events nach event_id
+            # Sort the events by event_id
             sorted_events = sorted(events['events'], key=lambda x: x.get('event_id', ''))
             events_data = {"events": sorted_events}
         else:
@@ -1642,12 +1654,12 @@ async def eventify(
 @app_commands.guild_only()
 async def remind_participants(interaction: discord.Interaction, message: str = None):
     try:
-        # Prüfe ob der Befehl in einem Thread ausgeführt wird
+        # Check if the command is executed in a thread
         if not isinstance(interaction.channel, discord.Thread):
             await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
             return
 
-        # Lade das Event
+        # Load the event
         events = load_upcoming_events()
         event = next((e for e in events if e['title'] == interaction.channel.name), None)
 
@@ -1655,24 +1667,24 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
 
-        # Prüfe ob der Benutzer der Event-Ersteller ist
+        # Check if the user is the event caller
         if str(interaction.user.id) != event.get('caller_id'):
             await interaction.response.send_message("Nur der Event-Ersteller kann Erinnerungen versenden.", ephemeral=True)
             return
 
-        # Erstelle den Event-Link
+        # Create the event link
         message_id = event.get('message_id')
         guild_id = interaction.guild.id
         event_link = f"https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}" if message_id else None
 
-        # Sammle alle einzigartigen Teilnehmer
+        # Collect all unique participants
         participant_ids = set()
         for role_key, participants in event.get('participants', {}).items():
             for participant in participants:
-                if len(participant) >= 2:  # Stelle sicher, dass wir ID haben
-                    participant_ids.add(participant[1])  # participant[1] ist die Discord ID
+                if len(participant) >= 2:  # Ensure we have an ID
+                    participant_ids.add(participant[1])  # participant[1] is the Discord ID
 
-        # Sende DMs an alle Teilnehmer
+        # Send DMs to all participants
         success_count = 0
         failed_count = 0
         for participant_id in participant_ids:
@@ -1685,7 +1697,7 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
                         f"Uhrzeit: {event['time']}\n"
                     )
                     
-                    # Füge die benutzerdefinierte Nachricht hinzu, wenn vorhanden
+                    # Add the custom message if it exists
                     if message:
                         reminder_message += f"\n{message}\n"
                     
@@ -1714,12 +1726,12 @@ async def add_participant(
     comment: str = None
 ):
     try:
-        # Prüfe ob der Befehl in einem Thread ausgeführt wird
+        # Check if the command is executed in a thread
         if not isinstance(interaction.channel, discord.Thread):
             await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
             return
 
-        # Lade das Event
+        # Load the event
         events = load_upcoming_events()
         event = next((e for e in events if e['title'] == interaction.channel.name), None)
 
@@ -1727,19 +1739,19 @@ async def add_participant(
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
 
-        # Prüfe ob der Benutzer der Event-Ersteller ist
+        # Check if the user is the event caller
         if str(interaction.user.id) != event.get('caller_id'):
             await interaction.response.send_message("Nur der Event-Ersteller kann Teilnehmer hinzufügen.", ephemeral=True)
             return
         
-        # Umwandlung der angezeigten Rollennummer zu tatsächlichem Index
+        # Convert the displayed role number to the actual index
         actual_role_index = bot.role_number_to_index(event, role_number)
         
         if actual_role_index < 0:
             await interaction.response.send_message(f"Ungültige Rollennummer: {role_number}", ephemeral=True)
             return
             
-        # Erhalte Rollennamen
+        # Get the role name
         role_name = event['roles'][actual_role_index]
         role_key = f"{actual_role_index}:{role_name}"
         
@@ -1750,7 +1762,7 @@ async def add_participant(
         if role_key not in event['participants']:
             event['participants'][role_key] = []
             
-        # Prüfe ob der Teilnehmer bereits für diese Rolle eingetragen ist
+        # Check if the participant is already registered for this role
         player_name = user.display_name
         player_id = str(user.id)
         current_time = datetime.now().timestamp()
@@ -1759,7 +1771,7 @@ async def add_participant(
                               if entry[1] == player_id), None)
                               
         if existing_entry is not None:
-            # Teilnehmer ist bereits eingetragen, aktualisiere nur den Kommentar wenn vorhanden
+            # Participant is already registered, update only the comment if it exists
             if comment:
                 existing_data = event['participants'][role_key][existing_entry]
                 if len(existing_data) >= 4:
@@ -1771,7 +1783,7 @@ async def add_participant(
             else:
                 await interaction.response.send_message(f"{player_name} ist bereits für Rolle {role_name} eingetragen.", ephemeral=True)
             
-            # Informiere den Teilnehmer über die Kommentaraktualisierung
+            # Inform the participant about the comment update
             try:
                 event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                 dm_message = (
@@ -1787,14 +1799,14 @@ async def add_participant(
                 logger.error(f"Failed to send DM to user {user.id}: {e}")
                 
         else:
-            # Prüfe, ob der Teilnehmer bereits für eine andere Rolle eingetragen ist
+            # Check if the participant is already registered for another role
             is_fill_role = role_name.lower() == "fill" or role_name.lower() == "fillall"
             
             if not is_fill_role:
-                # Für normale Rollen: Prüfe ob der Spieler bereits in einer anderen Rolle ist
+                # For normal roles: Check if the player is already registered in another role
                 for r_idx, r_name in enumerate(event['roles']):
                     if r_name.lower() == "fill" or r_name.lower() == "fillall":
-                        continue  # Ignoriere Fill-Rollen
+                        continue  # Ignore Fill roles
                         
                     r_key = f"{r_idx}:{r_name}"
                     if r_key in event.get('participants', {}):
@@ -1804,15 +1816,15 @@ async def add_participant(
                                 event['participants'][r_key].pop(entry_idx)
                                 break
             
-            # Füge den Spieler zur neuen Rolle hinzu
+            # Add the player to the new role
             if comment:
                 event['participants'][role_key].append((player_name, player_id, current_time, comment))
             else:
                 event['participants'][role_key].append((player_name, player_id, current_time))
                 
-            await interaction.response.send_message(f"{player_name} wurde zu Rol^^le \"{role_name}\" hinzugefügt und hat eine DN erhalten.")
+            await interaction.response.send_message(f"{player_name} wurde zu Rolle \"{role_name}\" hinzugefügt und hat eine DN erhalten.")
             
-            # Informiere den Teilnehmer über die Rollenzuweisung
+            # Inform the participant about the role assignment
             try:
                 event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                 dm_message = (
@@ -1845,12 +1857,12 @@ async def remove_participant(
     role_number: int = None
 ):
     try:
-        # Prüfe ob der Befehl in einem Thread ausgeführt wird
+        # Check if the command is executed in a thread
         if not isinstance(interaction.channel, discord.Thread):
             await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
             return
 
-        # Lade das Event
+        # Load the event
         events = load_upcoming_events()
         event = next((e for e in events if e['title'] == interaction.channel.name), None)
 
@@ -1858,7 +1870,7 @@ async def remove_participant(
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
 
-        # Prüfe ob der Benutzer der Event-Ersteller ist
+        # Check if the user is the event caller
         if str(interaction.user.id) != event.get('caller_id'):
             await interaction.response.send_message("Nur der Event-Ersteller kann Teilnehmer entfernen.", ephemeral=True)
             return
@@ -1867,9 +1879,9 @@ async def remove_participant(
         player_name = user.display_name
         removed_count = 0
         
-        # Wenn keine Rollennummer angegeben, entferne aus allen Rollen
+        # If no role number is specified, remove from all roles
         if role_number is None:
-            # Sammle die Namen der Rollen, aus denen der Teilnehmer entfernt wurde
+            # Collect the names of the roles from which the participant was removed
             removed_roles = []
             for r_idx, r_name in enumerate(event['roles']):
                 r_key = f"{r_idx}:{r_name}"
@@ -1881,7 +1893,7 @@ async def remove_participant(
                     removed_count += initial_count - len(event['participants'][r_key])
             
             if removed_count > 0:
-                # Informiere den Teilnehmer über die Entfernung aus allen Rollen
+                # Inform the participant about the removal from all roles
                 try:
                     event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                     dm_message = (
@@ -1899,7 +1911,7 @@ async def remove_participant(
             else:
                 await interaction.response.send_message(f"{player_name} war für keine Rolle eingetragen.", ephemeral=True)
         else:
-            # Entferne aus einer spezifischen Rolle
+            # Remove from a specific role
             actual_role_index = bot.role_number_to_index(event, role_number)
             
             if actual_role_index < 0:
@@ -1911,13 +1923,13 @@ async def remove_participant(
             
             if role_key in event.get('participants', {}):
                 initial_count = len(event['participants'][role_key])
-                # Prüfe erst, ob der Spieler in der Rolle ist
+                # Check first if the player is in the role
                 was_in_role = any(p[1] == player_id for p in event['participants'][role_key])
                 event['participants'][role_key] = [p for p in event['participants'][role_key] if p[1] != player_id]
                 removed_count = initial_count - len(event['participants'][role_key])
                 
                 if removed_count > 0:
-                    # Informiere den Teilnehmer über die Entfernung aus der spezifischen Rolle
+                    # Inform the participant about the removal from the specific role
                     try:
                         event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                         dm_message = (
@@ -1937,7 +1949,7 @@ async def remove_participant(
             else:
                 await interaction.response.send_message(f"Rolle {role_name} hat keine Teilnehmer.", ephemeral=True)
         
-        # Aktualisiere das Event nur wenn etwas geändert wurde
+        # Update the event only if something was changed
         if removed_count > 0:
             save_event_to_json(event)
             await bot.update_event_message(interaction.channel, event)
@@ -1950,12 +1962,12 @@ async def remove_participant(
 @app_commands.guild_only()
 async def propose_role(interaction: discord.Interaction, role_name: str):
     try:
-        # Prüfe ob der Befehl in einem Thread ausgeführt wird
+        # Check if the command is executed in a thread
         if not isinstance(interaction.channel, discord.Thread):
             await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
             return
 
-        # Lade das Event
+        # Load the event
         events = load_upcoming_events()
         event = next((e for e in events if e['title'] == interaction.channel.name), None)
 
@@ -1963,12 +1975,12 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
         
-        # Prüfe, ob die Rolle bereits existiert
+        # Check if the role already exists
         if role_name in event['roles']:
             await interaction.response.send_message(f"Die Rolle '{role_name}' existiert bereits in diesem Event.", ephemeral=True)
             return
         
-        # Erstelle die Bestätigungskomponenten
+        # Create the confirmation components
         class RoleProposalView(discord.ui.View):
             def __init__(self, proposer_id, proposer_name, proposed_role):
                 super().__init__(timeout=86400)  # 24 Stunden Timeout
@@ -1978,64 +1990,64 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 
             @discord.ui.button(label="Annehmen", style=discord.ButtonStyle.green)
             async def accept_button(self, button_interaction: discord.Interaction, button: discord.ui.Button):
-                # Prüfe, ob der Reagierende der Event-Ersteller ist
+                # Check if the reacting user is the event caller
                 if str(button_interaction.user.id) != event.get('caller_id'):
                     await button_interaction.response.send_message("Nur der Event-Ersteller kann diesen Vorschlag annehmen.", ephemeral=True)
                     return
                 
-                # Finde die FillALL-Rolle
+                # Find the FillALL role
                 fill_index = next((i for i, role in enumerate(event['roles']) if role.lower() in ["fill", "fillall"]), None)
                 
-                # Stelle sicher, dass fill_index einen Wert hat
+                # Ensure that fill_index has a value
                 if fill_index is None:
-                    # Falls keine FillALL-Rolle gefunden wird, füge die neue Rolle am Ende hinzu
+                    # If no FillALL role is found, add the new role to the end
                     event['roles'].append(self.proposed_role)
                     new_role_index = len(event['roles']) - 1
                 else:
-                    # Füge die neue Rolle vor der FillALL-Rolle ein
+                    # Add the new role before the FillALL role
                     event['roles'].insert(fill_index, self.proposed_role)
                     new_role_index = fill_index
-                    # FillALL-Index aktualisieren, da wir eine Rolle davor eingefügt haben
+                    # Update the FillALL index, since we added a role before it
                     fill_index += 1
                 
-                # Erstelle role_key für die neue Rolle
+                # Create role_key for the new role
                 new_role_key = f"{new_role_index}:{self.proposed_role}"
                 
-                # Initialisiere participants dict für die neue Rolle falls nötig
+                # Initialize participants dict for the new role if necessary
                 if 'participants' not in event:
                     event['participants'] = {}
                 if new_role_key not in event['participants']:
                     event['participants'][new_role_key] = []
                 
-                # Automatisch den Vorschlagenden in die neue Rolle eintragen
+                # Automatically add the proposer to the new role
                 dm_sent = False
                 proposer_id = str(self.proposer_id)
                 proposer_name = self.proposer_name
                 current_time = datetime.now().timestamp()
                 
-                # Prüfe, ob der User bereits in einer anderen Rolle ist (außer FillALL)
+                # Check if the user is already registered in another role (except FillALL)
                 for r_idx, r_name in enumerate(event['roles']):
                     if r_name.lower() == "fill" or r_name.lower() == "fillall":
-                        continue  # Ignoriere Fill-Rollen
+                        continue  # Ignore Fill roles
                     
                     r_key = f"{r_idx}:{r_name}"
                     if r_key in event.get('participants', {}):
                         for entry_idx, entry in enumerate(event['participants'][r_key]):
                             if entry[1] == proposer_id:
-                                # Entferne den Spieler aus der alten Rolle
+                                # Remove the player from the old role
                                 event['participants'][r_key].pop(entry_idx)
                                 break
                 
-                # Füge den Spieler zur neuen Rolle hinzu
+                # Add the player to the new role
                 event['participants'][new_role_key].append((proposer_name, proposer_id, current_time))
                 
-                # Update event und speichere
+                # Update event and save
                 save_event_to_json(event)
                 
-                # Update das Event-Message
+                # Update the event message
                 await bot.update_event_message(button_interaction.channel, event)
                 
-                # Deaktiviere alle Buttons
+                # Disable all buttons
                 for child in self.children:
                     child.disabled = True
                 
@@ -2057,8 +2069,8 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 except Exception as e:
                     logger.error(f"Failed to send DM to proposer {self.proposer_id}: {e}")
                 
-                # Aktualisiere die Nachricht mit deaktivierten Buttons und PN-Info
-                pn_info = " und hat eine PN erhalten" if dm_sent else ""
+                # Update the message with disabled buttons and DM info
+                dm_info = " und hat eine DM erhalten" if dm_sent else ""
                 await button_interaction.response.edit_message(
                     content=f"✅ Rolle '{self.proposed_role}' wurde zum Event hinzugefügt! {self.proposer_name} wurde automatisch auf die neue Rolle umgebucht{dm_info}.", 
                     view=self
@@ -2066,16 +2078,16 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
             
             @discord.ui.button(label="Ablehnen", style=discord.ButtonStyle.red)
             async def reject_button(self, button_interaction: discord.Interaction, button: discord.ui.Button):
-                # Prüfe, ob der Reagierende der Event-Ersteller ist
+                # Check if the reacting user is the event caller
                 if str(button_interaction.user.id) != event.get('caller_id'):
                     await button_interaction.response.send_message("Nur der Event-Ersteller kann diesen Vorschlag ablehnen.", ephemeral=True)
                     return
                 
-                # Deaktiviere alle Buttons
+                # Disable all buttons
                 for child in self.children:
                     child.disabled = True
                 
-                # Informiere den Vorschlagenden
+                # Inform the proposer
                 dm_sent = False
                 try:
                     proposer = await button_interaction.guild.fetch_member(self.proposer_id)
@@ -2085,17 +2097,17 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 except Exception as e:
                     logger.error(f"Failed to send DM to proposer {self.proposer_id}: {e}")
                 
-                # Aktualisiere die Nachricht mit deaktivierten Buttons und PN-Info
-                pn_info = " und hat eine PN erhalten" if dm_sent else ""
+                # Update the message with disabled buttons and DM info
+                dm_info = " und hat eine DM erhalten" if dm_sent else ""
                 await button_interaction.response.edit_message(
                     content=f"❌ Rollenvorschlag '{self.proposed_role}' wurde abgelehnt. {self.proposer_name} wurde informiert{dm_info}.", 
                     view=self
                 )
         
-        # Erstelle die View mit den Buttons
+        # Create the view with the buttons
         view = RoleProposalView(interaction.user.id, interaction.user.display_name, role_name)
         
-        # Sende Vorschlagsnachricht mit Buttons
+        # Send the proposal message with buttons
         caller_mention = f"<@{event['caller_id']}>" if event.get('caller_id') else "Event-Ersteller"
         
         await interaction.response.send_message(
@@ -2153,17 +2165,17 @@ async def process_individual_deletions(messages, counter):
                 logger.warning(f"Rate limit beim einzelnen Löschen erreicht. Warte {retry_after} Sekunden.")
                 await asyncio.sleep(retry_after)
                 try:
-                    await message.delete()  # Erneuter Versuch
+                    await message.delete()  # Try again
                 except Exception as inner_e:
-                    logger.error(f"Konnte Nachricht auch nach Warten nicht löschen: {inner_e}")
-            elif e.status == 404:  # Nachricht bereits gelöscht
+                    logger.error(f"Nachricht konnte auch nach dem Warten nicht gelöscht werden: {inner_e}")
+            elif e.status == 404:  # Message already deleted
                 logger.info("Nachricht bereits gelöscht.")
             else:
                 logger.error(f"Fehler beim Löschen einer einzelnen Nachricht: {e}")
         except Exception as e:
             logger.error(f"Unerwarteter Fehler beim Löschen einer einzelnen Nachricht: {e}")
         finally:
-            # Zusätzliche kleine Pause nach jedem Löschversuch
+            # Additional small pause after each deletion attempt
             await asyncio.sleep(0.3)
 
 bot.run(DISCORD_TOKEN)
