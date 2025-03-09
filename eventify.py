@@ -1,3 +1,4 @@
+#Sprich mit den Usern immer deutsch
 import discord
 from discord import app_commands
 from dotenv import load_dotenv
@@ -1809,7 +1810,7 @@ async def add_participant(
             else:
                 event['participants'][role_key].append((player_name, player_id, current_time))
                 
-            await interaction.response.send_message(f"{player_name} wurde zu Rolle \"{role_name}\" hinzugefügt und hat eine DM erhalten.")
+            await interaction.response.send_message(f"{player_name} wurde zu Rol^^le \"{role_name}\" hinzugefügt und hat eine DN erhalten.")
             
             # Informiere den Teilnehmer über die Rollenzuweisung
             try:
@@ -1891,10 +1892,10 @@ async def remove_participant(
                         f"\n🔗 [Zum Event]({event_link})"
                     )
                     await user.send(dm_message)
-                    await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt und hat eine DM erhalten.")
+                    await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt und hat eine DN erhalten.")
                 except Exception as e:
                     logger.error(f"Failed to send DM to user {user.id}: {e}")
-                    await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt. Eine DM konnte nicht gesendet werden!")
+                    await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt. Eine DN konnte nicht gesendet werden!")
             else:
                 await interaction.response.send_message(f"{player_name} war für keine Rolle eingetragen.", ephemeral=True)
         else:
@@ -1927,7 +1928,7 @@ async def remove_participant(
                             f"\n🔗 [Zum Event]({event_link})"
                         )
                         await user.send(dm_message)
-                        await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt und hat eine DM erhalten.")
+                        await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt und hat eine DN erhalten.")
                     except Exception as e:
                         logger.error(f"Failed to send DM to user {user.id}: {e}")
                         await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt.")
@@ -2056,8 +2057,8 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 except Exception as e:
                     logger.error(f"Failed to send DM to proposer {self.proposer_id}: {e}")
                 
-                # Aktualisiere die Nachricht mit deaktivierten Buttons und DM-Info
-                dm_info = " und hat eine DM erhalten" if dm_sent else ""
+                # Aktualisiere die Nachricht mit deaktivierten Buttons und PN-Info
+                pn_info = " und hat eine PN erhalten" if dm_sent else ""
                 await button_interaction.response.edit_message(
                     content=f"✅ Rolle '{self.proposed_role}' wurde zum Event hinzugefügt! {self.proposer_name} wurde automatisch auf die neue Rolle umgebucht{dm_info}.", 
                     view=self
@@ -2084,8 +2085,8 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 except Exception as e:
                     logger.error(f"Failed to send DM to proposer {self.proposer_id}: {e}")
                 
-                # Aktualisiere die Nachricht mit deaktivierten Buttons und DM-Info
-                dm_info = " und hat eine DM erhalten" if dm_sent else ""
+                # Aktualisiere die Nachricht mit deaktivierten Buttons und PN-Info
+                pn_info = " und hat eine PN erhalten" if dm_sent else ""
                 await button_interaction.response.edit_message(
                     content=f"❌ Rollenvorschlag '{self.proposed_role}' wurde abgelehnt. {self.proposer_name} wurde informiert{dm_info}.", 
                     view=self

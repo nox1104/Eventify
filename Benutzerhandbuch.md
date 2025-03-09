@@ -117,7 +117,7 @@ Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
    - Datum und Uhrzeit
    - Link zum Event
 
-Nur der Event-Ersteller kann diese Befehle verwenden. Die automatischen DM-Benachrichtigungen helfen den Teilnehmern, über Änderungen ihrer Rollenzuweisung informiert zu bleiben.
+Nur der Event-Ersteller kann diese Befehle verwenden. Die automatischen PN-Benachrichtigungen helfen den Teilnehmern, über Änderungen ihrer Rollenzuweisung informiert zu bleiben.
 
 ### Rollenformatierung
 
@@ -165,7 +165,7 @@ Der Bot hält den Event-Kanal automatisch sauber und übersichtlich:
   - Der Thread noch aktiv ist (wird 15 Minuten nach Eventbeginn gelöscht)
 
 **Wichtiger Hinweis zur Planung**: 
-Aufgrund der Discord-Beschränkung, dass Nachrichten älter als 14 Tage nicht mehr gelöscht werden können, bitten wir darum, Events nicht weiter als 13 Tage in die Zukunft zu planen. Dies stellt sicher, dass:
+Aufgrund der Discord-Beschränkung, dass Nachrichten älter als 14 Tage nicht mehr gelöscht werden können, wird darum gebeten, Events nicht weiter als 13 Tage in die Zukunft zu planen. Dies stellt sicher, dass:
 - Der Bot alte Event-Posts automatisch entfernen kann
 - Keine "verwaisten" Event-Posts zurückbleiben
 
