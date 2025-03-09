@@ -48,12 +48,17 @@ Als Event-Ersteller kannst du neue Events planen und verwalten. Hier ist, wie du
 
 ### Event erstellen
 
-1. Verwende den Slash-Befehl `/eventify` im Event-Kanal
-2. Gib die folgenden Informationen ein:
-   - `title`: Der Titel deines Events
-   - `date`: Das Datum im Format DDMMYYYY (z.B. 31122025 für den 31.12.2025) oder DD.MM.YYYY
-   - `time`: Die Uhrzeit im Format HHMM (z.B. 1300 für 13:00 Uhr)
-   - `mention_role` (optional): Die Discord-Rolle, die beim Event erwähnt werden soll
+Mit dem Befehl `/eventify` kannst du ein neues Event erstellen. Folgende Parameter sind verfügbar:
+
+- `title`: Der Titel des Events
+- `date`: Das Datum des Events im Format TT.MM.JJJJ
+- `time`: Die Uhrzeit des Events im Format HH:mm
+- `description`: Die Beschreibung des Events
+- `mention_role` (optional): Eine Rolle, die beim Event erwähnt werden soll
+- `image_url` (optional): Ein Link zu einem Bild, das im Event angezeigt werden soll
+  - Das Bild wird unter der Beschreibung angezeigt
+  - Unterstützte Bildformate: PNG, JPG, GIF
+  - Der Link muss direkt zum Bild führen
 
 3. Nach dem Absenden öffnet sich ein Modal, in dem du folgende Informationen eingeben kannst:
    - **Beschreibung**: 
@@ -142,6 +147,7 @@ Um Links in Discord klickbar zu machen, verwende die folgende Markdown-Syntax:
   - `[builds](https://docs.google.com/spreadsheets/d/1pNt74V...)`
   - `[Bildbeschreibung](https://de.wikipedia.org/wiki/Fliegender_Fisch_(Sternbild)#/media/Datei:Uranometria_Pavo_et_al.png)`
 - Achte darauf, dass keine Leerzeichen zwischen den Klammern sind
+- Um ein Bild in deinem Event anzuzeigen, kannst du die `image_url` Option beim `/eventify` Befehl nutzen.
 
 ### Event-Kanal Verwaltung
 
@@ -168,7 +174,7 @@ Events, die weiter in der Zukunft liegen, sollten erst später erstellt werden, 
 
 ### Event erstellen
 ```
-/eventify title: Ava Dungeon date: 31122025 time: 1900 mention_role: @Tank
+/eventify title: Ava Dungeon date: 31122025 time: 1900 mention_role: @Tank image_url: https://example.com/ava-dungeon-builds.png
 ```
 
 ### Rollen-Liste Beispiel

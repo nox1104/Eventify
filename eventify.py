@@ -1089,7 +1089,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 name="Teilnehmer-Tipps",
                 value="**Anmelden**: Schreibe einfach die Nummer der gewünschten Rolle\n"
                       "**Abmelden**: Schreibe `-` (von allen Rollen) oder `-X` (von Rolle X)\n"
-                      "**Kommentar hinzufügen**: Schreibe nach der Rollennummer deinen Kommentar (mh, dps)",
+                      "**Kommentar hinzufügen**: Schreibe nach der Rollennummer deinen Kommentar (z.B. 3 mh, dps)",
                 inline=False
             )
 
@@ -1101,7 +1101,8 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 inline=False
             )
 
-            welcome_embed.set_footer(text="Bei Fragen kontaktiere <@778914224613228575>")
+            welcome_embed.remove_footer()
+            welcome_embed.add_field(name="Support", value="Fragen, Bugs oder Feature-Vorschläge gehen an <@778914224613228575>", inline=False)
 
             await thread.send(embed=welcome_embed)
             print("Event message and thread created.")
@@ -1489,13 +1490,23 @@ def save_events_to_json(events):
             logger.error(f"Error resetting events file: {write_error}")
         return False
 
-@bot.tree.command(name="eventify", description="Starte ein neues Event")
-async def create_event(
+@bot.tree.command(name="eventify", description="Erstelle ein Event")
+@app_commands.describe(
+    title="Der Titel des Events",
+    date="Das Datum des Events (TT.MM.JJJJ)",
+    time="Die Uhrzeit des Events (HH:mm)",
+    description="Die Beschreibung des Events",
+    mention_role="Optional: Eine Rolle, die beim Event erwähnt werden soll",
+    image_url="Optional: Ein Link zu einem Bild, das im Event angezeigt werden soll"
+)
+async def eventify(
     interaction: discord.Interaction, 
-    title: str, 
-    date: str, 
+    title: str,
+    date: str,
     time: str,
-    mention_role: discord.Role = None  # Neuer optionaler Parameter
+    description: str,
+    mention_role: discord.Role = None,
+    image_url: str = None
 ):
     try:
         # Parse date and time
@@ -1705,7 +1716,7 @@ async def add_participant(
             else:
                 event['participants'][role_key].append((player_name, player_id, current_time))
                 
-            await interaction.response.send_message(f"{player_name} wurde zu Rolle \"{role_name}\" hinzugefügt.")
+            await interaction.response.send_message(f"{player_name} wurde zu Rolle \"{role_name}\" hinzugefügt und hat eine DM erhalten.")
             
             # Informiere den Teilnehmer über die Rollenzuweisung
             try:
@@ -1787,10 +1798,10 @@ async def remove_participant(
                         f"\n🔗 [Zum Event]({event_link})"
                     )
                     await user.send(dm_message)
+                    await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt und hat eine DM erhalten.")
                 except Exception as e:
                     logger.error(f"Failed to send DM to user {user.id}: {e}")
-                
-                await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt.")
+                    await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt. Eine DM konnte nicht gesendet werden!")
             else:
                 await interaction.response.send_message(f"{player_name} war für keine Rolle eingetragen.", ephemeral=True)
         else:
@@ -1823,10 +1834,10 @@ async def remove_participant(
                             f"\n🔗 [Zum Event]({event_link})"
                         )
                         await user.send(dm_message)
+                        await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt und hat eine DM erhalten.")
                     except Exception as e:
                         logger.error(f"Failed to send DM to user {user.id}: {e}")
-                    
-                    await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt.")
+                        await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt.")
                 else:
                     await interaction.response.send_message(f"{player_name} war nicht für Rolle \"{role_name}\" eingetragen.")
             else:
