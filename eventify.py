@@ -168,10 +168,17 @@ class MyBot(discord.Client):
             if event:
                 logger.info(f"Found matching event: {event['title']}")
                 
+                # Prüfen, ob wir im participant_only_mode sind
+                is_participant_only = event.get('participant_only_mode', False)
+                
                 # Check if this is the "Fill" role by name instead of position
                 is_fill_role = False
                 if 0 <= role_index < len(event['roles']):
                     is_fill_role = event['roles'][role_index].lower() == "fill" or event['roles'][role_index].lower() == "fillall"
+                
+                # Im participant_only_mode behandeln wir die Teilnehmer-Rolle wie FillALL
+                if is_participant_only:
+                    is_fill_role = True
                 
                 if 0 <= role_index < len(event['roles']):
                     role_name = event['roles'][role_index]
@@ -483,13 +490,26 @@ class MyBot(discord.Client):
                     role_name = roles[0]
                     role_key = f"{role_idx}:{role_name}"
                     
-                    # Zeige alle Teilnehmer an
+                    # WICHTIG: Exakt so wie bei FillALL implementieren
+                    # 1. Rollenname und Nummer zusammensetzen
+                    participant_title = f"1. {role_name}"
+                    
+                    # 2. Teilnehmerliste abrufen
                     role_participants = participants.get(role_key, [])
+                    
+                    # 3. Wenn Teilnehmer vorhanden sind, formatiere sie genau wie bei FillALL
                     if role_participants:
-                        participants_text = "\n".join([f"{i+1}. {p[0]}" for i, p in enumerate(role_participants)])
-                        embed.add_field(name=f"{role_name} ({len(role_participants)})", value=participants_text, inline=False)
+                        # Sortiere Teilnehmer nach Zeitstempel
+                        sorted_participants = sorted(role_participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                        
+                        # EXAKT wie bei FillALL - alle Teilnehmer anzeigen
+                        participants_text = "\n".join([f"<@{p[1]}>" for p in sorted_participants if len(p) >= 2])
+                        
+                        # Füge das Feld hinzu
+                        embed.add_field(name=participant_title, value=participants_text or "\u200b", inline=False)
                     else:
-                        embed.add_field(name=f"{role_name} (0)", value="Niemand angemeldet", inline=False)
+                        # Leere Teilnehmerliste
+                        embed.add_field(name=participant_title, value="\u200b", inline=False)
             else:
                 # Standard-Modus mit mehreren Rollen
                 # Find the Fill role - case insensitive check
@@ -573,19 +593,16 @@ class MyBot(discord.Client):
                         # Für FillALL alle Teilnehmer anzeigen
                         fill_players_text = "\n".join([f"<@{p[1]}>" for p in sorted_fill if len(p) >= 2])
                         
-                        # Add Fill role to embed only if there are participants
-                        embed.add_field(name=fill_text, value=fill_players_text, inline=False)
+                        # Add Fill role to embed
+                        embed.add_field(name=fill_text, value=fill_players_text or "\u200b", inline=False)
                     else:
-                        # Leere Fill-Rolle anzeigen, aber OHNE "Niemand angemeldet"
+                        # Leere Fill-Rolle anzeigen
                         embed.add_field(name=fill_text, value="\u200b", inline=False)
             
             # Add image if available (neue Funktion)
             image_url = event.get('image_url') if isinstance(event, dict) else getattr(event, 'image_url', None)
             if image_url:
                 embed.set_image(url=image_url)
-            
-            # Support-Frame NICHT hinzufügen bei Updates
-            # Das Support-Feld wird nur bei der initialen Erstellung in EventModal.on_submit hinzugefügt
             
             # Update the message
             await event_message.edit(embed=embed)
@@ -610,6 +627,17 @@ class MyBot(discord.Client):
         # Get roles from event
         roles = event.get('roles', []) if isinstance(event, dict) else getattr(event, 'roles', [])
         
+        # Prüfe, ob wir im participant_only_mode sind
+        is_participant_only = event.get('participant_only_mode', False) if isinstance(event, dict) else getattr(event, 'participant_only_mode', False)
+        
+        # Im participant_only_mode ist es einfach: es gibt nur eine Rolle (Teilnehmer) an Position 0
+        if is_participant_only:
+            if role_number == 1:  # Da es nur eine Rolle gibt, muss die Nummer 1 sein
+                return 0
+            else:
+                return -1  # Ungültige Rollennummer
+        
+        # Im normalen Modus wie bisher vorgehen
         # Find the Fill role index
         fill_index = next((i for i, role in enumerate(roles) if role.lower() in ["fill", "fillall"]), None)
         
@@ -847,7 +875,7 @@ class MyBot(discord.Client):
         await self.wait_until_ready()
 
 class Event:
-    def __init__(self, title, date, time, description, roles, datetime_obj=None, caller_id=None, caller_name=None):
+    def __init__(self, title, date, time, description, roles, datetime_obj=None, caller_id=None, caller_name=None, participant_only_mode=False):
         self.title = title
         self.date = date
         self.time = time
@@ -858,6 +886,7 @@ class Event:
         self.caller_id = caller_id  # Discord ID des Erstellers
         self.caller_name = caller_name  # Name des Erstellers
         self.message_id = None  # Message ID des Event-Posts
+        self.participant_only_mode = participant_only_mode  # Flag für den Teilnehmer-only-Modus
         
         # Generiere eine eindeutige ID für das Event
         timestamp = datetime_obj.strftime("%Y%m%d%H%M") if datetime_obj else datetime.now().strftime("%Y%m%d%H%M")
@@ -880,7 +909,8 @@ class Event:
             "event_id": self.event_id,  # Speichere die eindeutige ID
             "caller_id": self.caller_id,  # Speichere die ID des Erstellers
             "caller_name": self.caller_name,  # Speichere den Namen des Erstellers
-            "message_id": self.message_id  # Speichere die Message ID des Event-Posts
+            "message_id": self.message_id,  # Speichere die Message ID des Event-Posts
+            "participant_only_mode": self.participant_only_mode  # Speichere das Flag für den Teilnehmer-only-Modus
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
@@ -915,12 +945,12 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             # Get roles from input, filter out empty lines
             raw_roles_input = self.roles_input.value.strip()
             
-            # Prüfe, ob "none" eingegeben wurde (case-insensitive)
-            is_participant_only_mode = raw_roles_input.lower() == "none"
+            # Prüfe, ob "none", "nan" oder ähnliche Eingaben gemacht wurden (case-insensitive)
+            is_participant_only_mode = raw_roles_input.lower() in ["none", "nan", "null", "keine"]
             fill_index = None  # Initialisiere fill_index außerhalb der Bedingung
             
             if is_participant_only_mode:
-                # Bei "none" nur eine "Teilnehmer"-Rolle erstellen
+                # Bei "none"/"nan" nur eine "Teilnehmer"-Rolle erstellen
                 roles = ["Teilnehmer"]
             else:
                 # Normaler Modus mit Fill-Rolle
@@ -950,11 +980,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 roles=roles,
                 datetime_obj=self.full_datetime,
                 caller_id=self.caller_id,
-                caller_name=self.caller_name
+                caller_name=self.caller_name,
+                participant_only_mode=is_participant_only_mode
             )
-
-            # Kennzeichne den Event-Modus (Teilnehmer-only oder normal)
-            event.participant_only_mode = is_participant_only_mode
 
             # Speichere die Mention-Rolle ID separat im Event-Objekt
             if self.mention_role:
