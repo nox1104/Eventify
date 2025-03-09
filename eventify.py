@@ -2,14 +2,59 @@ import discord
 from discord import app_commands
 from dotenv import load_dotenv
 import os
-from datetime import datetime, time
+from datetime import datetime, time, timedelta, timezone
 import json
 import logging
 import uuid  # Für die Generierung zufälliger IDs
+from discord.ext import tasks
+import asyncio
+import sys
+from logging.handlers import RotatingFileHandler
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('eventify')
+# Logging-Konfiguration
+def setup_logging():
+    # Erstelle logs Ordner, falls nicht vorhanden
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+
+    # Erstelle Formatter für konsistentes Log-Format
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # Konfiguriere Root-Logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
+    # Rotating File Handler (begrenzt Dateigröße und behält alte Logs)
+    log_filename = f'logs/eventify_{datetime.now().strftime("%Y%m%d")}.log'
+    file_handler = RotatingFileHandler(
+        log_filename,
+        maxBytes=5*1024*1024,  # 5 MB pro Datei
+        backupCount=42,         # Behalte 5 alte Log-Dateien
+        encoding='utf-8'
+    )
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
+
+    # Console Handler (für Terminal-Ausgabe)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+    # Discord-Logger konfigurieren
+    discord_logger = logging.getLogger('discord')
+    discord_logger.setLevel(logging.INFO)
+
+    # Eigenen Logger für Eventify erstellen
+    eventify_logger = logging.getLogger('eventify')
+    eventify_logger.setLevel(logging.INFO)
+
+    return eventify_logger
+
+# Am Anfang des Skripts aufrufen
+logger = setup_logging()
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -33,6 +78,10 @@ class MyBot(discord.Client):
         await self.tree.sync()
         print("Slash commands synchronized!")
         print("Bot is ready and listening for messages.")
+        
+        # Starte die Loops
+        self.delete_old_event_threads.start()
+        self.cleanup_event_channel.start()  # Neue Loop hinzugefügt
 
     async def on_message(self, message):
         logger.info(f"Message received: {message.content} in channel: {message.channel.name if hasattr(message.channel, 'name') else 'Unknown'}")
@@ -571,6 +620,220 @@ class MyBot(discord.Client):
         else:
             # Invalid role number
             return -1
+
+    @tasks.loop(minutes=5)
+    async def delete_old_event_threads(self):
+        """Löscht Threads von Events, die vor mehr als 15 Minuten begonnen haben"""
+        try:
+            now = datetime.now()
+            logger.info(f"{now} - Überprüfe alte Event-Threads...")
+            
+            # Lade alle Events
+            events = load_upcoming_events()
+            
+            for event in events:
+                try:
+                    # Hole die event_id
+                    event_id = event.get('event_id')
+                    if not event_id:
+                        logger.warning(f"Keine event_id für Event '{event.get('title')}' gefunden.")
+                        continue
+                    
+                    # Extrahiere Datum und Zeit aus der event_id (Format: YYYYMMDDHHmm-uuid)
+                    datetime_str = event_id.split('-')[0]  # Nimm den Teil vor dem Bindestrich
+                    try:
+                        event_datetime = datetime.strptime(datetime_str, "%Y%m%d%H%M")
+                        
+                        # Prüfe, ob das Event vor mehr als 15 Minuten begonnen hat
+                        if event_datetime < now - timedelta(minutes=15):
+                            logger.info(f"Event '{event['title']}' (ID: {event_id}) hat vor mehr als 15 Minuten begonnen. Lösche Thread...")
+                            
+                            # Wir brauchen den Thread, der mit diesem Event verbunden ist
+                            if 'message_id' in event and event['message_id']:
+                                for guild in self.guilds:
+                                    channel = guild.get_channel(CHANNEL_ID_EVENT)
+                                    if channel:
+                                        try:
+                                            # Hole die ursprüngliche Nachricht
+                                            message = await channel.fetch_message(int(event['message_id']))
+                                            
+                                            # Prüfe, ob es einen Thread für diese Nachricht gibt
+                                            if hasattr(message, 'thread') and message.thread:
+                                                # Thread gefunden, lösche ihn
+                                                await message.thread.delete()
+                                                logger.info(f"Thread für Event '{event['title']}' gelöscht.")
+                                                
+                                                # Sende Benachrichtigung in den Event-Kanal
+                                                await channel.send(
+                                                    f"Der Thread für das Event '{event['title']}' wurde automatisch gelöscht, "
+                                                    f"da das Event bereits begonnen hat.", 
+                                                    delete_after=300
+                                                )
+                                            else:
+                                                logger.warning(f"Kein Thread für Event '{event['title']}' gefunden.")
+                                        except Exception as e:
+                                            logger.error(f"Fehler beim Löschen des Threads: {e}")
+                            else:
+                                logger.warning(f"Keine message_id für Event '{event['title']}' gefunden.")
+                                
+                    except ValueError as e:
+                        logger.error(f"Fehler beim Parsen der event_id {event_id}: {e}")
+                        
+                except Exception as e:
+                    logger.error(f"Fehler bei der Verarbeitung des Events: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Fehler bei der Thread-Überprüfung: {e}")
+
+    # Warte bis der Bot bereit ist, bevor die Loop startet
+    @delete_old_event_threads.before_loop
+    async def before_delete_old_event_threads(self):
+        await self.wait_until_ready()
+
+    @tasks.loop(hours=6)  
+    async def cleanup_event_channel(self):
+        """
+        Räumt den Event-Kanal vorsichtig auf. Löscht nur:
+        - Vergangene Event-Posts (bestätigt durch events.json)
+        - System-Nachrichten (z.B. "Bot ist online")
+        Alle anderen Nachrichten bleiben erhalten.
+        """
+        logger.info(f"{datetime.now()} - Starte vorsichtiges Aufräumen des Event-Kanals...")
+        
+        for guild in self.guilds:
+            channel = guild.get_channel(CHANNEL_ID_EVENT)
+            if not channel:
+                logger.warning(f"Event-Kanal in Guild {guild.name} nicht gefunden.")
+                continue
+
+            # Sicherheitscheck: Prüfe Berechtigungen
+            permissions = channel.permissions_for(guild.me)
+            if not permissions.manage_messages:
+                logger.error("Bot hat keine Berechtigung zum Löschen von Nachrichten!")
+                continue
+                
+            # Lade aktive Events
+            try:
+                with open('events.json', 'r') as f:
+                    events_data = json.load(f)
+                    id_to_event = {str(event['message_id']): event['event_id'] 
+                                 for event in events_data if 'message_id' in event and 'event_id' in event}
+            except FileNotFoundError:
+                logger.error("events.json nicht gefunden! Breche Aufräumen ab.")
+                return
+            except Exception as e:
+                logger.error(f"Kritischer Fehler beim Laden der Events: {e}")
+                return
+
+            # Zähler für Logging
+            counter = {
+                "system": 0,      # System-Nachrichten
+                "past_event": 0,  # Vergangene Events
+                "protected": 0,   # Geschützte Nachrichten
+                "skipped": 0      # Übersprungene Nachrichten
+            }
+            
+            # Liste der zu löschenden Nachrichten
+            to_delete = []
+            
+            # Sammle zu löschende Nachrichten
+            async for message in channel.history(limit=1000):
+                try:
+                    # SCHUTZ: Überspringe Nachrichten mit Threads
+                    if message.thread:
+                        logger.info(f"GESCHÜTZT: Nachricht {message.id} hat aktiven Thread")
+                        counter["protected"] += 1
+                        continue
+
+                    # SCHUTZ: Überspringe Nachrichten von anderen Bots (außer uns selbst)
+                    if message.author.bot and message.author.id != bot.user.id:
+                        logger.info(f"GESCHÜTZT: Nachricht {message.id} ist von anderem Bot")
+                        counter["protected"] += 1
+                        continue
+
+                    # SCHUTZ: Überspringe Nachrichten mit Anhängen
+                    if message.attachments:
+                        logger.info(f"GESCHÜTZT: Nachricht {message.id} hat Anhänge")
+                        counter["protected"] += 1
+                        continue
+
+                    # Prüfe Event-Posts
+                    message_id_str = str(message.id)
+                    if message_id_str in id_to_event:
+                        event_id = id_to_event[message_id_str]
+                        event_datetime_str = event_id.split('-')[0]
+                        try:
+                            event_datetime = datetime.strptime(event_datetime_str, '%Y%m%d%H%M')
+                            event_datetime = event_datetime.replace(tzinfo=timezone.utc)
+                            
+                            # Nur löschen wenn Event mindestens 1 Stunde alt ist
+                            if event_datetime + timedelta(hours=1) < datetime.now(timezone.utc):
+                                logger.info(f"Markiere vergangenes Event zur Löschung: {message.id}")
+                                to_delete.append(message)
+                                counter["past_event"] += 1
+                            else:
+                                logger.info(f"GESCHÜTZT: Event {message.id} ist noch aktiv oder zu neu")
+                                counter["protected"] += 1
+                        except ValueError as e:
+                            logger.error(f"Fehler beim Parsen des Event-Datums {event_datetime_str}: {e}")
+                            counter["skipped"] += 1
+                            continue
+                    
+                    # Prüfe System-Nachrichten von unserem Bot
+                    elif message.author.id == bot.user.id and not message.embeds:
+                        # Liste von bekannten System-Nachrichten
+                        system_messages = [
+                            "bot on",
+                            "bot off",
+                            "Bot ist online",
+                            "Bot ist offline",
+                            "Thread wurde gelöscht"
+                        ]
+                        
+                        if any(msg in message.content for msg in system_messages):
+                            logger.info(f"Markiere System-Nachricht zur Löschung: {message.id}")
+                            to_delete.append(message)
+                            counter["system"] += 1
+                        else:
+                            logger.info(f"GESCHÜTZT: Unbekannte Bot-Nachricht: {message.id}")
+                            counter["protected"] += 1
+                    else:
+                        logger.info(f"GESCHÜTZT: Sonstige Nachricht: {message.id}")
+                        counter["protected"] += 1
+
+                except Exception as e:
+                    logger.error(f"Fehler bei Nachricht {message.id}: {e}")
+                    counter["skipped"] += 1
+                    continue
+
+            # SICHERHEIT: Prüfe nochmal die Anzahl zu löschender Nachrichten
+            if len(to_delete) > 100:
+                logger.warning(f"Ungewöhnlich viele Nachrichten ({len(to_delete)}) zum Löschen markiert!")
+                logger.warning("Lösche nur die ersten 100 zur Sicherheit.")
+                to_delete = to_delete[:100]
+
+            # Lösche die markierten Nachrichten
+            deleted = 0
+            for message in to_delete:
+                try:
+                    await message.delete()
+                    deleted += 1
+                    await asyncio.sleep(1.2)  # Großzügige Pause zwischen Löschungen
+                except Exception as e:
+                    logger.error(f"Fehler beim Löschen von Nachricht {message.id}: {e}")
+
+            # Abschluss-Log
+            logger.info(f"Aufräumen abgeschlossen:")
+            logger.info(f"- {counter['past_event']} vergangene Events markiert")
+            logger.info(f"- {counter['system']} System-Nachrichten markiert")
+            logger.info(f"- {counter['protected']} Nachrichten geschützt")
+            logger.info(f"- {counter['skipped']} Nachrichten übersprungen")
+            logger.info(f"- {deleted} Nachrichten erfolgreich gelöscht")
+
+    # Warte bis der Bot bereit ist, bevor die Loop startet
+    @cleanup_event_channel.before_loop
+    async def before_cleanup_event_channel(self):
+        await self.wait_until_ready()
 
 class Event:
     def __init__(self, title, date, time, description, roles, datetime_obj=None, caller_id=None, caller_name=None):
@@ -1682,5 +1945,63 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
     except Exception as e:
         logger.error(f"Error in propose_role: {e}")
         await interaction.response.send_message("Ein Fehler ist beim Vorschlagen der Rolle aufgetreten.", ephemeral=True)
+
+async def process_batch_deletion(channel, messages, counter):
+    """Löscht Nachrichten in einem Batch und behandelt mögliche Fehler."""
+    if not messages:
+        return
+    
+    try:
+        await channel.delete_messages(messages)
+        logger.info(f"Batch von {len(messages)} Nachrichten erfolgreich gelöscht.")
+        await asyncio.sleep(2)  # Kurze Pause zwischen Batches
+    except discord.errors.HTTPException as e:
+        if e.status == 429:  # Rate limit
+            retry_after = e.retry_after if hasattr(e, 'retry_after') else 5
+            logger.warning(f"Rate limit erreicht. Warte {retry_after} Sekunden.")
+            await asyncio.sleep(retry_after)
+            # Rekursiver Aufruf mit kleinerer Batch-Größe
+            if len(messages) > 10:
+                mid = len(messages) // 2
+                await process_batch_deletion(channel, messages[:mid], counter)
+                await asyncio.sleep(1)
+                await process_batch_deletion(channel, messages[mid:], counter)
+            else:
+                # Bei sehr kleinen Batches: Einzelnes Löschen
+                await process_individual_deletions(messages, counter)
+        else:
+            logger.error(f"Fehler beim Batch-Löschen: {e}")
+            # Bei anderen Fehlern: Einzelnes Löschen versuchen
+            await process_individual_deletions(messages, counter)
+
+async def process_individual_deletions(messages, counter):
+    """Löscht Nachrichten einzeln mit angemessenen Pausen."""
+    if not messages:
+        return
+    
+    for message in messages:
+        try:
+            await message.delete()
+            content_preview = message.content[:30] + "..." if message.content and len(message.content) > 30 else message.content
+            logger.info(f"Einzelnachricht gelöscht: {content_preview or 'Embed'}")
+            await asyncio.sleep(1.2)  # Angemessene Pause zwischen einzelnen Löschungen
+        except discord.errors.HTTPException as e:
+            if e.status == 429:  # Rate limit
+                retry_after = e.retry_after if hasattr(e, 'retry_after') else 5
+                logger.warning(f"Rate limit beim einzelnen Löschen erreicht. Warte {retry_after} Sekunden.")
+                await asyncio.sleep(retry_after)
+                try:
+                    await message.delete()  # Erneuter Versuch
+                except Exception as inner_e:
+                    logger.error(f"Konnte Nachricht auch nach Warten nicht löschen: {inner_e}")
+            elif e.status == 404:  # Nachricht bereits gelöscht
+                logger.info("Nachricht bereits gelöscht.")
+            else:
+                logger.error(f"Fehler beim Löschen einer einzelnen Nachricht: {e}")
+        except Exception as e:
+            logger.error(f"Unerwarteter Fehler beim Löschen einer einzelnen Nachricht: {e}")
+        finally:
+            # Zusätzliche kleine Pause nach jedem Löschversuch
+            await asyncio.sleep(0.3)
 
 bot.run(DISCORD_TOKEN)

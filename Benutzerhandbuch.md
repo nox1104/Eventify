@@ -130,15 +130,39 @@ Nur der Event-Ersteller kann diese Befehle verwenden. Die automatischen DM-Benac
 - Im Thread kannst du weitere Informationen teilen und mit den Teilnehmern kommunizieren
 - Das Event wird automatisch in der Event-Liste angezeigt
 - Dein Name wird als Ersteller unter dem Titel des Events angezeigt
+- Event-Threads werden 15 Minuten nach Eventbeginn automatisch gelöscht
+  - Eine kurze Benachrichtigung wird gesendet, wenn ein Thread gelöscht wurde
+  - Diese Nachricht verschwindet nach 5 Minuten automatisch
 
 ### Nutzung von Links in Discord
 
 Um Links in Discord klickbar zu machen, verwende die folgende Markdown-Syntax:
 
 - **Klickbarer Link**: `[Linktext](https://example.com)`
-- `[builds](https://docs.google.com/spreadsheets/d/1pNt74V...)`
-- `[Bildbeschreibung](https://de.wikipedia.org/wiki/Fliegender_Fisch_(Sternbild)#/media/Datei:Uranometria_Pavo_et_al.png)`
+  - `[builds](https://docs.google.com/spreadsheets/d/1pNt74V...)`
+  - `[Bildbeschreibung](https://de.wikipedia.org/wiki/Fliegender_Fisch_(Sternbild)#/media/Datei:Uranometria_Pavo_et_al.png)`
 - Achte darauf, dass keine Leerzeichen zwischen den Klammern sind
+
+### Event-Kanal Verwaltung
+
+Der Bot hält den Event-Kanal automatisch sauber und übersichtlich:
+
+- **Aufräum-Intervall**: Alle 6 Stunden werden überprüft und entfernt:
+  - Normale Nachrichten
+  - Event-Übersichten
+  - Event-Posts von vergangenen Events
+  - Benachrichtigungen und System-Nachrichten
+
+- **Event-Posts bleiben erhalten** solange:
+  - Das Event noch nicht stattgefunden hat
+  - Der Thread noch aktiv ist (wird 15 Minuten nach Eventbeginn gelöscht)
+
+**Wichtiger Hinweis zur Planung**: 
+Aufgrund der Discord-Beschränkung, dass Nachrichten älter als 14 Tage nicht mehr gelöscht werden können, bitten wir darum, Events nicht weiter als 13 Tage in die Zukunft zu planen. Dies stellt sicher, dass:
+- Der Bot alte Event-Posts automatisch entfernen kann
+- Keine "verwaisten" Event-Posts zurückbleiben
+
+Events, die weiter in der Zukunft liegen, sollten erst später erstellt werden, um die automatische Kanalpflege zu gewährleisten.
 
 ## Beispiele
 
@@ -148,4 +172,27 @@ Um Links in Discord klickbar zu machen, verwende die folgende Markdown-Syntax:
 ```
 
 ### Rollen-Liste Beispiel
+```
+(Core)
+Stofftank
+Plattenhealer
+kein Schaden
+Spirithunter
+Occult
+Support
+(DPS)
+DPS
+DPS
+DPS
+DPS
+DPS
+DPS
+DPS
+Partyheal
+(Blödsinn)
+Zipfelklatscher
+DefTank
+Irgendwas
+Orangenblätter
+Cursed
 ```
