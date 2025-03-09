@@ -703,26 +703,62 @@ class MyBot(discord.Client):
                             # Wir brauchen den Thread, der mit diesem Event verbunden ist
                             if 'message_id' in event and event['message_id']:
                                 for guild in self.guilds:
+                                    # Suche sowohl im Event-Kanal als auch direkt nach dem Thread
                                     channel = guild.get_channel(CHANNEL_ID_EVENT)
                                     if channel:
                                         try:
-                                            # Hole die ursprüngliche Nachricht
-                                            message = await channel.fetch_message(int(event['message_id']))
-                                            
-                                            # Prüfe, ob es einen Thread für diese Nachricht gibt
-                                            if hasattr(message, 'thread') and message.thread:
-                                                # Thread gefunden, lösche ihn
-                                                await message.thread.delete()
-                                                logger.info(f"Thread für Event '{event['title']}' gelöscht.")
+                                            # Prüfe zuerst, ob wir die Nachricht finden können
+                                            try:
+                                                message = await channel.fetch_message(int(event['message_id']))
                                                 
-                                                # Sende Benachrichtigung in den Event-Kanal
-                                                await channel.send(
-                                                    f"Der Thread für das Event '{event['title']}' wurde automatisch gelöscht, "
-                                                    f"da das Event bereits begonnen hat.", 
-                                                    delete_after=300
-                                                )
-                                            else:
-                                                logger.warning(f"Kein Thread für Event '{event['title']}' gefunden.")
+                                                # Prüfe, ob es einen Thread für diese Nachricht gibt
+                                                if hasattr(message, 'thread') and message.thread:
+                                                    # Thread gefunden, lösche ihn
+                                                    await message.thread.delete()
+                                                    logger.info(f"Thread für Event '{event['title']}' gelöscht.")
+                                                    
+                                                    # Sende Benachrichtigung in den Event-Kanal
+                                                    await channel.send(
+                                                        f"Der Thread für das Event '{event['title']}' wurde automatisch gelöscht, "
+                                                        f"da das Event bereits begonnen hat.", 
+                                                        delete_after=300
+                                                    )
+                                                else:
+                                                    logger.warning(f"Kein Thread an Nachricht für Event '{event['title']}' gefunden.")
+                                            except discord.NotFound:
+                                                # Nachricht nicht gefunden, versuche den Thread direkt zu finden
+                                                logger.info(f"Nachricht für Event '{event['title']}' nicht gefunden. Versuche Thread direkt zu finden...")
+                                            
+                                            # Alternative Methode: Suche nach Thread mit Event-Titel
+                                            thread_found = False
+                                            for thread in channel.threads:
+                                                if thread.name == event['title']:
+                                                    await thread.delete()
+                                                    logger.info(f"Thread mit Namen '{event['title']}' gelöscht.")
+                                                    thread_found = True
+                                                    
+                                                    # Sende Benachrichtigung in den Event-Kanal
+                                                    await channel.send(
+                                                        f"Der Thread für das Event '{event['title']}' wurde automatisch gelöscht, "
+                                                        f"da das Event bereits begonnen hat.", 
+                                                        delete_after=300
+                                                    )
+                                                    break
+                                            
+                                            # Versuche archivierte Threads zu durchsuchen
+                                            if not thread_found:
+                                                async for archived_thread in channel.archived_threads():
+                                                    if archived_thread.name == event['title']:
+                                                        await archived_thread.delete()
+                                                        logger.info(f"Archivierter Thread mit Namen '{event['title']}' gelöscht.")
+                                                        
+                                                        # Sende Benachrichtigung in den Event-Kanal
+                                                        await channel.send(
+                                                            f"Der Thread für das Event '{event['title']}' wurde automatisch gelöscht, "
+                                                            f"da das Event bereits begonnen hat.", 
+                                                            delete_after=300
+                                                        )
+                                                        break
                                         except Exception as e:
                                             logger.error(f"Fehler beim Löschen des Threads: {e}")
                             else:
