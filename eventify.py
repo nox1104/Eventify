@@ -416,175 +416,183 @@ class MyBot(discord.Client):
 
     async def update_event_message(self, thread, event):
         try:
-            logger.info(f"Updating event message for event: {event['title']}")
+            logger.info(f"Updating event message for event: {event.get('title') if isinstance(event, dict) else event.title}")
             
-            # Create Discord Embed
-            embed = discord.Embed(title=f"__**{event['title']}**__", color=0x0dceda)
+            # Get guild and channel
+            guild = thread.guild
+            event_channel = guild.get_channel(CHANNEL_ID_EVENT)
+            
+            if not event_channel:
+                logger.error(f"Event channel not found in guild {guild.name}")
+                return False
+            
+            # Get the event message
+            try:
+                if isinstance(event, dict):
+                    message_id = event.get("message_id")
+                else:
+                    message_id = getattr(event, "message_id", None)
+                    
+                if not message_id:
+                    logger.error("No message_id found in event")
+                    return False
+                    
+                event_message = await event_channel.fetch_message(int(message_id))
+            except (discord.NotFound, discord.HTTPException) as e:
+                logger.error(f"Error fetching event message: {e}")
+                return False
+            
+            # Create the embed with CYAN color
+            title = event.get('title') if isinstance(event, dict) else event.title
+            embed = discord.Embed(title=f"__**{title}**__", color=0x0dceda)  # Wichtig: Cyan statt Grün
             
             # Add caller information directly under the title
-            if 'caller_id' in event and event['caller_id']:
-                embed.add_field(name="Erstellt von", value=f"<@{event['caller_id']}>", inline=False)
+            caller_id = event.get('caller_id') if isinstance(event, dict) else getattr(event, 'caller_id', None)
+            if caller_id:
+                embed.add_field(name="Erstellt von", value=f"<@{caller_id}>", inline=False)
             
-            # Füge die Rollen-Mention als separates Feld hinzu, wenn vorhanden
-            if 'mention_role_id' in event and event['mention_role_id']:
-                embed.add_field(name="Für", value=f"<@&{event['mention_role_id']}>", inline=False)
+            # Add mention role if available
+            mention_role_id = event.get('mention_role_id') if isinstance(event, dict) else getattr(event, 'mention_role_id', None)
+            if mention_role_id:
+                embed.add_field(name="Für", value=f"<@&{mention_role_id}>", inline=False)
             
             # Add event details
-            embed.add_field(name="Date", value=event['date'], inline=True)
-            embed.add_field(name="Time", value=event['time'], inline=True)
+            date = event.get('date') if isinstance(event, dict) else getattr(event, 'date', '')
+            time = event.get('time') if isinstance(event, dict) else getattr(event, 'time', '')
+            embed.add_field(name="Date", value=date, inline=True)
+            embed.add_field(name="Time", value=time, inline=True)
             
-            # Truncate description if it's too long (Discord limit is 1024 characters per field)
-            description = event['description']
+            # Add description
+            description = event.get('description') if isinstance(event, dict) else getattr(event, 'description', '')
             if len(description) > 1020:  # Leave room for ellipsis
                 description = description[:1020] + "..."
             embed.add_field(name="Description", value=description, inline=False)
             
-            # Find the Fill role - case insensitive check
-            fill_index = next((i for i, role in enumerate(event['roles']) if role.lower() in ["fill", "fillall"]), None)
-            if fill_index is None:
-                # If no Fill role found, add one
-                fill_index = len(event['roles'])
-                event['roles'].append("FillALL")
-                # Save the updated event
-                save_event_to_json(event)
+            # ===== Rollenanzeige basierend auf v0.3.4 =====
+            roles = event.get('roles', []) if isinstance(event, dict) else getattr(event, 'roles', [])
+            participants = event.get('participants', {}) if isinstance(event, dict) else getattr(event, 'participants', {})
+
+            # Prüfen auf participant_only_mode
+            is_participant_only = event.get('participant_only_mode', False) if isinstance(event, dict) else getattr(event, 'participant_only_mode', False)
             
-            # Stelle sicher, dass FillALL immer als letzte Rolle erscheint
-            # Falls es nicht die letzte Rolle ist, verschiebe es ans Ende
-            if fill_index < len(event['roles']) - 1:
-                # Remove FillALL from its current position
-                fill_role = event['roles'].pop(fill_index)
-                # Add it back at the end
-                event['roles'].append(fill_role)
-                # Update the fill_index to match the new position
-                fill_index = len(event['roles']) - 1
-                # Save the updated event
-                save_event_to_json(event)
-            
-            # Extrahiere reguläre Rollen (alles außer FillALL)
-            regular_roles = []
-            section_headers = []
-            for i, role in enumerate(event['roles']):
-                if i != fill_index:  # Alles außer die FillALL-Rolle
-                    # Prüfe, ob es sich um eine Abschnittsüberschrift handelt (Text in Klammern)
-                    if role.strip().startswith('(') and role.strip().endswith(')'):
-                        section_headers.append((i, role))
-                    else:
-                        regular_roles.append((i, role))
-
-            # Erstellung des Inhalts für alle regulären Rollen
-            field_content = ""
-            current_section = None
-            role_counter = 1  # Counter for actual roles (excluding section headers)
-
-            # Gehe durch alle Rollen und Abschnittsüberschriften in der ursprünglichen Reihenfolge
-            all_items = section_headers + regular_roles
-            all_items.sort(key=lambda x: x[0])  # Sortiere nach dem ursprünglichen Index
-
-            for role_idx, role_name in all_items:
-                # Prüfe, ob es sich um eine Abschnittsüberschrift handelt
-                if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
-                    # Füge eine Leerzeile ein, wenn es nicht die erste Überschrift ist
-                    if field_content:
-                        field_content += "\n"
-                    # Remove parentheses from section header
-                    header_text = role_name.strip()[1:-1]  # Remove first and last character
-                    field_content += f"**{header_text}**\n"
-                else:
-                    # Dies ist eine normale Rolle
-                    # Rolle und Teilnehmer anzeigen
+            # Bei participant_only sollten wir nur die Teilnehmer-Rolle anzeigen
+            if is_participant_only:
+                # Im Teilnehmer-only Modus zeigen wir nur die erste Rolle an (sollte "Teilnehmer" sein)
+                if len(roles) > 0:
+                    role_idx = 0
+                    role_name = roles[0]
                     role_key = f"{role_idx}:{role_name}"
-                    # Sicherer Zugriff auf participants
-                    if isinstance(event, dict):
-                        participants = event.get('participants', {}).get(role_key, [])
-                    else:
-                        participants = getattr(event, 'participants', {}).get(role_key, [])
                     
-                    if participants:
-                        # Sortiere Teilnehmer nach Zeitstempel und zeige nur den ersten
-                        sorted_participants = sorted(participants, key=lambda x: x[2] if len(x) > 2 else 0)
-                        p_data = sorted_participants[0]
-                        
-                        if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
-                            p_id = p_data[1]
-                            
-                            # Rolle und Spieler in einer Zeile
-                            field_content += f"{role_counter}. {role_name} <@{p_id}>"
-                            
-                            # Kommentar falls vorhanden
-                            if len(p_data) >= 4 and p_data[3]:
-                                field_content += f" {p_data[3]}"
-                            
+                    # Zeige alle Teilnehmer an
+                    role_participants = participants.get(role_key, [])
+                    if role_participants:
+                        participants_text = "\n".join([f"{i+1}. {p[0]}" for i, p in enumerate(role_participants)])
+                        embed.add_field(name=f"{role_name} ({len(role_participants)})", value=participants_text, inline=False)
+                    else:
+                        embed.add_field(name=f"{role_name} (0)", value="Niemand angemeldet", inline=False)
+            else:
+                # Standard-Modus mit mehreren Rollen
+                # Find the Fill role - case insensitive check
+                fill_index = next((i for i, role in enumerate(roles) if role.lower() in ["fill", "fillall"]), None)
+                
+                # Extrahiere reguläre Rollen (alles außer FillALL)
+                regular_roles = []
+                section_headers = []
+                for i, role in enumerate(roles):
+                    if i != fill_index:  # Alles außer die FillALL-Rolle
+                        # Prüfe, ob es sich um eine Abschnittsüberschrift handelt (Text in Klammern)
+                        if role.strip().startswith('(') and role.strip().endswith(')'):
+                            section_headers.append((i, role))
+                        else:
+                            regular_roles.append((i, role))
+
+                # Erstellung des Inhalts für alle regulären Rollen
+                field_content = ""
+                role_counter = 1  # Counter for actual roles (excluding section headers)
+
+                # Gehe durch alle Rollen und Abschnittsüberschriften in der ursprünglichen Reihenfolge
+                all_items = section_headers + regular_roles
+                all_items.sort(key=lambda x: x[0])  # Sortiere nach dem ursprünglichen Index
+
+                for role_idx, role_name in all_items:
+                    # Prüfe, ob es sich um eine Abschnittsüberschrift handelt
+                    if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
+                        # Füge eine Leerzeile ein, wenn es nicht die erste Überschrift ist
+                        if field_content:
                             field_content += "\n"
+                        # Remove parentheses from section header
+                        header_text = role_name.strip()[1:-1]  # Remove first and last character
+                        field_content += f"**{header_text}**\n"
+                    else:
+                        # Dies ist eine normale Rolle
+                        # Rolle und Teilnehmer anzeigen
+                        role_key = f"{role_idx}:{role_name}"
+                        role_participants = participants.get(role_key, [])
+                        
+                        if role_participants:
+                            # Sortiere Teilnehmer nach Zeitstempel und zeige nur den ersten
+                            sorted_participants = sorted(role_participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                            p_data = sorted_participants[0]
+                            
+                            if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
+                                p_id = p_data[1]
+                                
+                                # Rolle und Spieler in einer Zeile
+                                field_content += f"{role_counter}. {role_name} <@{p_id}>"
+                                
+                                # Kommentar falls vorhanden
+                                if len(p_data) >= 4 and p_data[3]:
+                                    field_content += f" {p_data[3]}"
+                                
+                                field_content += "\n"
+                            else:
+                                field_content += f"{role_counter}. {role_name}\n"
                         else:
                             field_content += f"{role_counter}. {role_name}\n"
+                        
+                        # Increment the role counter for actual roles
+                        role_counter += 1
+
+                # Füge alle regulären Rollen als ein einziges Feld hinzu
+                if field_content:
+                    embed.add_field(name="\u200b", value=field_content, inline=False)
+
+                # Add Fill role section
+                if fill_index is not None:
+                    # Add Fill role header
+                    fill_text = f"{role_counter}. {roles[fill_index]}"
+                    
+                    # Get participants for Fill role
+                    fill_key = f"{fill_index}:{roles[fill_index]}"
+                    fill_participants = participants.get(fill_key, [])
+                    
+                    if fill_participants:
+                        # Sort participants by timestamp
+                        sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                        
+                        # Für FillALL alle Teilnehmer anzeigen
+                        fill_players_text = "\n".join([f"<@{p[1]}>" for p in sorted_fill if len(p) >= 2])
+                        
+                        # Add Fill role to embed
+                        embed.add_field(name=fill_text, value=fill_players_text or "Niemand angemeldet", inline=False)
                     else:
-                        field_content += f"{role_counter}. {role_name}\n"
-                    
-                    # Increment the role counter for actual roles
-                    role_counter += 1
-
-            # Füge alle regulären Rollen als ein einziges Feld hinzu
-            if field_content:
-                embed.add_field(name="\u200b", value=field_content, inline=False)
-
-            # Add Fill role section
-            fill_text = ""
-            fill_players_text = ""
-
-            if fill_index is not None:
-                # Add Fill role header
-                fill_text = f"{role_counter}. {event['roles'][fill_index]}"
-                fill_players_text = ""
-                
-                # Get participants for Fill role
-                fill_key = f"{fill_index}:{event['roles'][fill_index]}"
-                
-                # Sicherer Zugriff auf participants
-                if isinstance(event, dict):
-                    fill_participants = event.get('participants', {}).get(fill_key, [])
-                else:
-                    fill_participants = getattr(event, 'participants', {}).get(fill_key, [])
-                
-                if fill_participants:
-                    # Sort participants by timestamp
-                    sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
-                    
-                    # Für FillALL alle Teilnehmer anzeigen, keine Begrenzung auf einen Spieler
-                    for p_data in sorted_fill:
-                        if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
-                            p_id = p_data[1]
-                            fill_players_text += f"<@{p_id}>\n"
-                else:
-                    fill_players_text = ""
-                
-                # Add Fill role to embed
-                embed.add_field(name=fill_text, value=fill_players_text, inline=False)
-
-            # No footer text as requested
+                        # Leere Fill-Rolle anzeigen
+                        embed.add_field(name=fill_text, value="Niemand angemeldet", inline=False)
             
-            # Find the parent message of the thread
-            try:
-                # The more reliable way - if thread has starter_message attribute
-                if hasattr(thread, 'starter_message') and thread.starter_message:
-                    message_to_edit = thread.starter_message
-                    logger.info("Found starter message through thread.starter_message")
-                else:
-                    # Try to get the message through the parent channel
-                    channel = thread.parent
-                    message_to_edit = await channel.fetch_message(thread.id)
-                    logger.info("Found message through parent channel fetch")
-                
-                # Edit the message
-                await message_to_edit.edit(content=None, embed=embed)
-                logger.info("Successfully updated event message")
-                return True
-            except Exception as e:
-                logger.error(f"Error finding or editing message: {e}")
-                await thread.send("Konnte den ursprünglichen Beitrag nicht aktualisieren. Hier sind die aktualisierten Informationen:")
-                await thread.send(embed=embed)
-                return False
+            # Add image if available (neue Funktion)
+            image_url = event.get('image_url') if isinstance(event, dict) else getattr(event, 'image_url', None)
+            if image_url:
+                embed.set_image(url=image_url)
+            
+            # Support-Info hinzufügen
+            embed.add_field(name="Support", value="Fragen, Bugs oder Feature-Vorschläge gehen an <@778914224613228575>", inline=False)
+            
+            # Update the message
+            await event_message.edit(embed=embed)
+            logger.info(f"Event message updated successfully with {len(embed.fields)} fields.")
+            return True
         except Exception as e:
-            logger.error(f"Error in update_event_message: {e}")
+            logger.error(f"Error updating event message: {e}")
             await thread.send(f"Fehler beim Aktualisieren der Event-Nachricht: {str(e)}")
             return False
 
@@ -599,12 +607,15 @@ class MyBot(discord.Client):
         Returns:
             Der tatsächliche Index der Rolle im event['roles'] Array
         """
+        # Get roles from event
+        roles = event.get('roles', []) if isinstance(event, dict) else getattr(event, 'roles', [])
+        
         # Find the Fill role index
-        fill_index = next((i for i, role in enumerate(event['roles']) if role.lower() in ["fill", "fillall"]), None)
+        fill_index = next((i for i, role in enumerate(roles) if role.lower() in ["fill", "fillall"]), None)
         
         # Get all regular roles (excluding FillALL and section headers)
         regular_roles = []
-        for i, role in enumerate(event['roles']):
+        for i, role in enumerate(roles):
             if i != fill_index:  # Alles außer die FillALL-Rolle
                 # Ignoriere Abschnittsüberschriften (Texte in Klammern)
                 if not (role.strip().startswith('(') and role.strip().endswith(')')):
@@ -873,7 +884,7 @@ class Event:
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
-    def __init__(self, title: str, date: str, time: str, caller_id: str, caller_name: str, mention_role: discord.Role = None):
+    def __init__(self, title: str, date: str, time: str, caller_id: str, caller_name: str, mention_role: discord.Role = None, image_url: str = None):
         super().__init__()
 
         self.description_input = discord.ui.TextInput(label="Beschreibung", style=discord.TextStyle.paragraph,
@@ -883,7 +894,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
 
         self.roles_input = discord.ui.TextInput(label="Rollen (getrennt durch Zeilenumbrüche)",
                                                  style=discord.TextStyle.paragraph,
-                                                 placeholder="Gib die Rollen ein, die für das Event benötigt werden.",
+                                                 placeholder="Gib die Rollen ein oder schreibe 'none' für eine einfache Teilnehmerliste.",
                                                  required=True)
         self.add_item(self.roles_input)
 
@@ -894,31 +905,42 @@ class EventModal(discord.ui.Modal, title="Eventify"):
         self.caller_id = caller_id  # Discord ID des Erstellers
         self.caller_name = caller_name  # Name des Erstellers
         self.mention_role = mention_role
+        self.image_url = image_url
 
     async def on_submit(self, interaction: discord.Interaction):
         print("on_submit method called.")
         try:
             description = self.description_input.value
             
-            # Get roles from input, filter out empty lines, and add the "Fill" role
-            roles = [role.strip() for role in self.roles_input.value.splitlines() if role.strip()]
+            # Get roles from input, filter out empty lines
+            raw_roles_input = self.roles_input.value.strip()
             
-            # Find the Fill role - case insensitive check
-            fill_index = next((i for i, role in enumerate(roles) if role.lower() in ["fill", "fillall"]), None)
-            if fill_index is None:
-                # If no Fill role found, add one
-                fill_index = len(roles)
-                roles.append("FillALL")
+            # Prüfe, ob "none" eingegeben wurde (case-insensitive)
+            is_participant_only_mode = raw_roles_input.lower() == "none"
+            fill_index = None  # Initialisiere fill_index außerhalb der Bedingung
             
-            # Stelle sicher, dass FillALL immer als letzte Rolle erscheint
-            # Falls es nicht die letzte Rolle ist, verschiebe es ans Ende
-            if fill_index < len(roles) - 1:
-                # Remove FillALL from its current position
-                fill_role = roles.pop(fill_index)
-                # Add it back at the end
-                roles.append(fill_role)
-                # Update the fill_index to match the new position
-                fill_index = len(roles) - 1
+            if is_participant_only_mode:
+                # Bei "none" nur eine "Teilnehmer"-Rolle erstellen
+                roles = ["Teilnehmer"]
+            else:
+                # Normaler Modus mit Fill-Rolle
+                roles = [role.strip() for role in raw_roles_input.splitlines() if role.strip()]
+                
+                # Find the Fill role - case insensitive check
+                fill_index = next((i for i, role in enumerate(roles) if role.lower() in ["fill", "fillall"]), None)
+                if fill_index is None:
+                    # If no Fill role found, add one
+                    fill_index = len(roles)
+                    roles.append("FillALL")
+                
+                # Stelle sicher, dass FillALL immer als letzte Rolle erscheint
+                if fill_index < len(roles) - 1:
+                    # Remove FillALL from its current position
+                    fill_role = roles.pop(fill_index)
+                    # Add it back at the end
+                    roles.append(fill_role)
+                    # Update the fill_index to match the new position
+                    fill_index = len(roles) - 1
             
             event = Event(
                 title=self.title,
@@ -926,15 +948,22 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 time=self.time,
                 description=description,
                 roles=roles,
-                datetime_obj=self.full_datetime,  # Pass the datetime object
-                caller_id=self.caller_id,  # Pass the caller ID
-                caller_name=self.caller_name  # Pass the caller name
+                datetime_obj=self.full_datetime,
+                caller_id=self.caller_id,
+                caller_name=self.caller_name
             )
+
+            # Kennzeichne den Event-Modus (Teilnehmer-only oder normal)
+            event.participant_only_mode = is_participant_only_mode
 
             # Speichere die Mention-Rolle ID separat im Event-Objekt
             if self.mention_role:
                 event.mention_role_id = str(self.mention_role.id)
-            
+                
+            # Füge die Bild-URL hinzu, wenn vorhanden
+            if self.image_url:
+                event.image_url = self.image_url
+                
             # Save the event to JSON
             save_event_to_json(event)
             print("Event saved to JSON.")
@@ -1131,6 +1160,43 @@ async def create_event_listing(guild):
         
         # Get the guild ID for links
         guild_id = guild.id
+        event_channel = guild.get_channel(CHANNEL_ID_EVENT)
+        
+        if not event_channel:
+            logger.error(f"Event channel not found in guild {guild.name}")
+            return
+        
+        # Filtere Events, bei denen kein entsprechender Event-Post mehr existiert
+        valid_events = []
+        for event in events:
+            message_id = event.get("message_id")
+            
+            # Überspringe Events ohne message_id
+            if not message_id:
+                logger.warning(f"Event {event.get('title')} hat keine message_id und wird übersprungen.")
+                continue
+                
+            # Prüfe, ob der Event-Post noch existiert
+            try:
+                await event_channel.fetch_message(int(message_id))
+                # Wenn kein Fehler, füge das Event zur gültigen Liste hinzu
+                valid_events.append(event)
+            except (discord.NotFound, discord.HTTPException, ValueError) as e:
+                logger.warning(f"Event-Post für '{event.get('title')}' (ID: {message_id}) existiert nicht mehr: {e}")
+                # Hier könnte man das Event auch aus der JSON entfernen
+                continue
+        
+        # Aktualisiere die events.json, um verwaiste Events zu entfernen
+        if len(valid_events) < len(events):
+            logger.info(f"Entferne {len(events) - len(valid_events)} verwaiste Events aus der JSON.")
+            save_events_to_json(valid_events)
+        
+        if not valid_events:
+            logger.info("Keine gültigen Events mit existierenden Posts gefunden.")
+            return
+        
+        # Verwende nur die gültigen Events für die Übersicht
+        events = valid_events
         
         # Sortiere Events nach Datum und Zeit
         try:
@@ -1495,7 +1561,6 @@ def save_events_to_json(events):
     title="Der Titel des Events",
     date="Das Datum des Events (TT.MM.JJJJ)",
     time="Die Uhrzeit des Events (HH:mm)",
-    description="Die Beschreibung des Events",
     mention_role="Optional: Eine Rolle, die beim Event erwähnt werden soll",
     image_url="Optional: Ein Link zu einem Bild, das im Event angezeigt werden soll"
 )
@@ -1504,7 +1569,6 @@ async def eventify(
     title: str,
     date: str,
     time: str,
-    description: str,
     mention_role: discord.Role = None,
     image_url: str = None
 ):
@@ -1536,7 +1600,8 @@ async def eventify(
             time=formatted_time,
             caller_id=str(interaction.user.id),
             caller_name=interaction.user.display_name,
-            mention_role=mention_role  # Übergebe die Rolle an das Modal
+            mention_role=mention_role,
+            image_url=image_url
         )
         modal.full_datetime = full_datetime
         await interaction.response.send_modal(modal)
@@ -2016,3 +2081,4 @@ async def process_individual_deletions(messages, counter):
             await asyncio.sleep(0.3)
 
 bot.run(DISCORD_TOKEN)
+            

@@ -69,6 +69,7 @@ Mit dem Befehl `/eventify` kannst du ein neues Event erstellen. Folgende Paramet
      - Liste der verfügbaren Rollen, eine pro Zeile
      - Leerzeilen werden ignoriert
      - Mit Text in Klammern, z.B. "(Core)" setzt man Abschnittsüberschriften
+     - Schreibe einfach "none" für Events ohne spezifische Rollen (z.B. Gildenversammlungen, Gatherevents) - es wird dann automatisch eine einfache Teilnehmerliste erstellt
 
 ### Teilnehmer erinnern
 
