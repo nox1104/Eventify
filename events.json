@@ -94,6 +94,49 @@
             "message_id": 1348255265069203557
         },
         {
+            "title": "Group Dungeon",
+            "date": "09.03.2025",
+            "time": "14:20",
+            "description": "von HQ aus",
+            "roles": [
+                "Tank",
+                "Heal",
+                "DPS",
+                "DPS",
+                "DPS",
+                "FillALL"
+            ],
+            "participants": {
+                "0:Tank": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741520457.622602,
+                        "sdfg"
+                    ]
+                ],
+                "5:FillALL": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741520469.720771
+                    ]
+                ],
+                "2:DPS": [
+                    [
+                        "kambior",
+                        "1100064403526787083",
+                        1741520587.808061,
+                        "bloodmoon"
+                    ]
+                ]
+            },
+            "event_id": "202503091420-c78a8505",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1348259247586279496
+        },
+        {
             "title": "Testevent_asdsd98",
             "date": "15.03.2025",
             "time": "15:00",
@@ -140,6 +183,30 @@
             "caller_id": "778914224613228575",
             "caller_name": "nox1104",
             "message_id": 1348208754964955167
+        },
+        {
+            "title": "test in future",
+            "date": "10.04.2025",
+            "time": "18:00",
+            "description": "geht?",
+            "roles": [
+                "test",
+                "test",
+                "FillALL"
+            ],
+            "participants": {
+                "2:FillALL": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1741520823.001075
+                    ]
+                ]
+            },
+            "event_id": "202504101800-67db3c05",
+            "caller_id": "325726431030280192",
+            "caller_name": "testname",
+            "message_id": 1348260076728746054
         }
     ]
 }

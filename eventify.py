@@ -573,19 +573,19 @@ class MyBot(discord.Client):
                         # Für FillALL alle Teilnehmer anzeigen
                         fill_players_text = "\n".join([f"<@{p[1]}>" for p in sorted_fill if len(p) >= 2])
                         
-                        # Add Fill role to embed
-                        embed.add_field(name=fill_text, value=fill_players_text or "Niemand angemeldet", inline=False)
+                        # Add Fill role to embed only if there are participants
+                        embed.add_field(name=fill_text, value=fill_players_text, inline=False)
                     else:
-                        # Leere Fill-Rolle anzeigen
-                        embed.add_field(name=fill_text, value="Niemand angemeldet", inline=False)
+                        # Leere Fill-Rolle anzeigen, aber OHNE "Niemand angemeldet"
+                        embed.add_field(name=fill_text, value="\u200b", inline=False)
             
             # Add image if available (neue Funktion)
             image_url = event.get('image_url') if isinstance(event, dict) else getattr(event, 'image_url', None)
             if image_url:
                 embed.set_image(url=image_url)
             
-            # Support-Info hinzufügen
-            embed.add_field(name="Support", value="Fragen, Bugs oder Feature-Vorschläge gehen an <@778914224613228575>", inline=False)
+            # Support-Frame NICHT hinzufügen bei Updates
+            # Das Support-Feld wird nur bei der initialen Erstellung in EventModal.on_submit hinzugefügt
             
             # Update the message
             await event_message.edit(embed=embed)
