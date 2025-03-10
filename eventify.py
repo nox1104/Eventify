@@ -1,4 +1,4 @@
-#Sprich mit den Usern immer deutsch
+#Always communicate with users in German
 import discord
 from discord import app_commands
 from dotenv import load_dotenv
@@ -6,55 +6,55 @@ import os
 from datetime import datetime, time, timedelta, timezone
 import json
 import logging
-import uuid  # Für die Generierung zufälliger IDs
+import uuid  # For generating random IDs
 from discord.ext import tasks
 import asyncio
 import sys
 from logging.handlers import RotatingFileHandler
 
-# Logging-Konfiguration
+# Logging configuration
 def setup_logging():
-    # Erstelle logs Ordner, falls nicht vorhanden
+    # Create logs folder if it doesn't exist
     if not os.path.exists('logs'):
         os.makedirs('logs')
 
-    # Erstelle Formatter für konsistentes Log-Format
+    # Create formatter for consistent log format
     formatter = logging.Formatter(
         '%(asctime)s - %(levelname)s - %(name)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # Konfiguriere Root-Logger
+    # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
 
-    # Rotating File Handler (begrenzt Dateigröße und behält alte Logs)
+    # Rotating file handler (limits file size and keeps old logs)
     log_filename = f'logs/eventify_{datetime.now().strftime("%Y%m%d")}.log'
     file_handler = RotatingFileHandler(
         log_filename,
-        maxBytes=5*1024*1024,  # 5 MB pro Datei
-        backupCount=42,         # Behalte 5 alte Log-Dateien
+        maxBytes=5*1024*1024,  # 5 MB per file
+        backupCount=42,         # Keep 42 old log files
         encoding='utf-8'
     )
     file_handler.setFormatter(formatter)
     root_logger.addHandler(file_handler)
 
-    # Console Handler (für Terminal-Ausgabe)
+    # Console Handler (for terminal output)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
 
-    # Discord-Logger konfigurieren
+    # Configure Discord logger
     discord_logger = logging.getLogger('discord')
     discord_logger.setLevel(logging.INFO)
 
-    # Eigenen Logger für Eventify erstellen
+    # Create custom logger for Eventify
     eventify_logger = logging.getLogger('eventify')
     eventify_logger.setLevel(logging.INFO)
 
     return eventify_logger
 
-# Am Anfang des Skripts aufrufen
+# Call at the beginning of the script
 logger = setup_logging()
 
 load_dotenv()
@@ -80,9 +80,9 @@ class MyBot(discord.Client):
         print("Slash commands synchronized!")
         print("Bot is ready and listening for messages.")
         
-        # Starte die Loops
+        # Start the loops
         self.delete_old_event_threads.start()
-        self.cleanup_event_channel.start()  # Neue Loop hinzugefügt
+        self.cleanup_event_channel.start()  # New loop added
 
     async def on_message(self, message):
         logger.info(f"Message received: {message.content} in channel: {message.channel.name if hasattr(message.channel, 'name') else 'Unknown'}")
@@ -105,7 +105,7 @@ class MyBot(discord.Client):
                 # Only respond if user is attempting command
                 if message.content.strip() and (message.content.strip()[0].isdigit() or message.content.strip() == "-" or 
                                                (message.content.strip().startswith("-") and message.content.strip()[1:].isdigit())):
-                    await message.channel.send("No matching event found for this thread.")
+                    await message.channel.send("Anmeldungen für dieses Event sind nicht möglich.")
                 return
             
             # Check for digit at the beginning (sign up for role)
@@ -123,14 +123,14 @@ class MyBot(discord.Client):
                     display_role_number = int(role_number_str)
                     logger.info(f"Processing role signup in thread: {message.channel.name}, content: {message.content}")
                     
-                    # Umwandlung von angezeigter Rollennummer zu tatsächlichem Index
+                    # Conversion of displayed role number to actual index
                     actual_role_index = self.role_number_to_index(event, display_role_number)
                     
                     if actual_role_index >= 0:
-                        # Anmeldung mit dem tatsächlichen Rollenindex verarbeiten
+                        # Process role signup with actual role index
                         await self._handle_role_signup(message, event_title, actual_role_index + 1)
                     else:
-                        # Nur Logging, keine Nachricht an den Benutzer
+                        # Only logging, no message to user
                         logger.warning(f"Invalid role number: {display_role_number}. Event has {len(event['roles'])} roles.")
             
             # Check for unregister all roles with "-"
@@ -143,14 +143,14 @@ class MyBot(discord.Client):
                 display_role_number = int(message.content.strip()[1:])
                 logger.info(f"Processing unregister from role {display_role_number}: {message.channel.name}, user: {message.author.name}")
                 
-                # Umwandlung von angezeigter Rollennummer zu tatsächlichem Index
+                # Conversion of displayed role number to actual index
                 actual_role_index = self.role_number_to_index(event, display_role_number)
                 
                 if actual_role_index >= 0:
-                    # Abmeldung mit dem tatsächlichen Rollenindex verarbeiten
+                    # Process unregister with actual role index
                     await self._handle_unregister(message, True, actual_role_index)
                 else:
-                    # Nur Logging, keine Nachricht an den Benutzer
+                    # Only logging, no message to user
                     logger.warning(f"Invalid role number: {display_role_number}. Event has {len(event['roles'])} roles.")
         else:
             logger.debug("Message is not in a thread.")
@@ -388,7 +388,7 @@ class MyBot(discord.Client):
                             await message.add_reaction('❓')  # Info reaction
                     else:
                         logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
-                        # Keine Nachricht an den Benutzer
+                        # No message to the user
             else:
                 logger.warning(f"No event found matching thread name: {message.channel.name}")
                 await message.channel.send("Kein passendes Event für diesen Thread gefunden.")
@@ -482,98 +482,98 @@ class MyBot(discord.Client):
                 description = description[:1020] + "..."
             embed.add_field(name="Description", value=description, inline=False)
             
-            # ===== Rollenanzeige basierend auf v0.3.4 =====
+            # ===== Role display based on v0.3.4 =====
             roles = event.get('roles', []) if isinstance(event, dict) else getattr(event, 'roles', [])
             participants = event.get('participants', {}) if isinstance(event, dict) else getattr(event, 'participants', {})
 
-            # Prüfen auf participant_only_mode
+            # Check for participant_only_mode
             is_participant_only = event.get('participant_only_mode', False) if isinstance(event, dict) else getattr(event, 'participant_only_mode', False)
             
-            # Bei participant_only sollten wir nur die Teilnehmer-Rolle anzeigen
+            # In participant_only mode, we should only display the participant role
             if is_participant_only:
-                # Im Teilnehmer-only Modus zeigen wir nur die erste Rolle an (sollte "Teilnehmer" sein)
+                # In participant_only mode, we show only the first role (should be "Participant")
                 if len(roles) > 0:
                     role_idx = 0
                     role_name = roles[0]
                     role_key = f"{role_idx}:{role_name}"
                     
-                    # Rollenname und Nummer zusammensetzen
+                    # Combine role name and number
                     participant_title = f"1. {role_name}"
                     
-                    # Teilnehmerliste abrufen
+                    # Get participant list
                     role_participants = participants.get(role_key, [])
                     
-                    # Wenn Teilnehmer vorhanden sind, formatiere sie mit Kommentaren (anders als bei FillALL)
+                    # If participants are present, format them with comments (different from FillALL)
                     if role_participants:
-                        # Sortiere Teilnehmer nach Zeitstempel
+                        # Sort participants by timestamp
                         sorted_participants = sorted(role_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                         
-                        # Mit Kommentaren anzeigen (anders als bei FillALL)
+                        # Display with comments (different from FillALL)
                         participants_text = ""
                         for p in sorted_participants:
                             if len(p) >= 2:
-                                # Prüfen, ob ein Kommentar vorhanden ist
+                                # Check if a comment is present
                                 if len(p) >= 4 and p[3]:
                                     participants_text += f"<@{p[1]}> - {p[3]}\n"
                                 else:
                                     participants_text += f"<@{p[1]}>\n"
                         
-                        # Füge das Feld hinzu
+                        # Add the field
                         embed.add_field(name=participant_title, value=participants_text or "\u200b", inline=False)
                     else:
-                        # Leere Teilnehmerliste
+                        # Empty participant list
                         embed.add_field(name=participant_title, value="\u200b", inline=False)
             else:
-                # Standard-Modus mit mehreren Rollen
+                # Standard mode with multiple roles
                 # Find the Fill role - case insensitive check
                 fill_index = next((i for i, role in enumerate(roles) if role.lower() in ["fill", "fillall"]), None)
                 
-                # Extrahiere reguläre Rollen (alles außer FillALL)
+                # Extract regular roles (all except FillALL)
                 regular_roles = []
                 section_headers = []
                 for i, role in enumerate(roles):
-                    if i != fill_index:  # Alles außer die FillALL-Rolle
-                        # Prüfe, ob es sich um eine Abschnittsüberschrift handelt (Text in Klammern)
+                    if i != fill_index:  # All except FillALL role
+                        # Check if it's a section header (text in parentheses)
                         if role.strip().startswith('(') and role.strip().endswith(')'):
                             section_headers.append((i, role))
                         else:
                             regular_roles.append((i, role))
 
-                # Erstellung des Inhalts für alle regulären Rollen
+                # Creation of content for all regular roles
                 field_content = ""
                 role_counter = 1  # Counter for actual roles (excluding section headers)
 
-                # Gehe durch alle Rollen und Abschnittsüberschriften in der ursprünglichen Reihenfolge
+                # Go through all roles and section headers in the original order
                 all_items = section_headers + regular_roles
-                all_items.sort(key=lambda x: x[0])  # Sortiere nach dem ursprünglichen Index
+                all_items.sort(key=lambda x: x[0])  # Sort by original index
 
                 for role_idx, role_name in all_items:
-                    # Prüfe, ob es sich um eine Abschnittsüberschrift handelt
+                    # Check if it's a section header
                     if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
-                        # Füge eine Leerzeile ein, wenn es nicht die erste Überschrift ist
+                        # Add a line break if it's not the first header
                         if field_content:
                             field_content += "\n"
                         # Remove parentheses from section header
                         header_text = role_name.strip()[1:-1]  # Remove first and last character
                         field_content += f"**{header_text}**\n"
                     else:
-                        # Dies ist eine normale Rolle
-                        # Rolle und Teilnehmer anzeigen
+                        # This is a normal role
+                        # Display role and participants
                         role_key = f"{role_idx}:{role_name}"
                         role_participants = participants.get(role_key, [])
                         
                         if role_participants:
-                            # Sortiere Teilnehmer nach Zeitstempel und zeige nur den ersten
+                            # Sort participants by timestamp and show only the first
                             sorted_participants = sorted(role_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                             p_data = sorted_participants[0]
                             
-                            if len(p_data) >= 2:  # Sicherstellen, dass wir mindestens Name und ID haben
+                            if len(p_data) >= 2:  # Ensure we have at least name and ID
                                 p_id = p_data[1]
                                 
-                                # Rolle und Spieler in einer Zeile
+                                # Role and player in one line
                                 field_content += f"{role_counter}. {role_name} <@{p_id}>"
                                 
-                                # Kommentar falls vorhanden
+                                # Comment if available
                                 if len(p_data) >= 4 and p_data[3]:
                                     field_content += f" {p_data[3]}"
                                 
@@ -586,7 +586,7 @@ class MyBot(discord.Client):
                         # Increment the role counter for actual roles
                         role_counter += 1
 
-                # Füge alle regulären Rollen als ein einziges Feld hinzu
+                # Add all regular roles as a single field
                 if field_content:
                     embed.add_field(name="\u200b", value=field_content, inline=False)
 
@@ -603,16 +603,16 @@ class MyBot(discord.Client):
                         # Sort participants by timestamp
                         sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                         
-                        # Für FillALL alle Teilnehmer anzeigen
+                        # Display all participants for FillALL
                         fill_players_text = "\n".join([f"<@{p[1]}>" for p in sorted_fill if len(p) >= 2])
                         
                         # Add Fill role to embed
                         embed.add_field(name=fill_text, value=fill_players_text or "\u200b", inline=False)
                     else:
-                        # Leere Fill-Rolle anzeigen
+                        # Display empty Fill role
                         embed.add_field(name=fill_text, value="\u200b", inline=False)
             
-            # Add image if available (neue Funktion)
+            # Add image if available (new function)
             image_url = event.get('image_url') if isinstance(event, dict) else getattr(event, 'image_url', None)
             if image_url:
                 embed.set_image(url=image_url)
@@ -640,17 +640,17 @@ class MyBot(discord.Client):
         # Get roles from event
         roles = event.get('roles', []) if isinstance(event, dict) else getattr(event, 'roles', [])
         
-        # Prüfe, ob wir im participant_only_mode sind
+        # Check if we are in participant_only_mode
         is_participant_only = event.get('participant_only_mode', False) if isinstance(event, dict) else getattr(event, 'participant_only_mode', False)
         
-        # Im participant_only_mode ist es einfach: es gibt nur eine Rolle (Teilnehmer) an Position 0
+        # In participant_only_mode it's simple: there is only one role (Participant) at position 0
         if is_participant_only:
-            if role_number == 1:  # Da es nur eine Rolle gibt, muss die Nummer 1 sein
+            if role_number == 1:  # Since there is only one role, the number must be 1
                 return 0
             else:
                 return -1  # Ungültige Rollennummer
         
-        # Im normalen Modus wie bisher vorgehen
+        # In normal mode proceed as before
         # Find the Fill role index
         fill_index = next((i for i, role in enumerate(roles) if role.lower() in ["fill", "fillall"]), None)
         
@@ -680,44 +680,44 @@ class MyBot(discord.Client):
             now = datetime.now()
             logger.info(f"{now} - Überprüfe alte Event-Threads...")
             
-            # Lade alle Events
+            # Load all events
             events = load_upcoming_events()
             
             for event in events:
                 try:
-                    # Hole die event_id
+                    # Get the event_id
                     event_id = event.get('event_id')
                     if not event_id:
                         logger.warning(f"Keine event_id für Event '{event.get('title')}' gefunden.")
                         continue
                     
-                    # Extrahiere Datum und Zeit aus der event_id (Format: YYYYMMDDHHmm-uuid)
-                    datetime_str = event_id.split('-')[0]  # Nimm den Teil vor dem Bindestrich
+                    # Extract date and time from event_id (Format: YYYYMMDDHHmm-uuid)
+                    datetime_str = event_id.split('-')[0]  # Take the part before the hyphen
                     try:
                         event_datetime = datetime.strptime(datetime_str, "%Y%m%d%H%M")
                         
-                        # Prüfe, ob das Event vor mehr als 15 Minuten begonnen hat
+                        # Check if the event started more than 15 minutes ago
                         if event_datetime < now - timedelta(minutes=15):
                             logger.info(f"Event '{event['title']}' (ID: {event_id}) hat vor mehr als 15 Minuten begonnen. Lösche Thread...")
                             
-                            # Wir brauchen den Thread, der mit diesem Event verbunden ist
+                            # We need the thread that is connected to this event
                             if 'message_id' in event and event['message_id']:
                                 for guild in self.guilds:
-                                    # Suche sowohl im Event-Kanal als auch direkt nach dem Thread
+                                    # Search both in the event channel and directly after the thread
                                     channel = guild.get_channel(CHANNEL_ID_EVENT)
                                     if channel:
                                         try:
-                                            # Prüfe zuerst, ob wir die Nachricht finden können
+                                            # Check first if we can find the message
                                             try:
                                                 message = await channel.fetch_message(int(event['message_id']))
                                                 
-                                                # Prüfe, ob es einen Thread für diese Nachricht gibt
+                                                # Check if there is a thread for this message
                                                 if hasattr(message, 'thread') and message.thread:
-                                                    # Thread gefunden, lösche ihn
+                                                    # Thread found, delete it
                                                     await message.thread.delete()
                                                     logger.info(f"Thread für Event '{event['title']}' gelöscht.")
                                                     
-                                                    # Sende Benachrichtigung in den Event-Kanal
+                                                    # Send notification to the event channel
                                                     await channel.send(
                                                         f"Der Thread für das Event '{event['title']}' wurde automatisch gelöscht, "
                                                         f"da das Event bereits begonnen hat.", 
@@ -726,10 +726,10 @@ class MyBot(discord.Client):
                                                 else:
                                                     logger.warning(f"Kein Thread an Nachricht für Event '{event['title']}' gefunden.")
                                             except discord.NotFound:
-                                                # Nachricht nicht gefunden, versuche den Thread direkt zu finden
-                                                logger.info(f"Nachricht für Event '{event['title']}' nicht gefunden. Versuche Thread direkt zu finden...")
+                                                # Message not found, try to find thread directly
+                                                logger.info(f"Message for Event '{event['title']}' not found. Try to find thread directly...")
                                             
-                                            # Alternative Methode: Suche nach Thread mit Event-Titel
+                                            # Alternative method: Search for thread with event title
                                             thread_found = False
                                             for thread in channel.threads:
                                                 if thread.name == event['title']:
@@ -737,7 +737,7 @@ class MyBot(discord.Client):
                                                     logger.info(f"Thread mit Namen '{event['title']}' gelöscht.")
                                                     thread_found = True
                                                     
-                                                    # Sende Benachrichtigung in den Event-Kanal
+                                                    # Send notification to the event channel
                                                     await channel.send(
                                                         f"Der Thread für das Event '{event['title']}' wurde automatisch gelöscht, "
                                                         f"da das Event bereits begonnen hat.", 
@@ -745,14 +745,14 @@ class MyBot(discord.Client):
                                                     )
                                                     break
                                             
-                                            # Versuche archivierte Threads zu durchsuchen
+                                            # Try to search archived threads
                                             if not thread_found:
                                                 async for archived_thread in channel.archived_threads():
                                                     if archived_thread.name == event['title']:
                                                         await archived_thread.delete()
                                                         logger.info(f"Archivierter Thread mit Namen '{event['title']}' gelöscht.")
                                                         
-                                                        # Sende Benachrichtigung in den Event-Kanal
+                                                        # Send notification to the event channel
                                                         await channel.send(
                                                             f"Der Thread für das Event '{event['title']}' wurde automatisch gelöscht, "
                                                             f"da das Event bereits begonnen hat.", 
@@ -773,7 +773,7 @@ class MyBot(discord.Client):
         except Exception as e:
             logger.error(f"Fehler bei der Thread-Überprüfung: {e}")
 
-    # Warte bis der Bot bereit ist, bevor die Loop startet
+    # Wait until the bot is ready before starting the loop
     @delete_old_event_threads.before_loop
     async def before_delete_old_event_threads(self):
         await self.wait_until_ready()
@@ -794,13 +794,13 @@ class MyBot(discord.Client):
                 logger.warning(f"Event-Kanal in Guild {guild.name} nicht gefunden.")
                 continue
 
-            # Sicherheitscheck: Prüfe Berechtigungen
+            # Security check: Check permissions
             permissions = channel.permissions_for(guild.me)
             if not permissions.manage_messages:
                 logger.error("Bot hat keine Berechtigung zum Löschen von Nachrichten!")
                 continue
                 
-            # Lade aktive Events
+            # Load active events
             try:
                 with open('events.json', 'r') as f:
                     events_data = json.load(f)
@@ -813,39 +813,39 @@ class MyBot(discord.Client):
                 logger.error(f"Kritischer Fehler beim Laden der Events: {e}")
                 return
 
-            # Zähler für Logging
+            # Counter for logging
             counter = {
-                "system": 0,      # System-Nachrichten
-                "past_event": 0,  # Vergangene Events
-                "protected": 0,   # Geschützte Nachrichten
-                "skipped": 0      # Übersprungene Nachrichten
+                "system": 0,      # System messages
+                "past_event": 0,  # Past events
+                "protected": 0,   # Protected messages
+                "skipped": 0      # Skipped messages
             }
             
-            # Liste der zu löschenden Nachrichten
+            # List of messages to delete
             to_delete = []
             
-            # Sammle zu löschende Nachrichten
+            # Collect messages to delete
             async for message in channel.history(limit=1000):
                 try:
-                    # SCHUTZ: Überspringe Nachrichten mit Threads
+                    # PROTECTED: Skip messages with threads
                     if message.thread:
                         logger.info(f"GESCHÜTZT: Nachricht {message.id} hat aktiven Thread")
                         counter["protected"] += 1
                         continue
 
-                    # SCHUTZ: Überspringe Nachrichten von anderen Bots (außer uns selbst)
+                    # PROTECTED: Skip messages from other bots (except ourselves)
                     if message.author.bot and message.author.id != bot.user.id:
                         logger.info(f"GESCHÜTZT: Nachricht {message.id} ist von anderem Bot")
                         counter["protected"] += 1
                         continue
 
-                    # SCHUTZ: Überspringe Nachrichten mit Anhängen
+                    # PROTECTED: Skip messages with attachments
                     if message.attachments:
                         logger.info(f"GESCHÜTZT: Nachricht {message.id} hat Anhänge")
                         counter["protected"] += 1
                         continue
 
-                    # Prüfe Event-Posts
+                    # Check event posts
                     message_id_str = str(message.id)
                     if message_id_str in id_to_event:
                         event_id = id_to_event[message_id_str]
@@ -854,9 +854,9 @@ class MyBot(discord.Client):
                             event_datetime = datetime.strptime(event_datetime_str, '%Y%m%d%H%M')
                             event_datetime = event_datetime.replace(tzinfo=timezone.utc)
                             
-                            # Nur löschen wenn Event mindestens 1 Stunde alt ist
+                            # Only delete if event is at least 1 hour old
                             if event_datetime + timedelta(hours=1) < datetime.now(timezone.utc):
-                                logger.info(f"Markiere vergangenes Event zur Löschung: {message.id}")
+                                logger.info(f"Mark vergangenes Event zur Löschung: {message.id}")
                                 to_delete.append(message)
                                 counter["past_event"] += 1
                             else:
@@ -867,9 +867,9 @@ class MyBot(discord.Client):
                             counter["skipped"] += 1
                             continue
                     
-                    # Prüfe System-Nachrichten von unserem Bot
+                    # Check system messages from our bot
                     elif message.author.id == bot.user.id and not message.embeds:
-                        # Liste von bekannten System-Nachrichten
+                        # List of known system messages
                         system_messages = [
                             "bot on",
                             "bot off",
@@ -894,13 +894,13 @@ class MyBot(discord.Client):
                     counter["skipped"] += 1
                     continue
 
-            # SICHERHEIT: Prüfe nochmal die Anzahl zu löschender Nachrichten
+            # SAFETY: Check again the number of messages to be deleted
             if len(to_delete) > 100:
                 logger.warning(f"Ungewöhnlich viele Nachrichten ({len(to_delete)}) zum Löschen markiert!")
                 logger.warning("Lösche nur die ersten 100 zur Sicherheit.")
                 to_delete = to_delete[:100]
 
-            # Lösche die markierten Nachrichten
+            # Delete the marked messages
             deleted = 0
             for message in to_delete:
                 try:
@@ -910,7 +910,7 @@ class MyBot(discord.Client):
                 except Exception as e:
                     logger.error(f"Fehler beim Löschen von Nachricht {message.id}: {e}")
 
-            # Abschluss-Log
+            # Final log
             logger.info(f"Aufräumen abgeschlossen:")
             logger.info(f"- {counter['past_event']} vergangene Events markiert")
             logger.info(f"- {counter['system']} System-Nachrichten markiert")
@@ -918,7 +918,7 @@ class MyBot(discord.Client):
             logger.info(f"- {counter['skipped']} Nachrichten übersprungen")
             logger.info(f"- {deleted} Nachrichten erfolgreich gelöscht")
 
-    # Warte bis der Bot bereit ist, bevor die Loop startet
+    # Wait until the bot is ready before starting the loop
     @cleanup_event_channel.before_loop
     async def before_cleanup_event_channel(self):
         await self.wait_until_ready()
@@ -994,15 +994,15 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             # Get roles from input, filter out empty lines
             raw_roles_input = self.roles_input.value.strip()
             
-            # Prüfe, ob "none", "nan" oder ähnliche Eingaben gemacht wurden (case-insensitive)
-            is_participant_only_mode = raw_roles_input.lower() in ["none", "nan", "null", "keine"]
-            fill_index = None  # Initialisiere fill_index außerhalb der Bedingung
+            # Check if "none", "nan" or similar inputs were made (case-insensitive)
+            is_participant_only_mode = raw_roles_input.lower() in ["none", "nan", "null", "keine", "nix", "nö"]
+            fill_index = None  # Initialize fill_index outside the condition
             
             if is_participant_only_mode:
-                # Bei "none"/"nan" nur eine "Teilnehmer"-Rolle erstellen
-                roles = ["Teilnehmer"]
+                # For "none" only create a "Participants" role
+                roles = ["Participants"]
             else:
-                # Normaler Modus mit Fill-Rolle
+                # Normal mode with Fill role
                 roles = [role.strip() for role in raw_roles_input.splitlines() if role.strip()]
                 
                 # Find the Fill role - case insensitive check
@@ -1012,7 +1012,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                     fill_index = len(roles)
                     roles.append("FillALL")
                 
-                # Stelle sicher, dass FillALL immer als letzte Rolle erscheint
+                # Ensure FillALL always appears as the last role
                 if fill_index < len(roles) - 1:
                     # Remove FillALL from its current position
                     fill_role = roles.pop(fill_index)
@@ -1075,8 +1075,8 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             regular_roles = []
             section_headers = []
             for i, role in enumerate(roles):
-                if i != fill_index:  # Alles außer die FillALL-Rolle
-                    # Prüfe, ob es sich um eine Abschnittsüberschrift handelt (Text in Klammern)
+                if i != fill_index:  # Everything except the FillALL role
+                    # Check if it's a section header (text in parentheses)
                     if role.strip().startswith('(') and role.strip().endswith(')'):
                         section_headers.append((i, role))
                     else:
@@ -1094,7 +1094,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             for role_idx, role_name in all_items:
                 # Check if it's a section header
                 if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
-                    # Add a line break if it's not the first header
+                    # Add a blank line if it's not the first header
                     if field_content:
                         field_content += "\n"
                     # Remove parentheses from section header
@@ -1203,7 +1203,7 @@ async def create_event_listing(guild):
                 valid_events.append(event)
             except (discord.NotFound, discord.HTTPException, ValueError) as e:
                 logger.warning(f"Event-Post für '{event.get('title')}' (ID: {message_id}) existiert nicht mehr: {e}")
-                # Hier könnte man das Event auch aus der JSON entfernen
+                # Here we could also remove the event from the JSON
                 continue
         
         # Update the events.json to remove orphaned events
@@ -1218,19 +1218,19 @@ async def create_event_listing(guild):
         # Use only valid events for the overview
         events = valid_events
         
-        # Sortiere Events nach Datum und Zeit
+        # Sort events by date and time
         try:
-            # Sortebym datetime_ob,ifna hilabldn
+            # Sort by datetime_obj, if available
             events_with_datetime = []
             for event in events:
                 # Try to convert date and time to a datetime object
                 if 'datetime_obj' in event and event['datetime_obj']:
-                    # Datetime_obj ist bereits als String gespeichert, konvertiere es zurück
+                    # datetime_obj is already stored as a string, convert it back
                     dt_str = event['datetime_obj']
                     dt_obj = datetime.fromisoformat(dt_str)
                     events_with_datetime.append((event, dt_obj))
                 else:
-                    # Fallback: Versuche aus dem Datum und der Zeit ein datetime-Objekt zu erstellen
+                    # Fallback: Try to create a datetime object from the date and time
                     try:
                         date_str = event['date']
                         time_str = event['time']
@@ -1249,7 +1249,7 @@ async def create_event_listing(guild):
             sorted_events = [event for event, _ in events_with_datetime]
         except Exception as e:
             logger.error(f"Error sorting events: {e}")
-            sorted_events = events  # Fallback: Unsortierte Events
+            sorted_events = events  # Fallback: Unsorted events
         
         # Group events by date
         events_by_date = {}
@@ -1967,7 +1967,7 @@ async def add_participant(
                     if r_key in event.get('participants', {}):
                         for entry_idx, entry in enumerate(event['participants'][r_key]):
                             if entry[1] == player_id:
-                                # Entferne den Spieler aus der alten Rolle
+                                # Remove player from old role
                                 event['participants'][r_key].pop(entry_idx)
                                 break
             
@@ -2206,7 +2206,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 for child in self.children:
                     child.disabled = True
                 
-                # Informiere den Vorschlagenden
+                # Inform the proposer
                 try:
                     proposer = await button_interaction.guild.fetch_member(self.proposer_id)
                     if proposer:
@@ -2283,24 +2283,24 @@ async def process_batch_deletion(channel, messages, counter):
     try:
         await channel.delete_messages(messages)
         logger.info(f"Batch von {len(messages)} Nachrichten erfolgreich gelöscht.")
-        await asyncio.sleep(2)  # Kurze Pause zwischen Batches
+        await asyncio.sleep(2)  # Short pause between batches
     except discord.errors.HTTPException as e:
         if e.status == 429:  # Rate limit
             retry_after = e.retry_after if hasattr(e, 'retry_after') else 5
             logger.warning(f"Rate limit erreicht. Warte {retry_after} Sekunden.")
             await asyncio.sleep(retry_after)
-            # Rekursiver Aufruf mit kleinerer Batch-Größe
+            # Recursive call with smaller batch size
             if len(messages) > 10:
                 mid = len(messages) // 2
                 await process_batch_deletion(channel, messages[:mid], counter)
                 await asyncio.sleep(1)
                 await process_batch_deletion(channel, messages[mid:], counter)
             else:
-                # Bei sehr kleinen Batches: Einzelnes Löschen
+                # For very small batches: Individual deletions
                 await process_individual_deletions(messages, counter)
         else:
             logger.error(f"Fehler beim Batch-Löschen: {e}")
-            # Bei anderen Fehlern: Einzelnes Löschen versuchen
+            # For other errors: Try individual deletions
             await process_individual_deletions(messages, counter)
 
 async def process_individual_deletions(messages, counter):
@@ -2313,7 +2313,7 @@ async def process_individual_deletions(messages, counter):
             await message.delete()
             content_preview = message.content[:30] + "..." if message.content and len(message.content) > 30 else message.content
             logger.info(f"Einzelnachricht gelöscht: {content_preview or 'Embed'}")
-            await asyncio.sleep(1.2)  # Angemessene Pause zwischen einzelnen Löschungen
+            await asyncio.sleep(1.2)  # Reasonable pause between individual deletions
         except discord.errors.HTTPException as e:
             if e.status == 429:  # Rate limit
                 retry_after = e.retry_after if hasattr(e, 'retry_after') else 5
