@@ -80,9 +80,87 @@ class MyBot(discord.Client):
         print("Slash commands synchronized!")
         print("Bot is ready and listening for messages.")
         
+        # Run migrations for existing events
+        await self.migrate_events()
+        
         # Start the loops
         self.delete_old_event_threads.start()
         self.cleanup_event_channel.start()  # New loop added
+
+    async def migrate_events(self):
+        """Migrate existing events to ensure they have thread_id if a thread exists"""
+        logger.info("Running event migrations...")
+        
+        try:
+            # Load all events
+            events = load_upcoming_events()
+            events_updated = False
+            
+            for event in events:
+                # Skip events that already have thread_id
+                if 'thread_id' in event and event['thread_id']:
+                    continue
+                    
+                event_title = event.get('title')
+                message_id = event.get('message_id')
+                
+                if not message_id or not event_title:
+                    continue
+                    
+                logger.info(f"Migrating event: {event_title} (message_id: {message_id})")
+                
+                # Find the thread by event title
+                for guild in self.guilds:
+                    channel = guild.get_channel(CHANNEL_ID_EVENT)
+                    if not channel:
+                        continue
+                        
+                    # Check active threads first
+                    thread_found = False
+                    for thread in channel.threads:
+                        if thread.name == event_title:
+                            logger.info(f"Found thread for event {event_title}: {thread.id}")
+                            event['thread_id'] = thread.id
+                            events_updated = True
+                            thread_found = True
+                            break
+                            
+                    if thread_found:
+                        continue
+                        
+                    # Check archived threads if not found
+                    try:
+                        async for archived_thread in channel.archived_threads():
+                            if archived_thread.name == event_title:
+                                logger.info(f"Found archived thread for event {event_title}: {archived_thread.id}")
+                                event['thread_id'] = archived_thread.id
+                                events_updated = True
+                                break
+                    except Exception as e:
+                        logger.error(f"Error checking archived threads: {e}")
+                        
+                    # Try to find through message
+                    try:
+                        message = await channel.fetch_message(int(message_id))
+                        if message and hasattr(message, 'thread') and message.thread:
+                            logger.info(f"Found thread through message for event {event_title}: {message.thread.id}")
+                            event['thread_id'] = message.thread.id
+                            events_updated = True
+                    except Exception as e:
+                        logger.error(f"Error finding thread through message: {e}")
+            
+            # Save updated events
+            if events_updated:
+                logger.info("Saving updated events with thread_id...")
+                save_events_to_json(events)
+                logger.info("Events migration completed successfully")
+            else:
+                logger.info("No events needed migration")
+                
+        except Exception as e:
+            logger.error(f"Error during events migration: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     async def on_message(self, message):
         logger.info(f"Message received: {message.content} in channel: {message.channel.name if hasattr(message.channel, 'name') else 'Unknown'}")
@@ -675,103 +753,172 @@ class MyBot(discord.Client):
 
     @tasks.loop(minutes=5)
     async def delete_old_event_threads(self):
-        """Löscht Threads von Events, die vor mehr als 15 Minuten begonnen haben"""
+        """Deletes threads of events that started more than 15 minutes ago"""
         try:
             now = datetime.now()
-            logger.info(f"{now} - Überprüfe alte Event-Threads...")
+            logger.info(f"{now} - Checking for old event threads...")
             
             # Load all events
             events = load_upcoming_events()
+            logger.info(f"Loaded {len(events)} events to check for thread deletion")
             
             for event in events:
                 try:
                     # Get the event_id
                     event_id = event.get('event_id')
                     if not event_id:
-                        logger.warning(f"Keine event_id für Event '{event.get('title')}' gefunden.")
+                        logger.warning(f"No event_id found for event '{event.get('title')}'")
                         continue
+                    
+                    logger.info(f"Checking event: {event.get('title')} (ID: {event_id})")
                     
                     # Extract date and time from event_id (Format: YYYYMMDDHHmm-uuid)
                     datetime_str = event_id.split('-')[0]  # Take the part before the hyphen
                     try:
                         event_datetime = datetime.strptime(datetime_str, "%Y%m%d%H%M")
                         
+                        # Debug log the times for comparison
+                        logger.info(f"Event time: {event_datetime}, Current time: {now}, Threshold: {now - timedelta(minutes=15)}")
+                        
                         # Check if the event started more than 15 minutes ago
                         if event_datetime < now - timedelta(minutes=15):
-                            logger.info(f"Event '{event['title']}' (ID: {event_id}) hat vor mehr als 15 Minuten begonnen. Lösche Thread...")
+                            logger.info(f"Event '{event.get('title')}' (ID: {event_id}) started more than 15 minutes ago. Will delete thread...")
                             
-                            # We need the thread that is connected to this event
-                            if 'message_id' in event and event['message_id']:
-                                for guild in self.guilds:
-                                    # Search both in the event channel and directly after the thread
-                                    channel = guild.get_channel(CHANNEL_ID_EVENT)
-                                    if channel:
-                                        try:
-                                            # Check first if we can find the message
-                                            try:
-                                                message = await channel.fetch_message(int(event['message_id']))
-                                                
-                                                # Check if there is a thread for this message
-                                                if hasattr(message, 'thread') and message.thread:
-                                                    # Thread found, delete it
-                                                    await message.thread.delete()
-                                                    logger.info(f"Thread für Event '{event['title']}' gelöscht.")
-                                                    
-                                                    # Send notification to the event channel
-                                                    await channel.send(
-                                                        f"Der Thread für das Event '{event['title']}' wurde automatisch gelöscht, "
-                                                        f"da das Event bereits begonnen hat.", 
-                                                        delete_after=300
-                                                    )
-                                                else:
-                                                    logger.warning(f"Kein Thread an Nachricht für Event '{event['title']}' gefunden.")
-                                            except discord.NotFound:
-                                                # Message not found, try to find thread directly
-                                                logger.info(f"Message for Event '{event['title']}' not found. Try to find thread directly...")
+                            # Debug check for message_id
+                            message_id = event.get('message_id')
+                            if not message_id:
+                                logger.warning(f"No message_id found for event '{event.get('title')}'")
+                                continue
+                                
+                            logger.info(f"Looking for thread with message_id: {message_id}")
+                            
+                            # Check for permissions
+                            for guild in self.guilds:
+                                channel = guild.get_channel(CHANNEL_ID_EVENT)
+                                if not channel:
+                                    logger.warning(f"Event channel not found in guild {guild.name}")
+                                    continue
+                                    
+                                permissions = channel.permissions_for(guild.me)
+                                if not permissions.manage_threads:
+                                    logger.error(f"Bot does not have MANAGE_THREADS permission in channel {channel.name}")
+                                    continue
+                                
+                                logger.info(f"Attempting to delete thread for event '{event.get('title')}' in channel {channel.name}")
+                                
+                                thread_deleted = False
+                                
+                                # Try multiple approaches to find and delete the thread
+                                
+                                # 0. First try to use thread_id if available (most reliable method)
+                                thread_id = event.get('thread_id')
+                                if thread_id:
+                                    logger.info(f"Thread ID found: {thread_id}, attempting direct deletion")
+                                    try:
+                                        thread = await self.fetch_thread(guild, thread_id)
+                                        if thread:
+                                            await thread.delete()
+                                            logger.info(f"SUCCESS: Deleted thread directly using thread_id: {thread_id}")
+                                            thread_deleted = True
                                             
-                                            # Alternative method: Search for thread with event title
-                                            thread_found = False
-                                            for thread in channel.threads:
-                                                if thread.name == event['title']:
-                                                    await thread.delete()
-                                                    logger.info(f"Thread mit Namen '{event['title']}' gelöscht.")
-                                                    thread_found = True
+                                            # Send notification
+                                            await channel.send(
+                                                f"Der Thread für das Event '{event_title}' wurde automatisch gelöscht, "
+                                                f"da das Event bereits begonnen hat.", 
+                                                delete_after=300
+                                            )
+                                        else:
+                                            logger.warning(f"Could not fetch thread with ID: {thread_id}")
+                                    except Exception as e:
+                                        logger.error(f"Error deleting thread with ID {thread_id}: {e}")
+                                
+                                # 1. Try to get the thread directly by name
+                                event_title = event.get('title')
+                                logger.info(f"Looking for thread with name: {event_title}")
+                                
+                                for thread in channel.threads:
+                                    logger.info(f"Checking thread: {thread.name} (ID: {thread.id})")
+                                    if thread.name == event_title:
+                                        try:
+                                            await thread.delete()
+                                            logger.info(f"SUCCESS: Deleted thread for event '{event_title}' by name match")
+                                            thread_deleted = True
+                                            
+                                            # Send notification
+                                            await channel.send(
+                                                f"Der Thread für das Event '{event_title}' wurde automatisch gelöscht, "
+                                                f"da das Event bereits begonnen hat.", 
+                                                delete_after=300
+                                            )
+                                            break
+                                        except Exception as e:
+                                            logger.error(f"Error deleting thread by name: {e}")
+                                
+                                # 2. If not found or deleted, try archived threads
+                                if not thread_deleted:
+                                    logger.info(f"Thread not found in active threads, checking archived threads")
+                                    try:
+                                        async for archived_thread in channel.archived_threads():
+                                            logger.info(f"Checking archived thread: {archived_thread.name} (ID: {archived_thread.id})")
+                                            if archived_thread.name == event_title:
+                                                try:
+                                                    await archived_thread.delete()
+                                                    logger.info(f"SUCCESS: Deleted archived thread for event '{event_title}'")
+                                                    thread_deleted = True
                                                     
-                                                    # Send notification to the event channel
+                                                    # Send notification
                                                     await channel.send(
-                                                        f"Der Thread für das Event '{event['title']}' wurde automatisch gelöscht, "
+                                                        f"Der Thread für das Event '{event_title}' wurde automatisch gelöscht, "
                                                         f"da das Event bereits begonnen hat.", 
                                                         delete_after=300
                                                     )
                                                     break
-                                            
-                                            # Try to search archived threads
-                                            if not thread_found:
-                                                async for archived_thread in channel.archived_threads():
-                                                    if archived_thread.name == event['title']:
-                                                        await archived_thread.delete()
-                                                        logger.info(f"Archivierter Thread mit Namen '{event['title']}' gelöscht.")
-                                                        
-                                                        # Send notification to the event channel
-                                                        await channel.send(
-                                                            f"Der Thread für das Event '{event['title']}' wurde automatisch gelöscht, "
-                                                            f"da das Event bereits begonnen hat.", 
-                                                            delete_after=300
-                                                        )
-                                                        break
-                                        except Exception as e:
-                                            logger.error(f"Fehler beim Löschen des Threads: {e}")
-                            else:
-                                logger.warning(f"Keine message_id für Event '{event['title']}' gefunden.")
+                                                except Exception as e:
+                                                    logger.error(f"Error deleting archived thread: {e}")
+                                    except Exception as e:
+                                        logger.error(f"Error accessing archived threads: {e}")
                                 
+                                # 3. As last resort, try to find the thread through the message
+                                if not thread_deleted:
+                                    logger.info(f"Thread not found by name, trying through message with ID: {message_id}")
+                                    try:
+                                        message = await channel.fetch_message(int(message_id))
+                                        logger.info(f"Found message: {message.id}")
+                                        
+                                        # Check for thread attribute
+                                        if hasattr(message, 'thread') and message.thread:
+                                            logger.info(f"Found thread through message: {message.thread.name} (ID: {message.thread.id})")
+                                            try:
+                                                await message.thread.delete()
+                                                logger.info(f"SUCCESS: Deleted thread for event '{event_title}' through message")
+                                                thread_deleted = True
+                                                
+                                                # Send notification
+                                                await channel.send(
+                                                    f"Der Thread für das Event '{event_title}' wurde automatisch gelöscht, "
+                                                    f"da das Event bereits begonnen hat.", 
+                                                    delete_after=300
+                                                )
+                                            except Exception as e:
+                                                logger.error(f"Error deleting thread through message: {e}")
+                                    except discord.NotFound:
+                                        logger.warning(f"Message with ID {message_id} not found")
+                                    except Exception as e:
+                                        logger.error(f"Error fetching message: {e}")
+                                
+                                if not thread_deleted:
+                                    logger.warning(f"Failed to find and delete thread for event '{event_title}'")
+                                    
                     except ValueError as e:
-                        logger.error(f"Fehler beim Parsen der event_id {event_id}: {e}")
+                        logger.error(f"Error parsing event_id {event_id}: {e}")
                         
                 except Exception as e:
-                    logger.error(f"Fehler bei der Verarbeitung des Events: {e}")
+                    logger.error(f"Error processing event: {e}")
                     
         except Exception as e:
-            logger.error(f"Fehler bei der Thread-Überprüfung: {e}")
+            logger.error(f"Error in thread deletion task: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     # Wait until the bot is ready before starting the loop
     @delete_old_event_threads.before_loop
@@ -923,6 +1070,43 @@ class MyBot(discord.Client):
     async def before_cleanup_event_channel(self):
         await self.wait_until_ready()
 
+    async def fetch_thread(self, guild, thread_id):
+        """Helper method to fetch a thread by ID, checking both active and archived threads"""
+        try:
+            # First try getting from guild threads (active threads)
+            thread_id = int(thread_id)  # Ensure it's an integer
+            thread = guild.get_thread(thread_id)
+            if thread:
+                logger.info(f"Found active thread with ID {thread_id}")
+                return thread
+                
+            # If not found, check all channels for threads
+            for channel in guild.text_channels:
+                # Check permissions
+                if not channel.permissions_for(guild.me).read_messages:
+                    continue
+                    
+                # Check active threads
+                for thread in channel.threads:
+                    if thread.id == thread_id:
+                        logger.info(f"Found active thread with ID {thread_id} in channel {channel.name}")
+                        return thread
+                
+                # Check archived threads
+                try:
+                    async for archived_thread in channel.archived_threads():
+                        if archived_thread.id == thread_id:
+                            logger.info(f"Found archived thread with ID {thread_id} in channel {channel.name}")
+                            return archived_thread
+                except Exception as e:
+                    logger.error(f"Error checking archived threads in channel {channel.name}: {e}")
+                    
+            logger.warning(f"No thread found with ID {thread_id}")
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching thread by ID {thread_id}: {e}")
+            return None
+
 class Event:
     def __init__(self, title, date, time, description, roles, datetime_obj=None, caller_id=None, caller_name=None, participant_only_mode=False):
         self.title = title
@@ -935,6 +1119,7 @@ class Event:
         self.caller_id = caller_id  # Discord ID of the creator
         self.caller_name = caller_name  # Name of the creator
         self.message_id = None  # Message ID of the event post
+        self.thread_id = None  # Thread ID of the event thread
         self.participant_only_mode = participant_only_mode  # Flag for participant-only mode
         
         # Generate a unique ID for the event
@@ -959,6 +1144,7 @@ class Event:
             "caller_id": self.caller_id,  # Store the creator's ID
             "caller_name": self.caller_name,  # Store the creator's name
             "message_id": self.message_id,  # Store the event post's message ID
+            "thread_id": self.thread_id,  # Store the event thread's ID
             "participant_only_mode": self.participant_only_mode  # Store the flag for participant-only mode
         }
 
@@ -1119,8 +1305,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             event_post = await channel.send(embed=embed)
             thread = await event_post.create_thread(name=event.title)
             
-            # Save the message ID
+            # Save both the message ID and thread ID
             event.message_id = event_post.id
+            event.thread_id = thread.id
             save_event_to_json(event)
             
             welcome_embed = discord.Embed(
@@ -1747,8 +1934,9 @@ async def eventify(
             event_post = await channel.send(embed=embed)
             thread = await event_post.create_thread(name=event.title)
             
-            # Save the message ID
+            # Save both the message ID and thread ID
             event.message_id = event_post.id
+            event.thread_id = thread.id
             save_event_to_json(event)
             
             welcome_embed = discord.Embed(
