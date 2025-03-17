@@ -690,170 +690,95 @@ class MyBot(discord.Client):
 
     @tasks.loop(minutes=5)
     async def delete_old_event_threads(self):
-        """Deletes threads of events that started more than 15 minutes ago"""
+        """Löscht Threads für abgelaufene Events nach 30-Minuten-Wartezeit"""
         try:
             now = datetime.now()
             logger.info(f"{now} - Checking for old event threads...")
             
-            # Load all events
-            events = load_upcoming_events()
-            logger.info(f"Loaded {len(events)} events to check for thread deletion")
+            # Lade Events mit Status "expired" (abgelaufen, aber Thread noch aktiv)
+            events_data = load_upcoming_events(include_expired=True, include_cleaned=False)
             
-            for event in events:
+            # Filtere nur nach Events mit Status "expired"
+            expired_events = [e for e in events_data.get("events", []) if e.get("status") == "expired"]
+            logger.info(f"Found {len(expired_events)} expired events to check for thread deletion")
+            
+            events_cleaned = 0
+            
+            for event in expired_events:
                 try:
-                    # Get the event_id
+                    event_title = event.get('title', 'Unknown Event')
                     event_id = event.get('event_id')
+                    
                     if not event_id:
-                        logger.warning(f"No event_id found for event '{event.get('title')}'")
+                        logger.warning(f"No event_id found for event '{event_title}'")
                         continue
                     
-                    logger.info(f"Checking event: {event.get('title')} (ID: {event_id})")
-                    
-                    # Extract date and time from event_id (Format: YYYYMMDDHHmm-uuid)
-                    datetime_str = event_id.split('-')[0]  # Take the part before the hyphen
                     try:
-                        event_datetime = datetime.strptime(datetime_str, "%Y%m%d%H%M")
+                        # Extrahiere Datum und Zeit aus dem Event
+                        if "datetime_obj" in event and event["datetime_obj"]:
+                            try:
+                                event_dt = datetime.fromisoformat(event["datetime_obj"])
+                            except (ValueError, TypeError):
+                                # Fallback auf Datum und Zeit aus den Feldern
+                                day, month, year = map(int, event["date"].split("."))
+                                hour, minute = map(int, event["time"].split(":"))
+                                event_dt = datetime(year, month, day, hour, minute)
+                        else:
+                            # Datum und Zeit aus den Feldern
+                            day, month, year = map(int, event["date"].split("."))
+                            hour, minute = map(int, event["time"].split(":"))
+                            event_dt = datetime(year, month, day, hour, minute)
                         
-                        # Debug log the times for comparison
-                        logger.info(f"Event time: {event_datetime}, Current time: {now}, Threshold: {now - timedelta(minutes=15)}")
+                        # Prüfe, ob 30 Minuten seit Eventbeginn vergangen sind
+                        if now < event_dt + timedelta(minutes=30):
+                            logger.info(f"Event '{event_title}' still within 30-minute grace period, skipping")
+                            continue
                         
-                        # Check if the event started more than 15 minutes ago
-                        if event_datetime < now - timedelta(minutes=15):
-                            logger.info(f"Event '{event.get('title')}' (ID: {event_id}) started more than 15 minutes ago. Will delete thread...")
-                            
-                            # Debug check for message_id
-                            message_id = event.get('message_id')
-                            if not message_id:
-                                logger.warning(f"No message_id found for event '{event.get('title')}'")
-                                continue
-                                
-                            logger.info(f"Looking for thread with message_id: {message_id}")
-                            
-                            # Check for permissions
-                            for guild in self.guilds:
-                                channel = guild.get_channel(CHANNEL_ID_EVENT)
-                                if not channel:
-                                    logger.warning(f"Event channel not found in guild {guild.name}")
-                                    continue
+                        logger.info(f"Event '{event_title}' expired and 30-minute grace period passed, cleaning thread")
+                        
+                        # Hole die Thread-ID
+                        thread_id = event.get('thread_id')
+                        if not thread_id:
+                            logger.warning(f"No thread_id found for expired event '{event_title}'")
+                            continue
+                        
+                        # Lösche den Thread
+                        for guild in self.guilds:
+                            thread = await self.fetch_thread(guild, thread_id)
+                            if thread:
+                                try:
+                                    await thread.delete()
+                                    logger.info(f"Successfully deleted thread for expired event '{event_title}'")
                                     
-                                permissions = channel.permissions_for(guild.me)
-                                if not permissions.manage_threads:
-                                    logger.error(f"Bot does not have MANAGE_THREADS permission in channel {channel.name}")
-                                    continue
-                                
-                                logger.info(f"Attempting to delete thread for event '{event.get('title')}' in channel {channel.name}")
-                                
-                                thread_deleted = False
-                                
-                                # Try multiple approaches to find and delete the thread
-                                
-                                # 0. First try to use thread_id if available (most reliable method)
-                                thread_id = event.get('thread_id')
-                                if thread_id:
-                                    logger.info(f"Thread ID found: {thread_id}, attempting direct deletion")
-                                    try:
-                                        thread = await self.fetch_thread(guild, thread_id)
-                                        if thread:
-                                            await thread.delete()
-                                            logger.info(f"SUCCESS: Deleted thread directly using thread_id: {thread_id}")
-                                            thread_deleted = True
-                                            
-                                            # Send notification
-                                            await channel.send(
-                                                f"Der Thread für das Event '{event_title}' wurde automatisch gelöscht, "
-                                                f"da das Event bereits begonnen hat.", 
-                                                delete_after=300
-                                            )
-                                        else:
-                                            logger.warning(f"Could not fetch thread with ID: {thread_id}")
-                                    except Exception as e:
-                                        logger.error(f"Error deleting thread with ID {thread_id}: {e}")
-                                
-                                # 1. Try to get the thread directly by name
-                                event_title = event.get('title')
-                                logger.info(f"Looking for thread with name: {event_title}")
-                                
-                                for thread in channel.threads:
-                                    logger.info(f"Checking thread: {thread.name} (ID: {thread.id})")
-                                    if thread.name == event_title:
-                                        try:
-                                            await thread.delete()
-                                            logger.info(f"SUCCESS: Deleted thread for event '{event_title}' by name match")
-                                            thread_deleted = True
-                                            
-                                            # Send notification
-                                            await channel.send(
-                                                f"Der Thread für das Event '{event_title}' wurde automatisch gelöscht, "
-                                                f"da das Event bereits begonnen hat.", 
-                                                delete_after=300
-                                            )
-                                            break
-                                        except Exception as e:
-                                            logger.error(f"Error deleting thread by name: {e}")
-                                
-                                # 2. If not found or deleted, try archived threads
-                                if not thread_deleted:
-                                    logger.info(f"Thread not found in active threads, checking archived threads")
-                                    try:
-                                        async for archived_thread in channel.archived_threads():
-                                            logger.info(f"Checking archived thread: {archived_thread.name} (ID: {archived_thread.id})")
-                                            if archived_thread.name == event_title:
-                                                try:
-                                                    await archived_thread.delete()
-                                                    logger.info(f"SUCCESS: Deleted archived thread for event '{event_title}'")
-                                                    thread_deleted = True
-                                                    
-                                                    # Send notification
-                                                    await channel.send(
-                                                        f"Der Thread für das Event '{event_title}' wurde automatisch gelöscht, "
-                                                        f"da das Event bereits begonnen hat.", 
-                                                        delete_after=300
-                                                    )
-                                                    break
-                                                except Exception as e:
-                                                    logger.error(f"Error deleting archived thread: {e}")
-                                    except Exception as e:
-                                        logger.error(f"Error accessing archived threads: {e}")
-                                
-                                # 3. As last resort, try to find the thread through the message
-                                if not thread_deleted:
-                                    logger.info(f"Thread not found by name, trying through message with ID: {message_id}")
-                                    try:
-                                        message = await channel.fetch_message(int(message_id))
-                                        logger.info(f"Found message: {message.id}")
-                                        
-                                        # Check for thread attribute
-                                        if hasattr(message, 'thread') and message.thread:
-                                            logger.info(f"Found thread through message: {message.thread.name} (ID: {message.thread.id})")
-                                            try:
-                                                await message.thread.delete()
-                                                logger.info(f"SUCCESS: Deleted thread for event '{event_title}' through message")
-                                                thread_deleted = True
-                                                
-                                                # Send notification
-                                                await channel.send(
-                                                    f"Der Thread für das Event '{event_title}' wurde automatisch gelöscht, "
-                                                    f"da das Event bereits begonnen hat.", 
-                                                    delete_after=300
-                                                )
-                                            except Exception as e:
-                                                logger.error(f"Error deleting thread through message: {e}")
-                                    except discord.NotFound:
-                                        logger.warning(f"Message with ID {message_id} not found")
-                                    except Exception as e:
-                                        logger.error(f"Error fetching message: {e}")
-                                
-                                if not thread_deleted:
-                                    logger.warning(f"Failed to find and delete thread for event '{event_title}'")
+                                    # Sende Benachrichtigung
+                                    channel = guild.get_channel(CHANNEL_ID_EVENT)
+                                    if channel:
+                                        await channel.send(
+                                            f"Der Thread für das Event '{event_title}' wurde automatisch gelöscht, "
+                                            f"da das Event begonnen hat und die 30-minütige Nachfrist abgelaufen ist.", 
+                                            delete_after=300
+                                        )
                                     
-                    except ValueError as e:
-                        logger.error(f"Error parsing event_id {event_id}: {e}")
-                        
+                                    # Markiere Event als "cleaned"
+                                    event["status"] = "cleaned"
+                                    events_cleaned += 1
+                                    break
+                                except Exception as e:
+                                    logger.error(f"Error deleting thread for event '{event_title}': {e}")
+                    
+                    except (ValueError, KeyError) as e:
+                        logger.error(f"Error parsing date/time for event '{event_title}': {e}")
+                
                 except Exception as e:
                     logger.error(f"Error processing event: {e}")
-                    
+            
+            # Wenn Events als "cleaned" markiert wurden, speichere die Änderungen
+            if events_cleaned > 0:
+                logger.info(f"Marked {events_cleaned} events as cleaned")
+                save_events_to_json(events_data)
+                
         except Exception as e:
-            logger.error(f"Error in thread deletion task: {e}")
+            logger.error(f"Error in delete_old_event_threads: {e}")
             import traceback
             logger.error(traceback.format_exc())
 
@@ -1058,6 +983,7 @@ class Event:
         self.thread_id = None  # Thread ID of the event thread
         self.participant_only_mode = participant_only_mode  # Flag for participant-only mode
         self.mention_role_id = None  # Add mention_role_id field
+        self.status = "active"  # Neues Statusfeld: "active", "expired" oder "cleaned"
         
         # Konvertiere datetime_obj zu einem tatsächlichen datetime-Objekt, falls es ein String ist
         if datetime_obj is None:
@@ -1132,7 +1058,8 @@ class Event:
             "thread_id": self.thread_id,  # Store the event thread's ID
             "participant_only_mode": self.participant_only_mode,  # Store the flag for participant-only mode
             "mention_role_id": self.mention_role_id,  # Store the mention role ID
-            "datetime_obj": datetime_str  # Store the datetime as ISO format string
+            "datetime_obj": datetime_str,  # Store the datetime as ISO format string
+            "status": getattr(self, 'status', 'active')  # Store the status, default to "active" if not set
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
@@ -1326,8 +1253,8 @@ class EventModal(discord.ui.Modal, title="Eventify"):
 async def create_event_listing(guild):
     """Erstellt ein Event Listing mit allen anstehenden Events"""
     try:
-        # Load all upcoming events
-        events_data = load_upcoming_events()
+        # Lade nur aktive Events (keine abgelaufenen oder bereinigten)
+        events_data = load_upcoming_events(include_expired=False, include_cleaned=False)
         
         if not events_data or not events_data.get("events"):
             logger.info("No upcoming events to list.")
@@ -1598,22 +1525,30 @@ def save_event_to_json(event):
         return False
 
 def clean_old_events(events_data):
-    """Remove events that are in the past (expired)"""
+    """Markiert Events als abgelaufen (expired), wenn sie begonnen haben."""
     if not isinstance(events_data, dict) or "events" not in events_data:
         logger.error("Invalid events_data format in clean_old_events")
         return {"events": []}
         
     now = datetime.now()
-    future_events = []
-    removed_count = 0
+    expired_count = 0
+    cleaned_count = 0
+    
+    # Neue Liste für Events, die nicht als "cleaned" markiert sind
+    updated_events = []
     
     for event in events_data["events"]:
         if not isinstance(event, dict):
             logger.warning(f"Invalid event format: {event}")
             continue
             
+        # Entferne Events, die bereits als "cleaned" markiert sind
+        if event.get("status") == "cleaned":
+            cleaned_count += 1
+            logger.debug(f"Removing cleaned event: {event.get('title', 'Unknown Event')}")
+            continue
+            
         event_title = event.get("title", "Unknown Event")
-        keep_event = True
         
         try:
             # Try to use datetime_obj first if available
@@ -1649,28 +1584,38 @@ def clean_old_events(events_data):
                 # Create datetime object
                 event_dt = datetime(year, month, day, hour, minute)
             
-            # Keep only future events (changed from 24 hours to 0 hours)
-            if event_dt < now:
-                keep_event = False
-                removed_count += 1
-                logger.info(f"Removing past event: {event_title} (Date: {event.get('date', 'N/A')}, Time: {event.get('time', 'N/A')})")
+            # Wenn das Event begonnen hat und noch "active" ist, setze auf "expired"
+            if event_dt < now and event.get("status") == "active":
+                event["status"] = "expired"
+                expired_count += 1
+                logger.info(f"Marking event as expired: {event_title} (Date: {event.get('date', 'N/A')}, Time: {event.get('time', 'N/A')})")
                 
         except (ValueError, TypeError, KeyError, IndexError) as e:
             logger.warning(f"Failed to parse date/time for event {event_title}: {e}")
-            # Keep the event if we can't parse its date/time
-            keep_event = True
         
-        if keep_event:
-            future_events.append(event)
-            logger.debug(f"Keeping event: {event_title}")
+        # Füge das Event zur aktualisierten Liste hinzu (unabhängig vom Status, solange nicht "cleaned")
+        updated_events.append(event)
     
-    if removed_count > 0:
-        logger.info(f"Removed {removed_count} past events, keeping {len(future_events)} events")
+    if expired_count > 0:
+        logger.info(f"Marked {expired_count} events as expired")
     
-    events_data["events"] = future_events
+    if cleaned_count > 0:
+        logger.info(f"Removed {cleaned_count} cleaned events")
+    
+    events_data["events"] = updated_events
     return events_data
 
-def load_upcoming_events():
+def load_upcoming_events(include_expired=False, include_cleaned=False):
+    """
+    Lade Events aus der JSON-Datei mit optionaler Statusfilterung
+    
+    Args:
+        include_expired: Wenn True, werden auch abgelaufene Events (status="expired") zurückgegeben
+        include_cleaned: Wenn True, werden auch bereinigte Events (status="cleaned") zurückgegeben
+        
+    Returns:
+        Dictionary mit Events, gefiltert nach Status
+    """
     try:
         # Use absolute path from the script's location
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1692,15 +1637,30 @@ def load_upcoming_events():
                 logger.error("Missing 'events' key in events.json")
                 return {"events": []}
             
-            # Clean old events before returning
+            # Aktualisiere Status der Events
             events = clean_old_events(events)
             
-            # Save the cleaned events back to the file
+            # Speichere die aktualisierten Status zurück
             with open(events_file, 'w', encoding='utf-8') as f:
                 json.dump(events, f, indent=4)
-                
-            logger.info(f"Loaded {len(events['events'])} events from events.json")
-            return events
+            
+            # Filtere nach Status, falls erforderlich
+            if not include_expired and not include_cleaned:
+                # Nur aktive Events für die Anzeige
+                filtered_events = {"events": [e for e in events["events"] 
+                                           if e.get("status", "active") == "active"]}
+                logger.info(f"Loaded {len(filtered_events['events'])} active events from events.json")
+                return filtered_events
+            elif not include_cleaned:
+                # Aktive und abgelaufene Events (für Thread-Management)
+                filtered_events = {"events": [e for e in events["events"] 
+                                           if e.get("status", "active") != "cleaned"]}
+                logger.info(f"Loaded {len(filtered_events['events'])} non-cleaned events from events.json")
+                return filtered_events
+            else:
+                # Alle Events (für administrative Zwecke)
+                logger.info(f"Loaded all {len(events['events'])} events from events.json")
+                return events
     except json.JSONDecodeError as e:
         logger.error(f"Error decoding events.json: {e}")
         return {"events": []}
@@ -1720,7 +1680,7 @@ def save_events_to_json(events):
             logger.error("Invalid events format for save_events_to_json")
             return False
             
-        # Clean old events
+        # Aktualisiere Event-Status (markiere abgelaufene Events)
         events_data = clean_old_events(events_data)
             
         # Use absolute path from the script's location
