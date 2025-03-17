@@ -1047,6 +1047,7 @@ class Event:
         self.message_id = None  # Message ID of the event post
         self.thread_id = None  # Thread ID of the event thread
         self.participant_only_mode = participant_only_mode  # Flag for participant-only mode
+        self.mention_role_id = None  # Add mention_role_id field
         
         # Generate a unique ID for the event
         timestamp = datetime_obj.strftime("%Y%m%d%H%M") if datetime_obj else datetime.now().strftime("%Y%m%d%H%M")
@@ -1071,7 +1072,8 @@ class Event:
             "caller_name": self.caller_name,  # Store the creator's name
             "message_id": self.message_id,  # Store the event post's message ID
             "thread_id": self.thread_id,  # Store the event thread's ID
-            "participant_only_mode": self.participant_only_mode  # Store the flag for participant-only mode
+            "participant_only_mode": self.participant_only_mode,  # Store the flag for participant-only mode
+            "mention_role_id": self.mention_role_id  # Store the mention role ID
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
@@ -1119,6 +1121,14 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 participant_only_mode=self.roles.value and self.roles.value.lower() == 'none'
             )
             
+            # Store the mention role ID separately in the event object
+            if self.mention_role:
+                event.mention_role_id = str(self.mention_role.id)
+                
+            # Add the image URL if provided
+            if self.image_url:
+                event.image_url = self.image_url
+                
             # Create embed
             embed = discord.Embed(
                 title=event.title,
@@ -1142,12 +1152,12 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             embed.add_field(name="Erstellt von", value=f"<@{event.caller_id}>", inline=False)
             
             # Add mention role in embed if specified
-            if self.mention_role:
-                embed.add_field(name="Für", value=f"<@&{self.mention_role.id}>", inline=False)
+            if event.mention_role_id:
+                embed.add_field(name="Für", value=f"<@&{event.mention_role_id}>", inline=False)
             
             # Add image if provided
-            if self.image_url:
-                embed.set_image(url=self.image_url)
+            if event.image_url:
+                embed.set_image(url=event.image_url)
             
             # Set footer with event ID
             embed.set_footer(text=f"Event ID: {event.event_id}")
@@ -1173,7 +1183,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
 
             welcome_embed.add_field(
                 name="Benutzerhandbuch",
-                value="Im ❗[Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md)❗ findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
+                value="Im [Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md) findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
                 inline=False
             )
 
@@ -1198,8 +1208,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             await thread.send(embed=welcome_embed)
             
             # Send a separate mention message if a mention role is specified
-            if self.mention_role:
-                await thread.send(f"{self.mention_role.mention} Neues Event: {event.title}")
+            if event.mention_role_id:
+                # Send mention but delete it right after (will still notify users)
+                await thread.send(f"<@&{event.mention_role_id}>", delete_after=0.1)
             
             # Send confirmation
             await interaction.response.send_message(
@@ -1209,8 +1220,8 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             )
             
             # Mention role if specified (in main channel)
-            if self.mention_role:
-                await channel.send(f"{self.mention_role.mention} Neues Event erstellt!")
+            if event.mention_role_id:
+                await channel.send(f"<@&{event.mention_role_id}> Neues Event erstellt!")
                 
         except Exception as e:
             logger.error(f"Error in EventModal on_submit: {e}")
@@ -1756,8 +1767,8 @@ async def eventify(
                 embed.add_field(name="Erstellt von", value=f"<@{event.caller_id}>", inline=False)
             
             # Add the role mention as a separate field if available
-            if mention_role:
-                embed.add_field(name="Für", value=f"<@&{mention_role.id}>", inline=False)
+            if event.mention_role_id:
+                embed.add_field(name="Für", value=f"<@&{event.mention_role_id}>", inline=False)
             
             # Get weekday abbreviation
             weekday = get_weekday_abbr(event.date)
@@ -1832,7 +1843,7 @@ async def eventify(
 
             welcome_embed.add_field(
                 name="Benutzerhandbuch",
-                value="Im ❗[Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md)❗ findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
+                value="Im ❗[Benutzerhandbuch]❗(https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md) findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
                 inline=False
             )
 
@@ -1857,13 +1868,14 @@ async def eventify(
             await thread.send(embed=welcome_embed)
             
             # Send a separate mention message if a mention role is specified
-            if mention_role:
-                await thread.send(f"{mention_role.mention} Neues Event: {event.title}")
-
+            if event.mention_role_id:
+                # Send mention but delete it right after (will still notify users)
+                await thread.send(f"<@&{event.mention_role_id}>", delete_after=0.1)
+            
             # Create the event listing after creating the event
             await create_event_listing(interaction.guild)
             
-            # Send a follow-up message to confirm event creation
+            # Send confirmation
             await interaction.followup.send("Event wurde erfolgreich erstellt!", ephemeral=True)
         else:
             # Create and show the modal
@@ -1934,7 +1946,7 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
                         reminder_message += f"\n{message}\n"
                     
                     if event_link:
-                        reminder_message += f"\n[Zum Event]({event_link})"
+                        reminder_message += f"\n🔗 [Zum Event]({event_link})"
                     
                     await user.send(reminder_message)
                     success_count += 1
@@ -2024,7 +2036,7 @@ async def add_participant(
                     f"Datum: {event['date']}\n"
                     f"Uhrzeit: {event['time']}\n"
                     f"Neuer Kommentar: {comment}\n"
-                    f"\n[Zum Event]({event_link})"
+                    f"\n🔗 [Zum Event]({event_link})"
                 )
                 await user.send(dm_message)
             except Exception as e:
@@ -2067,7 +2079,7 @@ async def add_participant(
                 )
                 if comment:
                     dm_message += f"Kommentar: {comment}\n"
-                dm_message += f"\n[Zum Event]({event_link})"
+                dm_message += f"\n🔗 [Zum Event]({event_link})"
                 
                 await user.send(dm_message)
             except Exception as e:
@@ -2133,7 +2145,7 @@ async def remove_participant(
                         f"Du wurdest aus folgenden Rollen entfernt: {', '.join(removed_roles)}\n"
                         f"Datum: {event['date']}\n"
                         f"Uhrzeit: {event['time']}\n"
-                        f"\n[Zum Event]({event_link})"
+                        f"\n🔗 [Zum Event]({event_link})"
                     )
                     await user.send(dm_message)
                     await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt und hat eine DN erhalten.")
@@ -2169,7 +2181,7 @@ async def remove_participant(
                             f"Rolle: {role_name}\n"
                             f"Datum: {event['date']}\n"
                             f"Uhrzeit: {event['time']}\n"
-                            f"\n[Zum Event]({event_link})"
+                            f"\n🔗 [Zum Event]({event_link})"
                         )
                         await user.send(dm_message)
                         await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt und hat eine DN erhalten.")
@@ -2294,7 +2306,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                             f"Datum: {event['date']}\n"
                             f"Uhrzeit: {event['time']}\n"
                             f"Du wurdest automatisch in diese Rolle eingetragen.\n"
-                            f"\n[Zum Event]({event_link})"
+                            f"\n🔗 [Zum Event]({event_link})"
                         )
                         await proposer.send(dm_message)
                         dm_sent = True
