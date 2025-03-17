@@ -85,89 +85,75 @@ class MyBot(discord.Client):
         self.cleanup_event_channel.start()  # New loop added
 
     async def on_message(self, message):
-        logger.info(f"Message received: {message.content} in channel: {message.channel.name if hasattr(message.channel, 'name') else 'Unknown'}")
-        
-        # Ignore messages from the bot itself
-        if message.author == self.user:
-            logger.info("Ignoring message from self")
-            return
+        try:
+            # Ignore messages from the bot itself
+            if message.author == self.user:
+                logger.info(f"Ignoring message from self")
+                return
 
-        # Check if the message is in a thread
-        if isinstance(message.channel, discord.Thread):
-            event_title = message.channel.name
+            # Get the channel name for logging
+            channel_name = message.channel.name if hasattr(message.channel, 'name') else 'Unknown'
+            logger.info(f"Message received: {message.content} in channel: {channel_name}")
+
+            # Check if message is in a thread
+            if not isinstance(message.channel, discord.Thread):
+                return
+
+            thread_id = message.channel.id
             
-            # Load events from JSON for role index conversion
-            events = load_upcoming_events()
-            event = next((e for e in events if e['title'] == event_title), None)
+            # Load events from JSON
+            events_data = load_upcoming_events()
+            if not events_data or "events" not in events_data:
+                return
+                
+            # Find the event for this thread
+            event = next((e for e in events_data["events"] if str(e.get('thread_id')) == str(thread_id)), None)
             
             if not event:
-                logger.warning(f"No event found matching thread name: {event_title}")
-                # Only respond if user is attempting command
-                if message.content.strip() and (message.content.strip()[0].isdigit() or message.content.strip() == "-" or 
-                                               (message.content.strip().startswith("-") and message.content.strip()[1:].isdigit())):
-                    await message.channel.send("Anmeldungen für dieses Event sind nicht möglich.")
                 return
-            
-            # Check for digit at the beginning (sign up for role)
-            if message.content.strip() and message.content.strip()[0].isdigit():
-                # Extract the role number (everything until the first non-digit)
-                role_number_str = ""
-                for char in message.content.strip():
-                    if char.isdigit():
-                        role_number_str += char
-                    else:
-                        break
+
+            # Process role signup (single digit number)
+            if message.content.strip().isdigit():
+                await self._handle_role_signup(message, event, int(message.content))
                 
-                if role_number_str:
-                    # Convert to int and process the role signup
-                    display_role_number = int(role_number_str)
-                    logger.info(f"Processing role signup in thread: {message.channel.name}, content: {message.content}")
-                    
-                    # Conversion of displayed role number to actual index
-                    actual_role_index = self.role_number_to_index(event, display_role_number)
-                    
-                    if actual_role_index >= 0:
-                        # Process role signup with actual role index
-                        await self._handle_role_signup(message, event_title, actual_role_index + 1)
-                    else:
-                        # Only logging, no message to user
-                        logger.warning(f"Invalid role number: {display_role_number}. Event has {len(event['roles'])} roles.")
-            
-            # Check for unregister all roles with "-"
-            elif message.content.strip() == "-":
-                logger.info(f"Processing unregister from all roles: {message.channel.name}, user: {message.author.name}")
-                await self._handle_unregister(message, False)
-            
-            # Check for unregister from specific role with "-N"
-            elif message.content.strip().startswith("-") and message.content.strip()[1:].isdigit():
-                display_role_number = int(message.content.strip()[1:])
-                logger.info(f"Processing unregister from role {display_role_number}: {message.channel.name}, user: {message.author.name}")
+            # Process role signup with comment (number followed by text)
+            elif message.content.strip() and message.content.strip()[0].isdigit():
+                # Extract the number part
+                parts = message.content.strip().split(' ', 1)
+                if parts[0].isdigit():
+                    await self._handle_role_signup(message, event, int(parts[0]))
                 
-                # Conversion of displayed role number to actual index
-                actual_role_index = self.role_number_to_index(event, display_role_number)
+            # Process role unregister
+            elif message.content.strip() == '-':
+                await self._handle_unregister(message)
                 
-                if actual_role_index >= 0:
-                    # Process unregister with actual role index
-                    await self._handle_unregister(message, True, actual_role_index)
-                else:
-                    # Only logging, no message to user
-                    logger.warning(f"Invalid role number: {display_role_number}. Event has {len(event['roles'])} roles.")
-        else:
-            logger.debug("Message is not in a thread.")
+            # Process specific role unregister (e.g., "-2" to unregister from role 2)
+            elif message.content.strip().startswith('-') and message.content[1:].isdigit():
+                role_index = int(message.content[1:])
+                await self._handle_unregister(message, is_specific_role=True, role_index=role_index)
+                
+        except Exception as e:
+            logger.error(f"Error in on_message: {e}")
+            logger.exception("Full traceback:")
 
     async def _handle_role_signup(self, message, event_title, role_number):
         try:
             role_index = role_number - 1
             
             # Load events from JSON
-            events = load_upcoming_events()
-            logger.info(f"Loaded {len(events)} events from JSON")
+            events_data = load_upcoming_events()
+            logger.info(f"Loaded events data from JSON")
             
-            # Find the event that matches the thread name
-            event = next((e for e in events if e['title'] == event_title), None)
+            # First try to find the event by thread_id (most reliable)
+            thread_id = message.channel.id
+            event = next((e for e in events_data["events"] if e.get('thread_id') == thread_id), None)
+            
+            # Fallback: try to find by title (for backwards compatibility)
+            if not event:
+                event = next((e for e in events_data["events"] if e.get('title') == event_title), None)
 
             if event:
-                logger.info(f"Found matching event: {event['title']}")
+                logger.info(f"Found matching event: {event['title']} (ID: {event.get('event_id', 'unknown')})")
                 
                 # Check if we're in participant_only_mode
                 is_participant_only = event.get('participant_only_mode', False)
@@ -197,6 +183,7 @@ class MyBot(discord.Client):
                         comment = message.content.split(' ', 1)[1].strip()
                         # Remove all @ characters from comments
                         comment = comment.replace('@', '')
+                        logger.info(f"Extracted comment: '{comment}'")
                     else:
                         comment = ""
                     
@@ -225,7 +212,7 @@ class MyBot(discord.Client):
                                 event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
                             else:
                                 event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
-                            await self._update_event_and_save(message, event, events)
+                            await self._update_event_and_save(message, event, events_data)
                             await message.add_reaction('✅')  # Add confirmation reaction
                         else:
                             # Just acknowledge if no comment to update
@@ -247,20 +234,21 @@ class MyBot(discord.Client):
                                 logger.info(f"Added {player_name} to FillALL role")
                                 
                                 # Update the event message and save to JSON
-                                await self._update_event_and_save(message, event, events)
+                                await self._update_event_and_save(message, event, events_data)
                                 await message.add_reaction('✅')  # Add confirmation reaction
                             else:
                                 # This is a regular Fill role (not FillALL) or participant_only_mode
                                 # Add new entry with timestamp and comment
                                 if comment:
                                     event['participants'][role_key].append((player_name, player_id, current_time, comment))
+                                    logger.info(f"Adding {player_name} to role {role_name} with comment: '{comment}'")
                                 else:
                                     event['participants'][role_key].append((player_name, player_id, current_time))
                                 
                                 logger.info(f"Added {player_name} to Fill role or participant_only_mode")
                                 
                                 # Update the event message and save to JSON
-                                await self._update_event_and_save(message, event, events)
+                                await self._update_event_and_save(message, event, events_data)
                                 await message.add_reaction('✅')  # Add confirmation reaction
                         else:
                             # Check if player is already signed up for another role (except Fill)
@@ -300,19 +288,20 @@ class MyBot(discord.Client):
                                 logger.info(f"Added {player_name} to role {role_name}")
                                 
                                 # Update the event message and save to JSON
-                                await self._update_event_and_save(message, event, events)
+                                await self._update_event_and_save(message, event, events_data)
                                 await message.add_reaction('✅')  # Add confirmation reaction
                             else:
                                 # Add new entry with timestamp and comment
                                 if comment:
                                     event['participants'][role_key].append((player_name, player_id, current_time, comment))
+                                    logger.info(f"Adding {player_name} to role {role_name} with comment: '{comment}'")
                                 else:
                                     event['participants'][role_key].append((player_name, player_id, current_time))
                                 
                                 logger.info(f"Added {player_name} to role {role_name}")
                                 
                                 # Update the event message and save to JSON
-                                await self._update_event_and_save(message, event, events)
+                                await self._update_event_and_save(message, event, events_data)
                                 await message.add_reaction('✅')  # Add confirmation reaction
                 else:
                     logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
@@ -327,10 +316,15 @@ class MyBot(discord.Client):
     async def _handle_unregister(self, message, is_specific_role=False, role_index=None):
         try:
             # Load events from JSON
-            events = load_upcoming_events()
+            events_data = load_upcoming_events()
             
-            # Find the event that matches the thread name
-            event = next((e for e in events if e['title'] == message.channel.name), None)
+            # First try to find the event by thread_id (most reliable)
+            thread_id = message.channel.id
+            event = next((e for e in events_data["events"] if e.get('thread_id') == thread_id), None)
+            
+            # Fallback: try to find by title (for backwards compatibility)
+            if not event:
+                event = next((e for e in events_data["events"] if e.get('title') == message.channel.name), None)
 
             if event:
                 player_name = message.author.name
@@ -356,7 +350,7 @@ class MyBot(discord.Client):
                     # Only reply if player was actually removed from something
                     if removed_count > 0:
                         # Update the event message
-                        await self._update_event_and_save(message, event, events)
+                        await self._update_event_and_save(message, event, events_data)
                         await message.add_reaction('✅')  # Add confirmation reaction
                     else:
                         await message.add_reaction('❓')  # Player wasn't registered
@@ -378,7 +372,7 @@ class MyBot(discord.Client):
                                 logger.info(f"Removed {player_name} from role {role_name}")
                                 
                                 # Update the event message and save to JSON
-                                await self._update_event_and_save(message, event, events)
+                                await self._update_event_and_save(message, event, events_data)
                                 await message.add_reaction('✅')  # Add confirmation reaction
                             else:
                                 logger.info(f"{player_name} was not registered for role {role_name}")
@@ -398,18 +392,25 @@ class MyBot(discord.Client):
 
     async def _update_event_and_save(self, message, event, events):
         try:
+            # Ensure events is a dictionary with an "events" key
+            if isinstance(events, list):
+                events = {"events": events}
+            elif not isinstance(events, dict) or "events" not in events:
+                logger.error("Invalid events format in _update_event_and_save")
+                return False
+
             # Find the event by ID if available, otherwise by title
             event_id = event.get("event_id")
             if event_id:
                 # Find the event in the events list by ID
-                for e in events:
+                for e in events["events"]:
                     if e.get("event_id") == event_id:
                         # Update the event
                         e.update(event)
                         break
             else:
                 # Fallback to title for backward compatibility
-                for e in events:
+                for e in events["events"]:
                     if e["title"] == event["title"]:
                         # Update the event
                         e.update(event)
@@ -589,6 +590,7 @@ class MyBot(discord.Client):
                                 # Comment if available
                                 if len(p_data) >= 4 and p_data[3]:
                                     field_content += f" {p_data[3]}"
+                                    logger.info(f"Including comment for role {role_name}: '{p_data[3]}'")
                                 
                                 field_content += "\n"
                             else:
@@ -1043,14 +1045,13 @@ class MyBot(discord.Client):
             return None
 
 class Event:
-    def __init__(self, title, date, time, description, roles, datetime_obj=None, caller_id=None, caller_name=None, participant_only_mode=False):
+    def __init__(self, title, date, time, description, roles, datetime_obj=None, caller_id=None, caller_name=None, participant_only_mode=False, event_id=None):
         self.title = title
         self.date = date
         self.time = time
         self.description = description
         self.roles = roles
         self.participants = {}
-        self.datetime_obj = datetime_obj
         self.caller_id = caller_id  # Discord ID of the creator
         self.caller_name = caller_name  # Name of the creator
         self.message_id = None  # Message ID of the event post
@@ -1058,17 +1059,65 @@ class Event:
         self.participant_only_mode = participant_only_mode  # Flag for participant-only mode
         self.mention_role_id = None  # Add mention_role_id field
         
-        # Generate a unique ID for the event
-        timestamp = datetime_obj.strftime("%Y%m%d%H%M") if datetime_obj else datetime.now().strftime("%Y%m%d%H%M")
-        random_string = str(uuid.uuid4())[:8]  # Use first 8 characters of UUID
-        self.event_id = f"{timestamp}-{random_string}"
+        # Konvertiere datetime_obj zu einem tatsächlichen datetime-Objekt, falls es ein String ist
+        if datetime_obj is None:
+            try:
+                # Versuche, aus Datum und Uhrzeit ein datetime-Objekt zu erstellen
+                dt_str = f"{date} {time}"
+                self.datetime_obj = datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
+            except:
+                # Fallback auf aktuelle Zeit
+                self.datetime_obj = datetime.now()
+                logger.warning(f"Konnte kein datetime-Objekt aus Datum '{date}' und Zeit '{time}' erstellen. Verwende aktuelle Zeit.")
+        elif isinstance(datetime_obj, str):
+            try:
+                # Versuche, den String in ein datetime-Objekt zu konvertieren
+                self.datetime_obj = datetime.strptime(datetime_obj, "%d.%m.%Y %H:%M")
+            except:
+                # Fallback auf aktuelle Zeit
+                self.datetime_obj = datetime.now()
+                logger.warning(f"Konnte kein datetime-Objekt aus String '{datetime_obj}' erstellen. Verwende aktuelle Zeit.")
+        else:
+            # Bereits ein datetime-Objekt
+            self.datetime_obj = datetime_obj
+        
+        # Use provided event_id or generate a new one
+        if event_id:
+            self.event_id = event_id
+            logger.info(f"Using provided event_id: {event_id} for event: {title}")
+        else:
+            # Generate a unique ID for the event that includes the timestamp
+            timestamp = self.datetime_obj.strftime("%Y%m%d%H%M")
+            random_string = str(uuid.uuid4())[:8]  # Use first 8 characters of UUID
+            self.event_id = f"{timestamp}-{random_string}"
+            logger.info(f"Generated new event_id: {self.event_id} for event: {title}")
     
     def get(self, attr, default=None):
         """Emulates dictionary-like get method to maintain compatibility."""
         return getattr(self, attr, default)
     
+    @staticmethod
+    def get_datetime_from_event_id(event_id):
+        """Extrahiert den Zeitstempel aus der Event-ID und gibt ein datetime-Objekt zurück."""
+        try:
+            # Extrahiere den Zeitstempel-Teil (vor dem Bindestrich)
+            timestamp_str = event_id.split('-')[0]
+            # Konvertiere zu datetime
+            return datetime.strptime(timestamp_str, "%Y%m%d%H%M")
+        except:
+            # Bei Fehlern None zurückgeben
+            return None
+    
     def to_dict(self):
         """Convert the event to a dictionary for JSON serialization"""
+        # Convert datetime_obj to ISO format string for JSON serialization
+        datetime_str = None
+        if hasattr(self, 'datetime_obj') and self.datetime_obj:
+            try:
+                datetime_str = self.datetime_obj.isoformat()
+            except:
+                logger.warning(f"Could not convert datetime_obj to ISO format for event: {self.title}")
+        
         return {
             "title": self.title,
             "date": self.date,
@@ -1082,7 +1131,8 @@ class Event:
             "message_id": self.message_id,  # Store the event post's message ID
             "thread_id": self.thread_id,  # Store the event thread's ID
             "participant_only_mode": self.participant_only_mode,  # Store the flag for participant-only mode
-            "mention_role_id": self.mention_role_id  # Store the mention role ID
+            "mention_role_id": self.mention_role_id,  # Store the mention role ID
+            "datetime_obj": datetime_str  # Store the datetime as ISO format string
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
@@ -1117,14 +1167,31 @@ class EventModal(discord.ui.Modal, title="Eventify"):
         
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            # Create event object
+            # Parse date and time to create a datetime object
+            try:
+                date_parts = self.date.split('.')
+                time_parts = self.time.split(':')
+                
+                if len(date_parts) == 3 and len(time_parts) == 2:
+                    day, month, year = map(int, date_parts)
+                    hour, minute = map(int, time_parts)
+                    event_datetime = datetime(year, month, day, hour, minute)
+                else:
+                    # Fallback to current time if parsing fails
+                    event_datetime = datetime.now()
+                    logger.warning(f"Konnte kein datetime-Objekt aus Datum '{self.date}' und Zeit '{self.time}' erstellen. Verwende aktuelle Zeit.")
+            except Exception as e:
+                event_datetime = datetime.now()
+                logger.warning(f"Fehler beim Erstellen des datetime-Objekts: {e}. Verwende aktuelle Zeit.")
+            
+            # Create event object - always generate a new event_id
             event = Event(
                 title=self.title,
                 date=self.date,
                 time=self.time,
                 description=self.description.value,
                 roles=self.roles.value.split('\n') if self.roles.value and self.roles.value.lower() != 'none' else [],
-                datetime_obj=f"{self.date} {self.time}",
+                datetime_obj=event_datetime,
                 caller_id=self.caller_id,
                 caller_name=self.caller_name,
                 participant_only_mode=self.roles.value and self.roles.value.lower() == 'none'
@@ -1260,9 +1327,9 @@ async def create_event_listing(guild):
     """Erstellt ein Event Listing mit allen anstehenden Events"""
     try:
         # Load all upcoming events
-        events = load_upcoming_events()
+        events_data = load_upcoming_events()
         
-        if not events:
+        if not events_data or not events_data.get("events"):
             logger.info("No upcoming events to list.")
             return
         
@@ -1276,7 +1343,11 @@ async def create_event_listing(guild):
         
         # Filter events where no corresponding event post exists
         valid_events = []
-        for event in events:
+        for event in events_data["events"]:
+            if not isinstance(event, dict):
+                logger.warning(f"Invalid event format: {event}")
+                continue
+                
             message_id = event.get("message_id")
             
             # Skip events without message_id
@@ -1291,34 +1362,35 @@ async def create_event_listing(guild):
                 valid_events.append(event)
             except (discord.NotFound, discord.HTTPException, ValueError) as e:
                 logger.warning(f"Event-Post für '{event.get('title')}' (ID: {message_id}) existiert nicht mehr: {e}")
-                # Here we could also remove the event from the JSON
                 continue
         
         # Update the events.json to remove orphaned events
-        if len(valid_events) < len(events):
-            logger.info(f"Remove {len(events) - len(valid_events)} orphaned events from the JSON.")
-            save_events_to_json(valid_events)
+        if len(valid_events) < len(events_data["events"]):
+            logger.info(f"Remove {len(events_data['events']) - len(valid_events)} orphaned events from the JSON.")
+            save_events_to_json({"events": valid_events})
         
         if not valid_events:
             logger.info("No valid events with existing posts found.")
             return
         
-        # Use only valid events for the overview
-        events = valid_events
-        
         # Sort events by date and time
         try:
             # Sort by datetime_obj, if available
             events_with_datetime = []
-            for event in events:
+            for event in valid_events:
                 # Try to convert date and time to a datetime object
                 if 'datetime_obj' in event and event['datetime_obj']:
-                    # datetime_obj is already stored as a string, convert it back
-                    dt_str = event['datetime_obj']
-                    dt_obj = datetime.fromisoformat(dt_str)
-                    events_with_datetime.append((event, dt_obj))
+                    try:
+                        dt_obj = datetime.fromisoformat(event['datetime_obj'])
+                        events_with_datetime.append((event, dt_obj))
+                    except (ValueError, TypeError):
+                        # If datetime_obj parsing fails, try date and time fields
+                        dt_obj = None
                 else:
-                    # Fallback: Try to create a datetime object from the date and time
+                    dt_obj = None
+                
+                # If datetime_obj is not available or invalid, parse date and time
+                if dt_obj is None:
                     try:
                         date_str = event['date']
                         time_str = event['time']
@@ -1326,18 +1398,19 @@ async def create_event_listing(guild):
                         day, month, year = map(int, date_str.split('.'))
                         hour, minute = map(int, time_str.split(':'))
                         dt_obj = datetime(year, month, day, hour, minute)
-                        events_with_datetime.append((event, dt_obj))
                     except (ValueError, KeyError) as e:
                         logger.error(f"Error parsing date/time for event {event.get('title', 'unknown')}: {e}")
                         # Add the event with the current timestamp so it is displayed
-                        events_with_datetime.append((event, datetime.now()))
+                        dt_obj = datetime.now()
+                    
+                    events_with_datetime.append((event, dt_obj))
             
             # Sort the events by timestamp
             events_with_datetime.sort(key=lambda x: x[1])
             sorted_events = [event for event, _ in events_with_datetime]
         except Exception as e:
             logger.error(f"Error sorting events: {e}")
-            sorted_events = events  # Fallback: Unsorted events
+            sorted_events = valid_events  # Fallback: Unsorted events
         
         # Group events by date
         events_by_date = {}
@@ -1388,6 +1461,7 @@ async def create_event_listing(guild):
         logger.info("Event listing created successfully.")
     except Exception as e:
         logger.error(f"Error creating event listing: {e}")
+        logger.exception("Full traceback:")
 
 bot = MyBot()
 
@@ -1446,6 +1520,7 @@ def save_event_to_json(event):
     try:
         # Check if file exists, create it if not
         if not os.path.exists(EVENTS_JSON_FILE):
+            logger.info(f"Creating new events file: {EVENTS_JSON_FILE}")
             with open(EVENTS_JSON_FILE, 'w') as f:
                 json.dump({"events": []}, f, indent=4)
         
@@ -1453,6 +1528,7 @@ def save_event_to_json(event):
         with open(EVENTS_JSON_FILE, 'r') as f:
             try:
                 events_data = json.load(f)
+                logger.info(f"Loaded {len(events_data.get('events', []))} existing events from {EVENTS_JSON_FILE}")
             except json.JSONDecodeError:
                 # File is corrupted, reset it
                 logger.error(f"JSON file is corrupted. Resetting {EVENTS_JSON_FILE}")
@@ -1460,10 +1536,12 @@ def save_event_to_json(event):
         
         # Validate format
         if not isinstance(events_data, dict) or "events" not in events_data:
+            logger.warning(f"Invalid format in {EVENTS_JSON_FILE}, resetting to empty events list")
             events_data = {"events": []}
         
         # Clean old events (past events)
         events_data = clean_old_events(events_data)
+        logger.info(f"After cleaning old events, {len(events_data.get('events', []))} events remain")
         
         # Check if the event already exists by the event_id
         event_exists = False
@@ -1480,16 +1558,18 @@ def save_event_to_json(event):
             timestamp = datetime.now().strftime("%Y%m%d%H%M")
             random_string = str(uuid.uuid4())[:8]
             event_id = f"{timestamp}-{random_string}"
+            logger.info(f"Generated new event_id: {event_id} for event: {event.get('title') if isinstance(event, dict) else event.title}")
             
             if isinstance(event, dict):
                 event["event_id"] = event_id
             else:
                 event.event_id = event_id
         
-        # Search for the event by the ID
+        # Search for the event by the ID only - this is the unique identifier
         for i, e in enumerate(events_data["events"]):
             if e.get("event_id") == event_id:
                 # Update existing event
+                logger.info(f"Updating existing event with ID: {event_id}")
                 if hasattr(event, 'to_dict'):
                     events_data["events"][i] = event.to_dict()
                 else:
@@ -1497,20 +1577,11 @@ def save_event_to_json(event):
                 event_exists = True
                 break
         
-        # If the event is not found, search for the title (for backwards compatibility)
+        # If event doesn't exist, add it as a new event
+        # We no longer check for title match - this allows multiple events with the same title
         if not event_exists:
-            for i, e in enumerate(events_data["events"]):
-                if e["title"] == (event["title"] if isinstance(event, dict) else event.title):
-                    # Update existing event
-                    if hasattr(event, 'to_dict'):
-                        events_data["events"][i] = event.to_dict()
-                    else:
-                        events_data["events"][i] = event
-                    event_exists = True
-                    break
-                
-        # If event doesn't exist, add it
-        if not event_exists:
+            event_title = event["title"] if isinstance(event, dict) else event.title
+            logger.info(f"Adding new event: {event_title} with ID: {event_id}")
             if hasattr(event, 'to_dict'):
                 events_data["events"].append(event.to_dict())
             else:
@@ -1520,44 +1591,42 @@ def save_event_to_json(event):
         with open(EVENTS_JSON_FILE, 'w') as f:
             json.dump(events_data, f, indent=4)
         
+        logger.info(f"Successfully saved events to {EVENTS_JSON_FILE}, total events: {len(events_data.get('events', []))}")
         return True
     except Exception as e:
         logger.error(f"Error saving event to JSON: {e}")
         return False
 
 def clean_old_events(events_data):
-    """Remove events that are in the past"""
-    now = datetime.now()
-    
-    # Ensure the events_data has the expected format
+    """Remove events that are in the past (expired)"""
     if not isinstance(events_data, dict) or "events" not in events_data:
-        # Convert from old format to new format if needed
-        if isinstance(events_data, list):
-            events_data = {"events": events_data}
-        else:
-            events_data = {"events": []}
-    
-    # Filter out past events
+        logger.error("Invalid events_data format in clean_old_events")
+        return {"events": []}
+        
+    now = datetime.now()
     future_events = []
     removed_count = 0
     
     for event in events_data["events"]:
+        if not isinstance(event, dict):
+            logger.warning(f"Invalid event format: {event}")
+            continue
+            
+        event_title = event.get("title", "Unknown Event")
         keep_event = True
         
-        # Check if event has datetime_obj field (new format)
-        if "datetime_obj" in event and event["datetime_obj"]:
-            try:
-                event_dt = datetime.fromisoformat(event["datetime_obj"])
-                if event_dt <= now:
-                    keep_event = False
-                    removed_count += 1
-            except (ValueError, TypeError):
-                # If datetime parsing fails, try to parse from date and time
-                pass
-        
-        # If no datetime_obj or parsing failed, try to parse from date and time fields
-        if keep_event and "date" in event and "time" in event:
-            try:
+        try:
+            # Try to use datetime_obj first if available
+            if "datetime_obj" in event:
+                try:
+                    event_dt = datetime.fromisoformat(event["datetime_obj"])
+                except (ValueError, TypeError):
+                    event_dt = None
+            else:
+                event_dt = None
+            
+            # If datetime_obj is not available or invalid, parse date and time
+            if event_dt is None:
                 # Parse date (format: DD.MM.YYYY)
                 if "." in event["date"]:
                     day, month, year = map(int, event["date"].split("."))
@@ -1579,107 +1648,91 @@ def clean_old_events(events_data):
                 
                 # Create datetime object
                 event_dt = datetime(year, month, day, hour, minute)
+            
+            # Keep only future events (changed from 24 hours to 0 hours)
+            if event_dt < now:
+                keep_event = False
+                removed_count += 1
+                logger.info(f"Removing past event: {event_title} (Date: {event.get('date', 'N/A')}, Time: {event.get('time', 'N/A')})")
                 
-                # Keep only future events
-                if event_dt <= now:
-                    keep_event = False
-                    removed_count += 1
-            except (ValueError, TypeError, IndexError) as e:
-                logger.warning(f"Failed to parse date/time for event: {event.get('title', 'unknown')}, error: {e}")
+        except (ValueError, TypeError, KeyError, IndexError) as e:
+            logger.warning(f"Failed to parse date/time for event {event_title}: {e}")
+            # Keep the event if we can't parse its date/time
+            keep_event = True
         
         if keep_event:
             future_events.append(event)
+            logger.debug(f"Keeping event: {event_title}")
     
     if removed_count > 0:
-        logger.info(f"Removed {removed_count} past events")
+        logger.info(f"Removed {removed_count} past events, keeping {len(future_events)} events")
     
     events_data["events"] = future_events
     return events_data
 
 def load_upcoming_events():
-    """Load upcoming events from the JSON file"""
-    if not os.path.exists(EVENTS_JSON_FILE):
-        # Create the file with an empty events list if it doesn't exist
-        with open(EVENTS_JSON_FILE, 'w') as f:
-            json.dump({"events": []}, f, indent=4)
-        return []
-    
     try:
-        # Check if file is empty
-        if os.path.getsize(EVENTS_JSON_FILE) == 0:
-            # File is empty, initialize with empty events list
-            with open(EVENTS_JSON_FILE, 'w') as f:
+        # Use absolute path from the script's location
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        events_file = os.path.join(script_dir, 'events.json')
+        
+        if not os.path.exists(events_file):
+            logger.info("events.json nicht gefunden - erstelle neue Datei")
+            # Create the file with empty events list
+            with open(events_file, 'w', encoding='utf-8') as f:
                 json.dump({"events": []}, f, indent=4)
-            return []
+            return {"events": []}
             
-        with open(EVENTS_JSON_FILE, 'r') as f:
-            try:
-                events_data = json.load(f)
-            except json.JSONDecodeError:
-                # File is corrupted, reset it
-                logger.error(f"JSON file is corrupted. Resetting {EVENTS_JSON_FILE}")
-                with open(EVENTS_JSON_FILE, 'w') as f:
-                    json.dump({"events": []}, f, indent=4)
-                return []
-        
-        # Handle different data formats
-        if isinstance(events_data, dict) and "events" in events_data:
-            events = events_data["events"]
-        elif isinstance(events_data, list):
-            # Old format, convert it
-            events = events_data
-            # Save in new format
-            with open(EVENTS_JSON_FILE, 'w') as f:
-                json.dump({"events": events}, f, indent=4)
-        else:
-            # Invalid format, return empty list and reset file
-            logger.error(f"Invalid JSON format in {EVENTS_JSON_FILE}. Resetting file.")
-            events = []
-            with open(EVENTS_JSON_FILE, 'w') as f:
-                json.dump({"events": []}, f, indent=4)
-        
-        # Clean old events
-        events_data = {"events": events}
-        cleaned_data = clean_old_events(events_data)
-        
-        return cleaned_data["events"]
+        with open(events_file, 'r', encoding='utf-8') as f:
+            events = json.load(f)
+            if not isinstance(events, dict):
+                logger.error("Invalid events format in events.json")
+                return {"events": []}
+            if "events" not in events:
+                logger.error("Missing 'events' key in events.json")
+                return {"events": []}
+            
+            # Clean old events before returning
+            events = clean_old_events(events)
+            
+            # Save the cleaned events back to the file
+            with open(events_file, 'w', encoding='utf-8') as f:
+                json.dump(events, f, indent=4)
+                
+            logger.info(f"Loaded {len(events['events'])} events from events.json")
+            return events
+    except json.JSONDecodeError as e:
+        logger.error(f"Error decoding events.json: {e}")
+        return {"events": []}
     except Exception as e:
-        logger.error(f"Error loading upcoming events: {e}")
-        # Reset the file in case of error
-        try:
-            with open(EVENTS_JSON_FILE, 'w') as f:
-                json.dump({"events": []}, f, indent=4)
-        except Exception as write_error:
-            logger.error(f"Error resetting events file: {write_error}")
-        return []
+        logger.error(f"Unexpected error loading events: {e}")
+        return {"events": []}
 
 def save_events_to_json(events):
     """Save events to JSON file"""
     try:
         # Ensure we have the right format
         if isinstance(events, list):
-            # Sort the events by event_id
-            sorted_events = sorted(events, key=lambda x: x.get('event_id', ''))
-            events_data = {"events": sorted_events}
+            events_data = {"events": events}
         elif isinstance(events, dict) and "events" in events:
-            # Sort the events by event_id
-            sorted_events = sorted(events['events'], key=lambda x: x.get('event_id', ''))
-            events_data = {"events": sorted_events}
+            events_data = events
         else:
-            events_data = {"events": []}
             logger.error("Invalid events format for save_events_to_json")
+            return False
+            
+        # Clean old events
+        events_data = clean_old_events(events_data)
+            
+        # Use absolute path from the script's location
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        events_file = os.path.join(script_dir, 'events.json')
         
-        with open(EVENTS_JSON_FILE, 'w') as f:
+        with open(events_file, 'w', encoding='utf-8') as f:
             json.dump(events_data, f, indent=4)
+        logger.info(f"Successfully saved events to events.json, total events: {len(events_data['events'])}")
         return True
     except Exception as e:
         logger.error(f"Error saving events to JSON: {e}")
-        # Try to reset the file in case of severe corruption
-        try:
-            with open(EVENTS_JSON_FILE, 'w') as f:
-                json.dump({"events": []}, f, indent=4)
-        except Exception as write_error:
-            logger.error(f"Error resetting events file: {write_error}")
         return False
 
 @bot.tree.command(name="eventify", description="Erstelle ein Event")
@@ -1940,7 +1993,13 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
 
         # Load the event
         events = load_upcoming_events()
-        event = next((e for e in events if e['title'] == interaction.channel.name), None)
+        # First try to find the event by thread_id (most reliable)
+        thread_id = interaction.channel.id
+        event = next((e for e in events if e.get('thread_id') == thread_id), None)
+        
+        # Fallback: try to find by title (for backwards compatibility)
+        if not event:
+            event = next((e for e in events if e.get('title') == interaction.channel.name), None)
 
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
@@ -2012,7 +2071,13 @@ async def add_participant(
 
         # Load the event
         events = load_upcoming_events()
-        event = next((e for e in events if e['title'] == interaction.channel.name), None)
+        # First try to find the event by thread_id (most reliable)
+        thread_id = interaction.channel.id
+        event = next((e for e in events if e.get('thread_id') == thread_id), None)
+        
+        # Fallback: try to find by title (for backwards compatibility)
+        if not event:
+            event = next((e for e in events if e.get('title') == interaction.channel.name), None)
 
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
@@ -2143,7 +2208,13 @@ async def remove_participant(
 
         # Load the event
         events = load_upcoming_events()
-        event = next((e for e in events if e['title'] == interaction.channel.name), None)
+        # First try to find the event by thread_id (most reliable)
+        thread_id = interaction.channel.id
+        event = next((e for e in events if e.get('thread_id') == thread_id), None)
+        
+        # Fallback: try to find by title (for backwards compatibility)
+        if not event:
+            event = next((e for e in events if e.get('title') == interaction.channel.name), None)
 
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
@@ -2248,7 +2319,13 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
 
         # Load the event
         events = load_upcoming_events()
-        event = next((e for e in events if e['title'] == interaction.channel.name), None)
+        # First try to find the event by thread_id (most reliable)
+        thread_id = interaction.channel.id
+        event = next((e for e in events if e.get('thread_id') == thread_id), None)
+        
+        # Fallback: try to find by title (for backwards compatibility)
+        if not event:
+            event = next((e for e in events if e.get('title') == interaction.channel.name), None)
 
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
