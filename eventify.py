@@ -1439,14 +1439,14 @@ async def create_event_listing(guild):
                 # Add time, caller and title
                 if caller_id:
                     if message_id and message_id != "None" and message_id != None:
-                        date_description += f"{time} <@{caller_id}> [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
+                        date_description += f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit <@{caller_id}>\n"
                     else:
-                        date_description += f"{time} <@{caller_id}> {title}\n"
+                        date_description += f"{time}  {title} mit <@{caller_id}>\n"
                 else:
                     if message_id and message_id != "None" and message_id != None:
-                        date_description += f"{time} [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
+                        date_description += f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
                     else:
-                        date_description += f"{time} {title}\n"
+                        date_description += f"{time}  {title}\n"
             
             # Add the field with this date
             embed.add_field(
