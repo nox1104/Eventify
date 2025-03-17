@@ -750,15 +750,6 @@ class MyBot(discord.Client):
                                     await thread.delete()
                                     logger.info(f"Successfully deleted thread for expired event '{event_title}'")
                                     
-                                    # Sende Benachrichtigung
-                                    channel = guild.get_channel(CHANNEL_ID_EVENT)
-                                    if channel:
-                                        await channel.send(
-                                            f"Der Thread für das Event '{event_title}' wurde automatisch gelöscht, "
-                                            f"da das Event begonnen hat und die 30-minütige Nachfrist abgelaufen ist.", 
-                                            delete_after=300
-                                        )
-                                    
                                     # Markiere Event als "cleaned"
                                     event["status"] = "cleaned"
                                     events_cleaned += 1
@@ -1230,7 +1221,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             # Send a separate mention message if a mention role is specified
             if event.mention_role_id:
                 # Send mention but delete it right after (will still notify users)
-                await thread.send(f"<@&{event.mention_role_id}>", delete_after=0.1)
+                await thread.send(f"<@&{event.mention_role_id}> - {event.title}, {event.date}, {event.time}", delete_after=0.1)
             
             # Send confirmation
             await interaction.response.send_message(
@@ -1918,7 +1909,7 @@ async def eventify(
             # Send a separate mention message if a mention role is specified
             if event.mention_role_id:
                 # Send mention but delete it right after (will still notify users)
-                await thread.send(f"<@&{event.mention_role_id}>", delete_after=0.1)
+                await thread.send(f"<@&{event.mention_role_id}> - {event.title}, {event.date}, {event.time}", delete_after=0.1)
             
             # Create the event listing after creating the event
             await create_event_listing(interaction.guild)
