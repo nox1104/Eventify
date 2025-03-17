@@ -1931,7 +1931,7 @@ async def eventify(
 
             welcome_embed.add_field(
                 name="Benutzerhandbuch",
-                value="Im ❗[Benutzerhandbuch]❗(https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md) findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
+                value="Im ❗[Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md)❗ findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
                 inline=False
             )
 
