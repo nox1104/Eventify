@@ -975,6 +975,7 @@ class Event:
         self.participant_only_mode = participant_only_mode  # Flag for participant-only mode
         self.mention_role_id = None  # Add mention_role_id field
         self.status = "active"  # Neues Statusfeld: "active", "expired" oder "cleaned"
+        self.image_url = None  # Attribut für Bild-URL hinzufügen
         
         # Konvertiere datetime_obj zu einem tatsächlichen datetime-Objekt, falls es ein String ist
         if datetime_obj is None:
@@ -1050,7 +1051,8 @@ class Event:
             "participant_only_mode": self.participant_only_mode,  # Store the flag for participant-only mode
             "mention_role_id": self.mention_role_id,  # Store the mention role ID
             "datetime_obj": datetime_str,  # Store the datetime as ISO format string
-            "status": getattr(self, 'status', 'active')  # Store the status, default to "active" if not set
+            "status": getattr(self, 'status', 'active'),  # Store the status, default to "active" if not set
+            "image_url": self.image_url  # Store the image URL
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
@@ -1074,7 +1076,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
         )
         self.roles = discord.ui.TextInput(
             label="Rollen",
-            placeholder="Gib die Rollen ein (mit \\n getrennt, oder 'none' für Teilnehmer-only Modus)",
+            placeholder="Gib die Rollen ein (oder nur 'none' für den Nur-Teilnehmer-Modus)",
             style=discord.TextStyle.paragraph,
             required=False,
             max_length=1000
@@ -1692,7 +1694,7 @@ def save_events_to_json(events):
     date="Das Datum des Events (TT.MM.JJJJ)",
     time="Die Uhrzeit des Events (HH:mm)",
     description="Optional: Die Beschreibung des Events (\\n für Zeilenumbrüche)",
-    roles="Optional: Die Rollen (mit \\n getrennt, oder 'none' für Teilnehmer-only Modus)",
+    roles="Optional: Gib die Rollen ein (oder nur 'none' für den Nur-Teilnehmer-Modus)",
     mention_role="Optional: Eine Rolle, die beim Event erwähnt werden soll",
     image_url="Optional: Ein Link zu einem Bild, das im Event angezeigt werden soll"
 )
