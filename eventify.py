@@ -1173,7 +1173,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
 
             welcome_embed.add_field(
                 name="Benutzerhandbuch",
-                value="Im [Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md) findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
+                value="Im ❗[Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md)❗ findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
                 inline=False
             )
 
@@ -1832,7 +1832,7 @@ async def eventify(
 
             welcome_embed.add_field(
                 name="Benutzerhandbuch",
-                value="Im ❗[Benutzerhandbuch]❗(https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md) findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
+                value="Im ❗[Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md)❗ findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
                 inline=False
             )
 
@@ -1934,7 +1934,7 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
                         reminder_message += f"\n{message}\n"
                     
                     if event_link:
-                        reminder_message += f"\n🔗 [Zum Event]({event_link})"
+                        reminder_message += f"\n[Zum Event]({event_link})"
                     
                     await user.send(reminder_message)
                     success_count += 1
@@ -2024,7 +2024,7 @@ async def add_participant(
                     f"Datum: {event['date']}\n"
                     f"Uhrzeit: {event['time']}\n"
                     f"Neuer Kommentar: {comment}\n"
-                    f"\n🔗 [Zum Event]({event_link})"
+                    f"\n[Zum Event]({event_link})"
                 )
                 await user.send(dm_message)
             except Exception as e:
@@ -2067,7 +2067,7 @@ async def add_participant(
                 )
                 if comment:
                     dm_message += f"Kommentar: {comment}\n"
-                dm_message += f"\n🔗 [Zum Event]({event_link})"
+                dm_message += f"\n[Zum Event]({event_link})"
                 
                 await user.send(dm_message)
             except Exception as e:
@@ -2133,7 +2133,7 @@ async def remove_participant(
                         f"Du wurdest aus folgenden Rollen entfernt: {', '.join(removed_roles)}\n"
                         f"Datum: {event['date']}\n"
                         f"Uhrzeit: {event['time']}\n"
-                        f"\n🔗 [Zum Event]({event_link})"
+                        f"\n[Zum Event]({event_link})"
                     )
                     await user.send(dm_message)
                     await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt und hat eine DN erhalten.")
@@ -2169,7 +2169,7 @@ async def remove_participant(
                             f"Rolle: {role_name}\n"
                             f"Datum: {event['date']}\n"
                             f"Uhrzeit: {event['time']}\n"
-                            f"\n🔗 [Zum Event]({event_link})"
+                            f"\n[Zum Event]({event_link})"
                         )
                         await user.send(dm_message)
                         await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt und hat eine DN erhalten.")
@@ -2294,7 +2294,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                             f"Datum: {event['date']}\n"
                             f"Uhrzeit: {event['time']}\n"
                             f"Du wurdest automatisch in diese Rolle eingetragen.\n"
-                            f"\n🔗 [Zum Event]({event_link})"
+                            f"\n[Zum Event]({event_link})"
                         )
                         await proposer.send(dm_message)
                         dm_sent = True
