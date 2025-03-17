@@ -456,35 +456,44 @@ class MyBot(discord.Client):
                 logger.error(f"Error fetching event message: {e}")
                 return False
             
-            # Create the embed with CYAN color
+            # Create the embed with CYAN color - Titel bleibt unterstrichen
             title = event.get('title') if isinstance(event, dict) else event.title
-            embed = discord.Embed(title=f"__**{title}**__", color=0x0dceda)  # Wichtig: Cyan statt Grün
+            embed = discord.Embed(title=f"__**{title}**__", color=0x0dceda)
             
-            # Add caller information directly under the title
-            caller_id = event.get('caller_id') if isinstance(event, dict) else getattr(event, 'caller_id', None)
-            if caller_id:
-                embed.add_field(name="Erstellt von", value=f"<@{caller_id}>", inline=False)
-            
-            # Add mention role if available
-            mention_role_id = event.get('mention_role_id') if isinstance(event, dict) else getattr(event, 'mention_role_id', None)
-            if mention_role_id:
-                embed.add_field(name="Für", value=f"<@&{mention_role_id}>", inline=False)
-            
-            # Add event details
+            # Get date, time and weekday
             date = event.get('date') if isinstance(event, dict) else getattr(event, 'date', '')
             time = event.get('time') if isinstance(event, dict) else getattr(event, 'time', '')
-            
-            # Get weekday abbreviation
             weekday = get_weekday_abbr(date)
             
-            embed.add_field(name="Datum", value=f"{date} {weekday}", inline=True)
+            # Add date and time as inline fields (only these two in the first row)
+            embed.add_field(name="Datum", value=f"{date} ({weekday})", inline=True)
             embed.add_field(name="Uhrzeit", value=time, inline=True)
+            # Add a blank field to ensure only 2 fields in the first row
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
+            
+            # Add creator and mention role as inline fields (in the second row)
+            caller_id = event.get('caller_id') if isinstance(event, dict) else getattr(event, 'caller_id', None)
+            mention_role_id = event.get('mention_role_id') if isinstance(event, dict) else getattr(event, 'mention_role_id', None)
+            
+            creator_mention = f"<@{caller_id}>" if caller_id else "Unbekannt"
+            
+            embed.add_field(name="Von", value=creator_mention, inline=True)
+            
+            if mention_role_id:
+                embed.add_field(name="Für", value=f"<@&{mention_role_id}>", inline=True)
+            else:
+                # Add an empty field to maintain alignment
+                embed.add_field(name="\u200b", value="\u200b", inline=True)
+            
+            # Add a blank field to ensure only 2 fields in the second row
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
             
             # Add description
             description = event.get('description') if isinstance(event, dict) else getattr(event, 'description', '')
-            if len(description) > 1020:  # Leave room for ellipsis
-                description = description[:1020] + "..."
-            embed.add_field(name="Beschreibung", value=description, inline=False)
+            if description:
+                if len(description) > 1020:  # Leave room for ellipsis
+                    description = description[:1020] + "..."
+                embed.add_field(name="Beschreibung", value=description, inline=False)
             
             # ===== Role display based on v0.3.4 =====
             roles = event.get('roles', []) if isinstance(event, dict) else getattr(event, 'roles', [])
@@ -592,7 +601,7 @@ class MyBot(discord.Client):
 
                 # Add all regular roles as a single field
                 if field_content:
-                    embed.add_field(name="\u200b", value=field_content, inline=False)
+                    embed.add_field(name="Rollen", value=field_content, inline=False)
 
                 # Add Fill role section
                 if fill_index is not None:
@@ -1131,29 +1140,46 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 
             # Create embed
             embed = discord.Embed(
-                title=event.title,
-                description=event.description or "Keine Beschreibung vorhanden",
-                color=discord.Color.blue()
+                title=f"__**{event.title}**__",
+                color=0x0dceda
             )
             
             # Get weekday abbreviation
             weekday = get_weekday_abbr(event.date)
             
-            # Add date and time
-            embed.add_field(name="Datum", value=f"{event.date} {weekday}", inline=True)
+            # Add date and time as inline fields (only these two in the first row)
+            embed.add_field(name="Datum", value=f"{event.date} ({weekday})", inline=True)
             embed.add_field(name="Uhrzeit", value=event.time, inline=True)
+            # Add a blank field to ensure only 2 fields in the first row
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
+            
+            # Add creator and mention role as inline fields (in the second row)
+            creator_mention = f"<@{event.caller_id}>" if event.caller_id else "Unbekannt"
+            
+            embed.add_field(name="Von", value=creator_mention, inline=True)
+            
+            if event.mention_role_id:
+                embed.add_field(name="Für", value=f"<@&{event.mention_role_id}>", inline=True)
+            else:
+                # Add an empty field to maintain alignment
+                embed.add_field(name="\u200b", value="\u200b", inline=True)
+            
+            # Add a blank field to ensure only 2 fields in the second row
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
+            
+            # Add description if available
+            if event.description:
+                if len(event.description) > 1020:  # Leave room for ellipsis
+                    description = event.description[:1020] + "..."
+                else:
+                    description = event.description
+                embed.add_field(name="Beschreibung", value=description, inline=False)
             
             # Add roles if not in participant-only mode
             if not event.participant_only_mode:
                 roles_text = "\n".join(f"{i+1}. {role}" for i, role in enumerate(event.roles))
-                embed.add_field(name="Rollen", value=roles_text or "Keine Rollen definiert", inline=False)
-            
-            # Add caller information
-            embed.add_field(name="Erstellt von", value=f"<@{event.caller_id}>", inline=False)
-            
-            # Add mention role in embed if specified
-            if event.mention_role_id:
-                embed.add_field(name="Für", value=f"<@&{event.mention_role_id}>", inline=False)
+                if roles_text:
+                    embed.add_field(name="Rollen", value=roles_text, inline=False)
             
             # Add image if provided
             if event.image_url:
@@ -1411,7 +1437,7 @@ def get_weekday_abbr(date_str: str):
         
         # German abbreviations for weekdays
         weekday_abbrs = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
-        return f"({weekday_abbrs[weekday]})"
+        return f"{weekday_abbrs[weekday]}"
     except Exception as e:
         logger.error(f"Error getting weekday: {e}")
         return ""
@@ -1762,26 +1788,35 @@ async def eventify(
             # Create embed with horizontal frames
             embed = discord.Embed(title=f"__**{event.title}**__", color=0x0dceda)
             
-            # Add caller information directly under the title
-            if event.caller_id:
-                embed.add_field(name="Erstellt von", value=f"<@{event.caller_id}>", inline=False)
-            
-            # Add the role mention as a separate field if available
-            if event.mention_role_id:
-                embed.add_field(name="Für", value=f"<@&{event.mention_role_id}>", inline=False)
-            
             # Get weekday abbreviation
             weekday = get_weekday_abbr(event.date)
             
-            # Add event details
-            embed.add_field(name="Datum", value=f"{event.date} {weekday}", inline=True)
+            # Add date and time as inline fields (only these two in the first row)
+            embed.add_field(name="Datum", value=f"{event.date} ({weekday})", inline=True)
             embed.add_field(name="Uhrzeit", value=event.time, inline=True)
+            # Add a blank field to ensure only 2 fields in the first row
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
+            
+            # Add creator and mention role as inline fields (in the second row)
+            creator_mention = f"<@{event.caller_id}>" if event.caller_id else "Unbekannt"
+            
+            embed.add_field(name="Von", value=creator_mention, inline=True)
+            
+            if event.mention_role_id:
+                embed.add_field(name="Für", value=f"<@&{event.mention_role_id}>", inline=True)
+            else:
+                # Add an empty field to maintain alignment
+                embed.add_field(name="\u200b", value="\u200b", inline=True)
+            
+            # Add a blank field to ensure only 2 fields in the second row
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
             
             # Truncate description if it's too long (Discord limit is 1024 characters per field)
             description_text = event.description
-            if len(description_text) > 1020:  # Leave room for ellipsis
-                description_text = description_text[:1020] + "..."
-            embed.add_field(name="Beschreibung", value=description_text, inline=False)
+            if description_text:
+                if len(description_text) > 1020:  # Leave room for ellipsis
+                    description_text = description_text[:1020] + "..."
+                embed.add_field(name="Beschreibung", value=description_text, inline=False)
             
             # Extract regular roles (everything except FillALL)
             regular_roles = []
@@ -1818,7 +1853,7 @@ async def eventify(
 
             # Add all regular roles as a single field
             if field_content:
-                embed.add_field(name="\u200b", value=field_content, inline=False)
+                embed.add_field(name="Rollen", value=field_content, inline=False)
             
             # Add Fill role section
             if fill_index is not None:
