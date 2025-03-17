@@ -77,7 +77,7 @@ Du hast zwei Möglichkeiten, ein Event zu erstellen:
      - Liste der verfügbaren Rollen, eine pro Zeile
      - Leerzeilen werden ignoriert
      - Mit Text in Klammern, z.B. "(Core)" setzt man Abschnittsüberschriften
-     - Schreibe einfach "none" für Events ohne spezifische Rollen (z.B. Gildenversammlungen, Gatherevents) - es wird dann automatisch eine einfache Teilnehmerliste erstellt
+     - Schreibe einfach "keine", "null" oder "none" für Events ohne spezifische Rollen (z.B. Gildenversammlungen, Gatherevents) - es wird dann automatisch eine einfache Teilnehmerliste erstellt
 
 ### Teilnehmer erinnern
 

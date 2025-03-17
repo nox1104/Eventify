@@ -80,87 +80,9 @@ class MyBot(discord.Client):
         print("Slash commands synchronized!")
         print("Bot is ready and listening for messages.")
         
-        # Run migrations for existing events
-        await self.migrate_events()
-        
         # Start the loops
         self.delete_old_event_threads.start()
         self.cleanup_event_channel.start()  # New loop added
-
-    async def migrate_events(self):
-        """Migrate existing events to ensure they have thread_id if a thread exists"""
-        logger.info("Running event migrations...")
-        
-        try:
-            # Load all events
-            events = load_upcoming_events()
-            events_updated = False
-            
-            for event in events:
-                # Skip events that already have thread_id
-                if 'thread_id' in event and event['thread_id']:
-                    continue
-                    
-                event_title = event.get('title')
-                message_id = event.get('message_id')
-                
-                if not message_id or not event_title:
-                    continue
-                    
-                logger.info(f"Migrating event: {event_title} (message_id: {message_id})")
-                
-                # Find the thread by event title
-                for guild in self.guilds:
-                    channel = guild.get_channel(CHANNEL_ID_EVENT)
-                    if not channel:
-                        continue
-                        
-                    # Check active threads first
-                    thread_found = False
-                    for thread in channel.threads:
-                        if thread.name == event_title:
-                            logger.info(f"Found thread for event {event_title}: {thread.id}")
-                            event['thread_id'] = thread.id
-                            events_updated = True
-                            thread_found = True
-                            break
-                            
-                    if thread_found:
-                        continue
-                        
-                    # Check archived threads if not found
-                    try:
-                        async for archived_thread in channel.archived_threads():
-                            if archived_thread.name == event_title:
-                                logger.info(f"Found archived thread for event {event_title}: {archived_thread.id}")
-                                event['thread_id'] = archived_thread.id
-                                events_updated = True
-                                break
-                    except Exception as e:
-                        logger.error(f"Error checking archived threads: {e}")
-                        
-                    # Try to find through message
-                    try:
-                        message = await channel.fetch_message(int(message_id))
-                        if message and hasattr(message, 'thread') and message.thread:
-                            logger.info(f"Found thread through message for event {event_title}: {message.thread.id}")
-                            event['thread_id'] = message.thread.id
-                            events_updated = True
-                    except Exception as e:
-                        logger.error(f"Error finding thread through message: {e}")
-            
-            # Save updated events
-            if events_updated:
-                logger.info("Saving updated events with thread_id...")
-                save_events_to_json(events)
-                logger.info("Events migration completed successfully")
-            else:
-                logger.info("No events needed migration")
-                
-        except Exception as e:
-            logger.error(f"Error during events migration: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
 
     async def on_message(self, message):
         logger.info(f"Message received: {message.content} in channel: {message.channel.name if hasattr(message.channel, 'name') else 'Unknown'}")
@@ -551,14 +473,18 @@ class MyBot(discord.Client):
             # Add event details
             date = event.get('date') if isinstance(event, dict) else getattr(event, 'date', '')
             time = event.get('time') if isinstance(event, dict) else getattr(event, 'time', '')
-            embed.add_field(name="Date", value=date, inline=True)
-            embed.add_field(name="Time", value=time, inline=True)
+            
+            # Get weekday abbreviation
+            weekday = get_weekday_abbr(date)
+            
+            embed.add_field(name="Datum", value=f"{date} {weekday}", inline=True)
+            embed.add_field(name="Uhrzeit", value=time, inline=True)
             
             # Add description
             description = event.get('description') if isinstance(event, dict) else getattr(event, 'description', '')
             if len(description) > 1020:  # Leave room for ellipsis
                 description = description[:1020] + "..."
-            embed.add_field(name="Description", value=description, inline=False)
+            embed.add_field(name="Beschreibung", value=description, inline=False)
             
             # ===== Role display based on v0.3.4 =====
             roles = event.get('roles', []) if isinstance(event, dict) else getattr(event, 'roles', [])
@@ -1151,165 +1077,94 @@ class Event:
 class EventModal(discord.ui.Modal, title="Eventify"):
     def __init__(self, title: str, date: str, time: str, caller_id: str, caller_name: str, mention_role: discord.Role = None, image_url: str = None):
         super().__init__()
-
-        self.description_input = discord.ui.TextInput(label="Beschreibung", style=discord.TextStyle.paragraph,
-                                                      placeholder="Gib eine Beschreibung für das Event ein.",
-                                                      required=True)
-        self.add_item(self.description_input)
-
-        self.roles_input = discord.ui.TextInput(label="Rollen (getrennt durch Zeilenumbrüche)",
-                                                 style=discord.TextStyle.paragraph,
-                                                 placeholder="Gib die Rollen ein oder schreibe 'none' für eine einfache Teilnehmerliste.",
-                                                 required=True)
-        self.add_item(self.roles_input)
-
         self.title = title
         self.date = date
         self.time = time
-        self.full_datetime = None  # Storage for the datetime object
-        self.caller_id = caller_id  # Discord ID des Erstellers
-        self.caller_name = caller_name  # Name des Erstellers
+        self.caller_id = caller_id
+        self.caller_name = caller_name
         self.mention_role = mention_role
         self.image_url = image_url
-
+        
+        # Add input fields
+        self.description = discord.ui.TextInput(
+            label="Beschreibung",
+            placeholder="Beschreibe dein Event...",
+            style=discord.TextStyle.paragraph,
+            required=False,
+            max_length=4000
+        )
+        self.roles = discord.ui.TextInput(
+            label="Rollen",
+            placeholder="Gib die Rollen ein (mit \\n getrennt, oder 'none' für Teilnehmer-only Modus)",
+            style=discord.TextStyle.paragraph,
+            required=False,
+            max_length=1000
+        )
+        
+        self.add_item(self.description)
+        self.add_item(self.roles)
+        
     async def on_submit(self, interaction: discord.Interaction):
-        print("on_submit method called.")
         try:
-            description = self.description_input.value
-            
-            # Get roles from input, filter out empty lines
-            raw_roles_input = self.roles_input.value.strip()
-            
-            # Check if "none", "nan" or similar inputs were made (case-insensitive)
-            is_participant_only_mode = raw_roles_input.lower() in ["none", "nan", "null", "keine", "nix", "nö"]
-            fill_index = None  # Initialize fill_index outside the condition
-            
-            if is_participant_only_mode:
-                # For "none" only create a "Participants" role
-                roles = ["Participants"]
-            else:
-                # Normal mode with Fill role
-                roles = [role.strip() for role in raw_roles_input.splitlines() if role.strip()]
-                
-                # Find the Fill role - case insensitive check
-                fill_index = next((i for i, role in enumerate(roles) if role.lower() in ["fill", "fillall"]), None)
-                if fill_index is None:
-                    # If no Fill role found, add one
-                    fill_index = len(roles)
-                    roles.append("FillALL")
-                
-                # Ensure FillALL always appears as the last role
-                if fill_index < len(roles) - 1:
-                    # Remove FillALL from its current position
-                    fill_role = roles.pop(fill_index)
-                    # Add it back at the end
-                    roles.append(fill_role)
-                    # Update the fill_index to match the new position
-                    fill_index = len(roles) - 1
-            
+            # Create event object
             event = Event(
                 title=self.title,
                 date=self.date,
                 time=self.time,
-                description=description,
-                roles=roles,
-                datetime_obj=self.full_datetime,
+                description=self.description.value,
+                roles=self.roles.value.split('\n') if self.roles.value and self.roles.value.lower() != 'none' else [],
+                datetime_obj=f"{self.date} {self.time}",
                 caller_id=self.caller_id,
                 caller_name=self.caller_name,
-                participant_only_mode=is_participant_only_mode
+                participant_only_mode=self.roles.value and self.roles.value.lower() == 'none'
             )
-
-            # Store the mention role ID separately in the event object
-            if self.mention_role:
-                event.mention_role_id = str(self.mention_role.id)
-                
-            # Add the image URL if available
-            if self.image_url:
-                event.image_url = self.image_url
-                
-            # Save the event to JSON
-            save_event_to_json(event)
-            print("Event saved to JSON.")
-
-            # Silently close the modal without sending a message
-            await interaction.response.defer()
-
-            channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
             
-            # Create embed with horizontal frames
-            embed = discord.Embed(title=f"__**{event.title}**__", color=0x0dceda)
+            # Create embed
+            embed = discord.Embed(
+                title=event.title,
+                description=event.description or "Keine Beschreibung vorhanden",
+                color=discord.Color.blue()
+            )
             
-            # Add caller information directly under the title
-            if event.caller_id:
-                embed.add_field(name="Erstellt von", value=f"<@{event.caller_id}>", inline=False)
+            # Get weekday abbreviation
+            weekday = get_weekday_abbr(event.date)
             
-            # Add the mention role as a separate field if it exists
+            # Add date and time
+            embed.add_field(name="Datum", value=f"{event.date} {weekday}", inline=True)
+            embed.add_field(name="Uhrzeit", value=event.time, inline=True)
+            
+            # Add roles if not in participant-only mode
+            if not event.participant_only_mode:
+                roles_text = "\n".join(f"{i+1}. {role}" for i, role in enumerate(event.roles))
+                embed.add_field(name="Rollen", value=roles_text or "Keine Rollen definiert", inline=False)
+            
+            # Add caller information
+            embed.add_field(name="Erstellt von", value=f"<@{event.caller_id}>", inline=False)
+            
+            # Add mention role in embed if specified
             if self.mention_role:
                 embed.add_field(name="Für", value=f"<@&{self.mention_role.id}>", inline=False)
             
-            # Add event details
-            embed.add_field(name="Date", value=event.date, inline=True)
-            embed.add_field(name="Time", value=event.time, inline=True)
+            # Add image if provided
+            if self.image_url:
+                embed.set_image(url=self.image_url)
             
-            # Truncate description if it's too long (Discord limit is 1024 characters per field)
-            description_text = event.description
-            if len(description_text) > 1020:  # Leave room for ellipsis
-                description_text = description_text[:1020] + "..."
-            embed.add_field(name="Description", value=description_text, inline=False)
+            # Set footer with event ID
+            embed.set_footer(text=f"Event ID: {event.event_id}")
             
-            # Extract regular roles (everything except FillALL)
-            regular_roles = []
-            section_headers = []
-            for i, role in enumerate(roles):
-                if i != fill_index:  # Everything except the FillALL role
-                    # Check if it's a section header (text in parentheses)
-                    if role.strip().startswith('(') and role.strip().endswith(')'):
-                        section_headers.append((i, role))
-                    else:
-                        regular_roles.append((i, role))
-
-            # Creation of the content for all regular roles
-            field_content = ""
-            current_section = None
-            role_counter = 1  # Counter for actual roles (excluding section headers)
-
-            # Go through all roles and section headers in the original order
-            all_items = section_headers + regular_roles
-            all_items.sort(key=lambda x: x[0])  # Sort by the original index
-
-            for role_idx, role_name in all_items:
-                # Check if it's a section header
-                if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
-                    # Add a blank line if it's not the first header
-                    if field_content:
-                        field_content += "\n"
-                    # Remove parentheses from section header
-                    header_text = role_name.strip()[1:-1]  # Remove first and last character
-                    field_content += f"**{header_text}**\n"
-                else:
-                    # This is a normal role
-                    field_content += f"{role_counter}. {role_name}\n"
-                    role_counter += 1
-
-            # Add all regular roles as a single field
-            if field_content:
-                embed.add_field(name="\u200b", value=field_content, inline=False)
-            
-            # Add Fill role section
-            if fill_index is not None:
-                # Add Fill role header
-                fill_text = f"{role_counter}. {roles[fill_index]}"
-                embed.add_field(name=fill_text, value="", inline=False)
-            
-            # Send the event post and create a thread
+            # Send event post and create thread
+            channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
             event_post = await channel.send(embed=embed)
             thread = await event_post.create_thread(name=event.title)
             
-            # Save both the message ID and thread ID
+            # Save both message ID and thread ID
             event.message_id = event_post.id
             event.thread_id = thread.id
+            
+            # Save event to JSON
             save_event_to_json(event)
             
+            # Send welcome information to the thread
             welcome_embed = discord.Embed(
                 title="Das Event wurde erfolgreich erstellt.",
                 description="Hier findest du alle wichtigen Informationen:",
@@ -1341,19 +1196,28 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             welcome_embed.add_field(name="Support", value="Fragen, Bugs oder Feature-Vorschläge gehen an <@778914224613228575>", inline=False)
 
             await thread.send(embed=welcome_embed)
-            print("Event message and thread created.")
             
-            # Create the event listing after the event is created
-            await create_event_listing(interaction.guild)
+            # Send a separate mention message if a mention role is specified
+            if self.mention_role:
+                await thread.send(f"{self.mention_role.mention} Neues Event: {event.title}")
             
+            # Send confirmation
+            await interaction.response.send_message(
+                f"Event '{event.title}' wurde erstellt!\n"
+                f"Thread: {thread.mention}",
+                ephemeral=True
+            )
+            
+            # Mention role if specified (in main channel)
+            if self.mention_role:
+                await channel.send(f"{self.mention_role.mention} Neues Event erstellt!")
+                
         except Exception as e:
-            print(f"Error creating event message or thread: {e}")
-            # Since we already responded to the interaction, we can't use interaction.response again
-            try:
-                # Try to send a follow-up message instead
-                await interaction.followup.send(f"Ein Fehler ist aufgetreten: {str(e)}", ephemeral=True)
-            except Exception as follow_up_error:
-                print(f"Couldn't send follow-up error message: {follow_up_error}")
+            logger.error(f"Error in EventModal on_submit: {e}")
+            await interaction.response.send_message(
+                "Es gab einen Fehler beim Erstellen des Events. Bitte versuche es später erneut.",
+                ephemeral=True
+            )
 
 async def create_event_listing(guild):
     """Erstellt ein Event Listing mit allen anstehenden Events"""
@@ -1448,7 +1312,7 @@ async def create_event_listing(guild):
         
         # Create the embed
         embed = discord.Embed(
-            title="Event overview",
+            title="Eventübersicht",
             color=0x0dceda  # Eventify Cyan
         )
         
@@ -1522,6 +1386,24 @@ def parse_time(time_str: str):
     except Exception as e:
         print(f"Error parsing time: {e}")
         return None
+
+def get_weekday_abbr(date_str: str):
+    """
+    Returns the German weekday abbreviation for a date in format DD.MM.YYYY.
+    Returns the abbreviation in parentheses like '(Mo)', '(Di)', etc.
+    """
+    try:
+        # Parse the date from DD.MM.YYYY format
+        day, month, year = map(int, date_str.split('.'))
+        date_obj = datetime(int(year), int(month), int(day))
+        weekday = date_obj.weekday()
+        
+        # German abbreviations for weekdays
+        weekday_abbrs = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+        return f"({weekday_abbrs[weekday]})"
+    except Exception as e:
+        logger.error(f"Error getting weekday: {e}")
+        return ""
 
 def save_event_to_json(event):
     try:
@@ -1877,15 +1759,18 @@ async def eventify(
             if mention_role:
                 embed.add_field(name="Für", value=f"<@&{mention_role.id}>", inline=False)
             
+            # Get weekday abbreviation
+            weekday = get_weekday_abbr(event.date)
+            
             # Add event details
-            embed.add_field(name="Date", value=event.date, inline=True)
-            embed.add_field(name="Time", value=event.time, inline=True)
+            embed.add_field(name="Datum", value=f"{event.date} {weekday}", inline=True)
+            embed.add_field(name="Uhrzeit", value=event.time, inline=True)
             
             # Truncate description if it's too long (Discord limit is 1024 characters per field)
             description_text = event.description
             if len(description_text) > 1020:  # Leave room for ellipsis
                 description_text = description_text[:1020] + "..."
-            embed.add_field(name="Description", value=description_text, inline=False)
+            embed.add_field(name="Beschreibung", value=description_text, inline=False)
             
             # Extract regular roles (everything except FillALL)
             regular_roles = []
@@ -1971,6 +1856,10 @@ async def eventify(
 
             await thread.send(embed=welcome_embed)
             
+            # Send a separate mention message if a mention role is specified
+            if mention_role:
+                await thread.send(f"{mention_role.mention} Neues Event: {event.title}")
+
             # Create the event listing after creating the event
             await create_event_listing(interaction.guild)
             
