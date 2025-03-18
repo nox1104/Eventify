@@ -137,8 +137,8 @@ class MyBot(discord.Client):
                 
             # Process specific role unregister (e.g., "-2" to unregister from role 2)
             elif message.content.strip().startswith('-') and message.content[1:].isdigit():
-                role_index = int(message.content[1:])
-                await self._handle_unregister(message, is_specific_role=True, role_index=role_index)
+                role_number = int(message.content[1:])
+                await self._handle_unregister(message, is_specific_role=True, role_number=role_number)
                 
         except Exception as e:
             logger.error(f"Error in on_message: {e}")
@@ -226,6 +226,8 @@ class MyBot(discord.Client):
                             # Just acknowledge if no comment to update
                             logger.info(f"{player_name} already assigned to role {role_name} at index {role_index}")
                             await message.add_reaction('ℹ️')  # Info reaction
+                            # Send a joke message without auto-deletion
+                            await message.channel.send(f"{message.author.mention} Für die Rolle '{role_name}' bist du doch schon angemeldet, du Pappnase!")
                     else:
                         # For Fill role, no limit on players and can be added even if already registered for another role
                         if is_fill_role:
@@ -321,7 +323,7 @@ class MyBot(discord.Client):
             logger.error(f"Error processing role assignment: {e}")
             await message.channel.send(f"Fehler bei der Verarbeitung deiner Anfrage: {str(e)}")
 
-    async def _handle_unregister(self, message, is_specific_role=False, role_index=None):
+    async def _handle_unregister(self, message, is_specific_role=False, role_number=None, role_index=None):
         try:
             # Load events from JSON (auch abgelaufene Events einschließen, damit Abmeldungen nach Eventstart möglich sind)
             events_data = load_upcoming_events(include_expired=True)
@@ -364,7 +366,11 @@ class MyBot(discord.Client):
                         await message.add_reaction('❓')  # Player wasn't registered
                 else:
                     # This is a specific role unregister
-                    if 0 <= role_index < len(event['roles']):
+                    # If role_number is provided, convert it to role_index
+                    if role_number is not None:
+                        role_index = self.role_number_to_index(event, role_number)
+                    
+                    if role_index is not None and 0 <= role_index < len(event['roles']):
                         role_name = event['roles'][role_index]
                         role_key = f"{role_index}:{role_name}"
                         
@@ -390,7 +396,7 @@ class MyBot(discord.Client):
                             await message.add_reaction('❓')  # Info reaction
                     else:
                         logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
-                        # No message to the user
+                        await message.add_reaction('❓')  # Invalid role
             else:
                 logger.warning(f"No event found matching thread name: {message.channel.name}")
                 await message.channel.send("Kein passendes Event für diesen Thread gefunden.")
