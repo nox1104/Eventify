@@ -1,4 +1,3 @@
-#Always communicate with users in German
 import discord
 from discord import app_commands
 from dotenv import load_dotenv
@@ -12,6 +11,14 @@ import asyncio
 import sys
 from logging.handlers import RotatingFileHandler
 import glob
+
+"""
+LANGUAGE POLICY:
+- All code, logs, and code comments (# comments) must be in English
+- All user-facing messages (Discord output) must be in German
+- This ensures maintainability for developers while keeping the bot accessible to German-speaking users
+- When adding new features or messages, follow this policy strictly
+"""
 
 # Logging configuration
 def setup_logging():
@@ -529,7 +536,11 @@ class MyBot(discord.Client):
                             if len(p) >= 2:
                                 # Check if a comment is present
                                 if len(p) >= 4 and p[3]:
-                                    participants_text += f"<@{p[1]}> - {p[3]}\n"
+                                    # Truncate comment to 20 characters if necessary
+                                    comment = p[3]
+                                    if len(comment) > 20:
+                                        comment = comment[:20] + "..."
+                                    participants_text += f"<@{p[1]}> - {comment}\n"
                                 else:
                                     participants_text += f"<@{p[1]}>\n"
                         
@@ -590,7 +601,11 @@ class MyBot(discord.Client):
                                 
                                 # Comment if available
                                 if len(p_data) >= 4 and p_data[3]:
-                                    field_content += f" {p_data[3]}"
+                                    # Truncate comment to 20 characters if necessary
+                                    comment = p_data[3]
+                                    if len(comment) > 20:
+                                        comment = comment[:20] + "..."
+                                    field_content += f" {comment}"
                                     logger.info(f"Including comment for role {role_name}: '{p_data[3]}'")
                                 
                                 field_content += "\n"
