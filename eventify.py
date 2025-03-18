@@ -556,10 +556,10 @@ class MyBot(discord.Client):
                                     participants_text += f"<@{p[1]}>\n"
                         
                         # Add the field - Teilnehmer role with signup instruction
-                        embed.add_field(name=f"{participant_title} (Anmeldung mit \"1\")", value=participants_text or "\u200b", inline=False)
+                        embed.add_field(name=f"{participant_title}", value=participants_text or "\u200b", inline=False)
                     else:
                         # Empty participant list - Teilnehmer role with signup instruction
-                        embed.add_field(name=f"{participant_title} (Anmeldung mit \"1\")", value="\u200b", inline=False)
+                        embed.add_field(name=f"{participant_title}", value="\u200b", inline=False)
             else:
                 # Standard mode with multiple roles
                 # Find the Fill role - case insensitive check
@@ -1082,7 +1082,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
         )
         self.roles = discord.ui.TextInput(
             label="Rollen",
-            placeholder="Gib die Rollen ein (oder nur 'none' für den Nur-Teilnehmer-Modus)",
+            placeholder="Gib die Rollen ein (oder frei lassen für den Nur-Teilnehmer-Modus)",
             style=discord.TextStyle.paragraph,
             required=False,
             max_length=1000
@@ -1111,15 +1111,16 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 logger.warning(f"Fehler beim Erstellen des datetime-Objekts: {e}. Verwende aktuelle Zeit.")
             
             # Check if we're in participant-only mode
-            is_participant_only_mode = self.roles.value and self.roles.value.lower() == 'none'
+            roles_input = self.roles.value.strip() if self.roles.value else ""
+            is_participant_only_mode = not roles_input
             
             # Set roles based on mode
             if is_participant_only_mode:
-                # Bei "none" nur eine "Teilnehmer"-Rolle erstellen
+                # Bei leerer Eingabe nur eine "Teilnehmer"-Rolle erstellen
                 roles = ["Teilnehmer"]
             else:
                 # Normaler Modus mit Rollen aus der Eingabe
-                roles = self.roles.value.split('\n') if self.roles.value else []
+                roles = roles_input.split('\n')
             
             # Create event object - always generate a new event_id
             event = Event(
@@ -1190,7 +1191,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                     embed.add_field(name="Rollen", value=roles_text, inline=False)
             else:
                 # Im Teilnehmer-only Modus, zeige die Teilnehmer-Rolle an
-                embed.add_field(name="Rollen", value="1. Teilnehmer (Anmeldung mit \"1\")", inline=False)
+                embed.add_field(name="Rollen", value="1. Teilnehmer", inline=False)
             
             # Send event post and create thread
             channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
@@ -1711,7 +1712,7 @@ def save_events_to_json(events):
     date="Das Datum des Events (TT.MM.JJJJ)",
     time="Die Uhrzeit des Events (HH:mm)",
     description="Optional: Die Beschreibung des Events (\\n für Zeilenumbrüche)",
-    roles="Optional: Gib die Rollen ein (oder nur 'none' für den Nur-Teilnehmer-Modus)",
+    roles="Optional: Gib die Rollen ein (diesen Parameter weglassen für Nur-Teilnehmer-Modus)",
     mention_role="Optional: Eine Rolle, die beim Event erwähnt werden soll",
     image_url="Optional: Ein Link zu einem Bild, das im Event angezeigt werden soll"
 )
@@ -1746,18 +1747,19 @@ async def eventify(
         formatted_date = parsed_date.strftime("%d.%m.%Y")
         formatted_time = parsed_time.strftime("%H:%M")
 
-        if description is not None and roles is not None:
+        if description is not None:
             # Direct event creation without modal
             # Replace literal \n with actual line breaks
             description = description.replace('\\n', '\n')
-            roles_input = roles.replace('\\n', '\n').strip()
+            # Behandle roles=None als leeren String (für Teilnehmer-only Modus)
+            roles_input = roles.replace('\\n', '\n').strip() if roles else ""
             
             # Check if we're in participant-only mode
-            is_participant_only_mode = roles_input.lower() == "none"
+            is_participant_only_mode = not roles_input
             fill_index = None
             
             if is_participant_only_mode:
-                # For "none"/"nan", create only a "Teilnehmer" role
+                # For empty input, create only a "Teilnehmer" role
                 roles_list = ["Teilnehmer"]
             else:
                 # Normal mode with Fill role

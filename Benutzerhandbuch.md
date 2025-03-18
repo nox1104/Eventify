@@ -54,7 +54,7 @@ Mit dem Befehl `/eventify` kannst du ein neues Event erstellen. Folgende Paramet
 - `date`: Das Datum des Events im Format TT.MM.JJJJ
 - `time`: Die Uhrzeit des Events im Format HH:mm
 - `description` (optional): Die Beschreibung des Events (mit \n für Zeilenumbrüche)
-- `roles` (optional): Liste der Rollen, getrennt durch \n (oder "none" für Teilnehmer-only Modus)
+- `roles` (optional): Liste der Rollen, getrennt durch \n (für den Nur-Teilnehmer-Modus diesen Parameter weglassen)
 - `mention_role` (optional): Eine Rolle, die beim Event erwähnt werden soll
 - `image_url` (optional): Ein Link zu einem Bild, das im Event angezeigt werden soll
   - Das Bild wird unter der Beschreibung angezeigt
@@ -77,7 +77,7 @@ Du hast zwei Möglichkeiten, ein Event zu erstellen:
      - Liste der verfügbaren Rollen, eine pro Zeile
      - Leerzeilen werden ignoriert
      - Mit Text in Klammern, z.B. "(Core)" setzt man Abschnittsüberschriften
-     - Schreibe einfach "keine", "null" oder "none" für Events ohne spezifische Rollen (z.B. Gildenversammlungen, Gatherevents) - es wird dann automatisch eine einfache Teilnehmerliste erstellt
+     - Lasse das "Rollen"-Feld einfach leer für Events ohne spezifische Rollen (z.B. Gildenversammlungen, Gatherevents) - es wird dann automatisch eine einfache Teilnehmerliste erstellt
 
 ### Teilnehmer erinnern
 
@@ -197,14 +197,19 @@ Der Bot hält den Event-Kanal automatisch sauber und übersichtlich:
 
 ## Beispiele
 
-### Normales Event erstellen
+### Event erstellen mit der Modal-Methode (nur 'title', 'date' und 'time' ausfüllen)
+```
+/eventify 
+```
+
+### Event nur per Prompt erstellen
 ```
 /eventify title: date: time: description: Wöchentlicher Raid\nBringt Buffs und Flasks mit\nSeid pünktlich! roles: Tank\nHealer\nDPS\nRanged DPS
 ```
 
-### Event im Nur-Teilnehmer Modus erstellen
+### Event im Nur-Teilnehmer-Modus erstellen (ohne 'roles', aber mind. einen Parameter zusätzlich zu 'title', 'date' und 'time')
 ```
-/eventify title: date: time: description: Monatliches Meeting\nThemen:\n- Gildenbank\n- Events\n- Sonstiges roles: none
+/eventify title: date: time: description: Monatliches Meeting\nThemen:\n- Gildenbank\n- Events\n- Sonstiges
 ```
 
 ### Rollen-Liste Beispiel
