@@ -97,6 +97,27 @@ Als Event-Ersteller kannst du allen eingetragenen Teilnehmern eine Erinnerung sc
 
 Nur der Event-Ersteller kann diesen Befehl verwenden.
 
+### Event absagen
+
+Als Event-Ersteller kannst du ein Event absagen und alle Teilnehmer automatisch informieren:
+
+1. Gehe in den Event-Thread
+2. Verwende den Slash-Befehl `/cancel`
+   - Optional kannst du einen Grund für die Absage mit `reason:` hinzufügen
+   - Beispiel: `/cancel reason: Event muss wegen zu wenig Teilnehmern abgesagt werden`
+3. Der Bot führt dann automatisch folgende Aktionen aus:
+   - Der Titel des Events wird mit `[ABGESAGT]` markiert
+   - Alle angemeldeten Teilnehmer erhalten eine private Nachricht mit:
+     - Information über die Absage
+     - Datum und Uhrzeit des abgesagten Events
+     - Den angegebenen Grund (falls vorhanden)
+     - Link zum Event-Post
+   - Das Event wird aus der Eventübersicht entfernt
+   - Eine neue Eventübersicht ohne das abgesagte Event wird erstellt
+   - Der Event-Thread wird sofort gelöscht, um zu verhindern, dass sich weitere Teilnehmer anmelden
+
+Nur der Event-Ersteller kann diesen Befehl verwenden und nur im Event-Thread.
+
 ### Teilnehmer verwalten (für Event-Ersteller)
 
 Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:

@@ -1212,7 +1212,8 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 name="Event-Ersteller Befehle",
                 value="• `/remind` - Erinnerung an alle Teilnehmer senden\n"
                       "• `/add` - Teilnehmer zu einer Rolle hinzufügen\n"
-                      "• `/remove` - Teilnehmer aus Rollen entfernen",
+                      "• `/remove` - Teilnehmer aus Rollen entfernen\n"
+                      "• `/cancel` - Event absagen und alle Teilnehmer benachrichtigen",
                 inline=False
             )
 
@@ -1900,7 +1901,8 @@ async def eventify(
                 name="Event-Ersteller Befehle",
                 value="• `/remind` - Erinnerung an alle Teilnehmer senden\n"
                       "• `/add` - Teilnehmer zu einer Rolle hinzufügen\n"
-                      "• `/remove` - Teilnehmer aus Rollen entfernen",
+                      "• `/remove` - Teilnehmer aus Rollen entfernen\n"
+                      "• `/cancel` - Event absagen und alle Teilnehmer benachrichtigen",
                 inline=False
             )
 
@@ -1999,7 +2001,13 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
                     success_count += 1
             except Exception as e:
                 logger.error(f"Failed to send reminder to user {participant_id}: {e}")
-                
+                failed_count += 1
+        
+        # Send confirmation
+        await interaction.response.send_message(
+            f"Erinnerung an {success_count} Teilnehmer gesendet. {failed_count} fehlgeschlagen.", 
+            ephemeral=True
+        )
 
     except Exception as e:
         logger.error(f"Error in remind_participants: {e}")
@@ -2007,6 +2015,123 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
             "Ein Fehler ist beim Versenden der Erinnerungen aufgetreten.", 
             ephemeral=True
         )
+
+@bot.tree.command(name="cancel", description="Sagt ein Event ab und benachrichtigt alle Teilnehmer")
+@app_commands.describe(
+    reason="Optional: Der Grund für die Absage des Events"
+)
+@app_commands.guild_only()
+async def cancel_event(interaction: discord.Interaction, reason: str = None):
+    """Sagt ein Event ab, benachrichtigt Teilnehmer und aktualisiert die Eventübersicht."""
+    try:
+        # Überprüfen, ob der Befehl in einem Event-Thread verwendet wird
+        if not isinstance(interaction.channel, discord.Thread):
+            await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
+            return
+        
+        thread = interaction.channel
+        
+        # Events laden
+        events_data = load_upcoming_events()
+        if not events_data or "events" not in events_data:
+            await interaction.response.send_message("Keine Events gefunden.", ephemeral=True)
+            return
+        
+        # Event finden
+        event = None
+        for e in events_data["events"]:
+            if str(e.get("thread_id")) == str(thread.id):
+                event = e
+                break
+        
+        if not event:
+            await interaction.response.send_message("Kein zugehöriges Event gefunden.", ephemeral=True)
+            return
+        
+        # Überprüfen, ob der Benutzer der Event-Ersteller ist
+        if str(interaction.user.id) != str(event.get("caller_id")):
+            await interaction.response.send_message("Du kannst nur Events absagen, die du selbst erstellt hast.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Event als abgesagt markieren
+        event["title"] = f"{event['title']} [ABGESAGT]"
+        
+        # Event-Nachricht aktualisieren
+        try:
+            channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
+            message_id = event.get("message_id")
+            if channel and message_id:
+                message = await channel.fetch_message(int(message_id))
+                if message:
+                    # Embed bearbeiten
+                    embeds = message.embeds
+                    if embeds:
+                        embed = embeds[0]
+                        embed.title = f"__**{event['title']}**__"
+                        await message.edit(embed=embed)
+        except Exception as e:
+            logger.error(f"Fehler beim Aktualisieren der Event-Nachricht: {e}")
+        
+        # Erstelle Event-Link
+        event_link = None
+        try:
+            guild_id = interaction.guild.id
+            message_id = event.get("message_id")
+            if message_id:
+                event_link = f"https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}"
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen des Event-Links: {e}")
+
+        # Alle Teilnehmer benachrichtigen
+        participants = []
+        for role_key, role_participants in event.get("participants", {}).items():
+            for participant in role_participants:
+                if participant not in participants and len(participant) >= 2:
+                    participants.append(participant)
+        
+        # Erstelle die Absage-Nachricht
+        cancel_message = f"**Event abgesagt:** {event['title']}\n**Datum:** {event['date']} {event['time']}"
+        if reason:
+            cancel_message += f"\n**Grund:** {reason}"
+        if event_link:
+            cancel_message += f"\n🔗 [Zum Event-Post]({event_link})"
+        
+        # Sende Nachricht an alle Teilnehmer
+        sent_count = 0
+        for participant_data in participants:
+            try:
+                user_id = int(participant_data[1])
+                user = await interaction.client.fetch_user(user_id)
+                if user:
+                    await user.send(cancel_message)
+                    sent_count += 1
+            except Exception as e:
+                logger.error(f"Fehler beim Senden der Absage-DM an {user_id}: {e}")
+
+        # Event aus der Liste entfernen und speichern
+        event_id = event.get("event_id")
+        for i, e in enumerate(events_data["events"]):
+            if e.get("event_id") == event_id:
+                del events_data["events"][i]
+                break
+        save_events_to_json(events_data)
+        
+        # Neue Eventübersicht erstellen
+        await create_event_listing(interaction.guild)
+        
+        # Bestätigung senden und Thread sofort löschen
+        await interaction.followup.send(f"Event wurde abgesagt. {sent_count} Benutzer wurden benachrichtigt. Der Thread wird jetzt gelöscht.")
+        
+        try:
+            await thread.delete()
+        except Exception as e:
+            logger.error(f"Fehler beim Löschen des Event-Threads: {e}")
+            await interaction.followup.send("Der Thread konnte nicht gelöscht werden, versuche es später nochmal.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Fehler bei der Event-Absage: {e}")
+        await interaction.followup.send(f"Ein Fehler ist aufgetreten: {str(e)}")
 
 @bot.tree.command(name="add", description="Füge einen Teilnehmer zu einer Rolle hinzu (nur für Event-Ersteller)")
 @app_commands.guild_only()
