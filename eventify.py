@@ -555,11 +555,11 @@ class MyBot(discord.Client):
                                 else:
                                     participants_text += f"<@{p[1]}>\n"
                         
-                        # Add the field
-                        embed.add_field(name=participant_title, value=participants_text or "\u200b", inline=False)
+                        # Add the field - Teilnehmer role with signup instruction
+                        embed.add_field(name=f"{participant_title} (Anmeldung mit \"1\")", value=participants_text or "\u200b", inline=False)
                     else:
-                        # Empty participant list
-                        embed.add_field(name=participant_title, value="\u200b", inline=False)
+                        # Empty participant list - Teilnehmer role with signup instruction
+                        embed.add_field(name=f"{participant_title} (Anmeldung mit \"1\")", value="\u200b", inline=False)
             else:
                 # Standard mode with multiple roles
                 # Find the Fill role - case insensitive check
@@ -1110,17 +1110,28 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 event_datetime = datetime.now()
                 logger.warning(f"Fehler beim Erstellen des datetime-Objekts: {e}. Verwende aktuelle Zeit.")
             
+            # Check if we're in participant-only mode
+            is_participant_only_mode = self.roles.value and self.roles.value.lower() == 'none'
+            
+            # Set roles based on mode
+            if is_participant_only_mode:
+                # Bei "none" nur eine "Teilnehmer"-Rolle erstellen
+                roles = ["Teilnehmer"]
+            else:
+                # Normaler Modus mit Rollen aus der Eingabe
+                roles = self.roles.value.split('\n') if self.roles.value else []
+            
             # Create event object - always generate a new event_id
             event = Event(
                 title=self.title,
                 date=self.date,
                 time=self.time,
                 description=self.description.value,
-                roles=self.roles.value.split('\n') if self.roles.value and self.roles.value.lower() != 'none' else [],
+                roles=roles,
                 datetime_obj=event_datetime,
                 caller_id=self.caller_id,
                 caller_name=self.caller_name,
-                participant_only_mode=self.roles.value and self.roles.value.lower() == 'none'
+                participant_only_mode=is_participant_only_mode
             )
             
             # Store the mention role ID separately in the event object
@@ -1177,9 +1188,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 roles_text = "\n".join(f"{i+1}. {role}" for i, role in enumerate(event.roles))
                 if roles_text:
                     embed.add_field(name="Rollen", value=roles_text, inline=False)
-            
-            # Set footer with event ID
-            embed.set_footer(text=f"Event ID: {event.event_id}")
+            else:
+                # Im Teilnehmer-only Modus, zeige die Teilnehmer-Rolle an
+                embed.add_field(name="Rollen", value="1. Teilnehmer (Anmeldung mit \"1\")", inline=False)
             
             # Send event post and create thread
             channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
@@ -1232,12 +1243,11 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 # Send mention but delete it right after (will still notify users)
                 await thread.send(f"<@&{event.mention_role_id}> - {event.title}, {event.date}, {event.time}", delete_after=0.1)
             
-            # Send confirmation
-            await interaction.response.send_message(
-                f"Event '{event.title}' wurde erstellt!\n"
-                f"Thread: {thread.mention}",
-                ephemeral=True
-            )
+            # Aktualisiere die Eventübersicht
+            await create_event_listing(interaction.guild)
+            
+            # Bestätigen der Interaktion damit das Modal geschlossen wird
+            await interaction.response.defer()
             
             # Mention role if specified (in main channel)
             if event.mention_role_id:
@@ -1743,7 +1753,7 @@ async def eventify(
             roles_input = roles.replace('\\n', '\n').strip()
             
             # Check if we're in participant-only mode
-            is_participant_only_mode = roles_input.lower() in ["none", "nan", "null", "keine"]
+            is_participant_only_mode = roles_input.lower() == "none"
             fill_index = None
             
             if is_participant_only_mode:
@@ -1928,8 +1938,8 @@ async def eventify(
             # Create the event listing after creating the event
             await create_event_listing(interaction.guild)
             
-            # Send confirmation
-            await interaction.followup.send("Event wurde erfolgreich erstellt!", ephemeral=True)
+            # Removing the confirmation message
+            # await interaction.followup.send("Event wurde erfolgreich erstellt!", ephemeral=True)
         else:
             # Create and show the modal
             modal = EventModal(
