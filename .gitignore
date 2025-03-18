@@ -1,4 +1,5 @@
 .env
+backups/
 logs/
 nox/ 
 events.json

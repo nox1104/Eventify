@@ -109,8 +109,8 @@ class MyBot(discord.Client):
 
             thread_id = message.channel.id
             
-            # Load events from JSON
-            events_data = load_upcoming_events()
+            # Load events from JSON (auch abgelaufene Events einschließen, damit Anmeldungen nach Eventstart möglich sind)
+            events_data = load_upcoming_events(include_expired=True)
             if not events_data or "events" not in events_data:
                 return
                 
@@ -148,8 +148,8 @@ class MyBot(discord.Client):
         try:
             role_index = role_number - 1
             
-            # Load events from JSON
-            events_data = load_upcoming_events()
+            # Load events from JSON (auch abgelaufene Events einschließen, damit Anmeldungen nach Eventstart möglich sind)
+            events_data = load_upcoming_events(include_expired=True)
             logger.info(f"Loaded events data from JSON")
             
             # First try to find the event by thread_id (most reliable)
@@ -323,8 +323,8 @@ class MyBot(discord.Client):
 
     async def _handle_unregister(self, message, is_specific_role=False, role_index=None):
         try:
-            # Load events from JSON
-            events_data = load_upcoming_events()
+            # Load events from JSON (auch abgelaufene Events einschließen, damit Abmeldungen nach Eventstart möglich sind)
+            events_data = load_upcoming_events(include_expired=True)
             
             # First try to find the event by thread_id (most reliable)
             thread_id = message.channel.id
@@ -504,6 +504,11 @@ class MyBot(discord.Client):
                     description = description[:1020] + "..."
                 embed.add_field(name="Beschreibung", value=description, inline=False)
             
+            # Add image if available (direkt nach der Beschreibung)
+            image_url = event.get('image_url') if isinstance(event, dict) else getattr(event, 'image_url', None)
+            if image_url:
+                embed.set_image(url=image_url)
+            
             # ===== Role display based on v0.3.4 =====
             roles = event.get('roles', []) if isinstance(event, dict) else getattr(event, 'roles', [])
             participants = event.get('participants', {}) if isinstance(event, dict) else getattr(event, 'participants', {})
@@ -642,11 +647,6 @@ class MyBot(discord.Client):
                     else:
                         # Display empty Fill role
                         embed.add_field(name=fill_text, value="\u200b", inline=False)
-            
-            # Add image if available (new function)
-            image_url = event.get('image_url') if isinstance(event, dict) else getattr(event, 'image_url', None)
-            if image_url:
-                embed.set_image(url=image_url)
             
             # Update the message
             await event_message.edit(embed=embed)
@@ -1162,15 +1162,15 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                     description = event.description
                 embed.add_field(name="Beschreibung", value=description, inline=False)
             
+            # Add image if provided (direkt nach der Beschreibung)
+            if self.image_url:
+                embed.set_image(url=self.image_url)
+            
             # Add roles if not in participant-only mode
             if not event.participant_only_mode:
                 roles_text = "\n".join(f"{i+1}. {role}" for i, role in enumerate(event.roles))
                 if roles_text:
                     embed.add_field(name="Rollen", value=roles_text, inline=False)
-            
-            # Add image if provided
-            if event.image_url:
-                embed.set_image(url=event.image_url)
             
             # Set footer with event ID
             embed.set_footer(text=f"Event ID: {event.event_id}")
@@ -1201,7 +1201,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             )
 
             welcome_embed.add_field(
-                name="Teilnehmer-Tipps",
+                name="Teilnehmer",
                 value="**Anmelden**: Schreibe einfach die Nummer der gewünschten Rolle\n"
                       "**Abmelden**: Schreibe `-` (von allen Rollen) oder `-X` (von Rolle X)\n"
                       "**Kommentar hinzufügen**: Schreibe nach der Rollennummer deinen Kommentar (z.B. 3 mh, dps)",
@@ -1209,7 +1209,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             )
 
             welcome_embed.add_field(
-                name="Event-Ersteller Befehle",
+                name="Event-Ersteller",
                 value="• `/remind` - Erinnerung an alle Teilnehmer senden\n"
                       "• `/add` - Teilnehmer zu einer Rolle hinzufügen\n"
                       "• `/remove` - Teilnehmer aus Rollen entfernen\n"
@@ -1825,6 +1825,10 @@ async def eventify(
                     description_text = description_text[:1020] + "..."
                 embed.add_field(name="Beschreibung", value=description_text, inline=False)
             
+            # Add image if provided (direkt nach der Beschreibung)
+            if image_url:
+                embed.set_image(url=image_url)
+            
             # Extract regular roles (everything except FillALL)
             regular_roles = []
             section_headers = []
@@ -1884,13 +1888,13 @@ async def eventify(
             )
 
             welcome_embed.add_field(
-                name="Benutzerhandbuch",
+                name="RTFM",
                 value="Im ❗[Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md)❗ findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
                 inline=False
             )
 
             welcome_embed.add_field(
-                name="Teilnehmer-Tipps",
+                name="Teilnehmer",
                 value="**Anmelden**: Schreibe einfach die Nummer der gewünschten Rolle\n"
                       "**Abmelden**: Schreibe `-` (von allen Rollen) oder `-X` (von Rolle X)\n"
                       "**Kommentar hinzufügen**: Schreibe nach der Rollennummer deinen Kommentar (z.B. 3 mh, dps)",
@@ -1898,7 +1902,7 @@ async def eventify(
             )
 
             welcome_embed.add_field(
-                name="Event-Ersteller Befehle",
+                name="Event-Ersteller",
                 value="• `/remind` - Erinnerung an alle Teilnehmer senden\n"
                       "• `/add` - Teilnehmer zu einer Rolle hinzufügen\n"
                       "• `/remove` - Teilnehmer aus Rollen entfernen\n"
@@ -1946,15 +1950,15 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
             await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
             return
 
-        # Load the event
-        events = load_upcoming_events()
+        # Load the event (auch abgelaufene Events einschließen)
+        events_data = load_upcoming_events(include_expired=True)
         # First try to find the event by thread_id (most reliable)
         thread_id = interaction.channel.id
-        event = next((e for e in events if e.get('thread_id') == thread_id), None)
+        event = next((e for e in events_data["events"] if e.get('thread_id') == thread_id), None)
         
         # Fallback: try to find by title (for backwards compatibility)
         if not event:
-            event = next((e for e in events if e.get('title') == interaction.channel.name), None)
+            event = next((e for e in events_data["events"] if e.get('title') == interaction.channel.name), None)
 
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
@@ -2147,15 +2151,15 @@ async def add_participant(
             await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
             return
 
-        # Load the event
-        events = load_upcoming_events()
+        # Load the event (auch abgelaufene Events einschließen)
+        events_data = load_upcoming_events(include_expired=True)
         # First try to find the event by thread_id (most reliable)
         thread_id = interaction.channel.id
-        event = next((e for e in events if e.get('thread_id') == thread_id), None)
+        event = next((e for e in events_data["events"] if e.get('thread_id') == thread_id), None)
         
         # Fallback: try to find by title (for backwards compatibility)
         if not event:
-            event = next((e for e in events if e.get('title') == interaction.channel.name), None)
+            event = next((e for e in events_data["events"] if e.get('title') == interaction.channel.name), None)
 
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
@@ -2284,15 +2288,15 @@ async def remove_participant(
             await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
             return
 
-        # Load the event
-        events = load_upcoming_events()
+        # Load the event (auch abgelaufene Events einschließen)
+        events_data = load_upcoming_events(include_expired=True)
         # First try to find the event by thread_id (most reliable)
         thread_id = interaction.channel.id
-        event = next((e for e in events if e.get('thread_id') == thread_id), None)
+        event = next((e for e in events_data["events"] if e.get('thread_id') == thread_id), None)
         
         # Fallback: try to find by title (for backwards compatibility)
         if not event:
-            event = next((e for e in events if e.get('title') == interaction.channel.name), None)
+            event = next((e for e in events_data["events"] if e.get('title') == interaction.channel.name), None)
 
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
@@ -2395,15 +2399,15 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
             await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
             return
 
-        # Load the event
-        events = load_upcoming_events()
+        # Load the event (auch abgelaufene Events einschließen)
+        events_data = load_upcoming_events(include_expired=True)
         # First try to find the event by thread_id (most reliable)
         thread_id = interaction.channel.id
-        event = next((e for e in events if e.get('thread_id') == thread_id), None)
+        event = next((e for e in events_data["events"] if e.get('thread_id') == thread_id), None)
         
         # Fallback: try to find by title (for backwards compatibility)
         if not event:
-            event = next((e for e in events if e.get('title') == interaction.channel.name), None)
+            event = next((e for e in events_data["events"] if e.get('title') == interaction.channel.name), None)
 
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)

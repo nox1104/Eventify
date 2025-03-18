@@ -3,8 +3,8 @@
         {
             "title": "Testevent",
             "date": "18.03.2025",
-            "time": "11:00",
-            "description": "Wöchentlicher Raid\nBringt Buffs und Pots mit.\nSeid pünktlich!",
+            "time": "12:05",
+            "description": "Wöchentlicher Raid\nBringt Buffs und Pots mit.",
             "roles": [
                 "Tank",
                 "Healer",
@@ -14,23 +14,65 @@
             ],
             "participants": {
                 "0:Tank": [],
-                "1:Healer": [
+                "1:Healer": [],
+                "2:DPS": [
                     [
                         "nox1104",
                         "778914224613228575",
-                        1742290008.596061,
-                        "asdfasdfasdfqwerqwerhzt"
+                        1742295806.279512
+                    ]
+                ],
+                "4:FillALL": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1742295841.635048
                     ]
                 ]
             },
-            "event_id": "202503181100-6652e9e9",
+            "event_id": "202503181205-fbf95a6c",
             "caller_id": "778914224613228575",
             "caller_name": "nox1104",
-            "message_id": 1351486962464456787,
-            "thread_id": 1351486962464456787,
+            "message_id": 1351511260952264745,
+            "thread_id": 1351511260952264745,
             "participant_only_mode": false,
             "mention_role_id": "1347966632483618927",
-            "datetime_obj": "2025-03-18T11:00:00",
+            "datetime_obj": "2025-03-18T12:05:00",
+            "status": "expired",
+            "image_url": null
+        },
+        {
+            "title": "Testevent",
+            "date": "18.03.2025",
+            "time": "12:12",
+            "description": "Wöchentlicher Raid\nBringt Buffs und Pots mit.",
+            "roles": [
+                "Tank",
+                "Healer",
+                "DPS",
+                "Ranged DPS",
+                "FillALL"
+            ],
+            "participants": {
+                "0:Tank": [
+                    [
+                        "nox1104",
+                        "778914224613228575",
+                        1742296649.542375
+                    ]
+                ],
+                "1:Healer": [],
+                "2:DPS": [],
+                "3:Ranged DPS": []
+            },
+            "event_id": "202503181212-c6aecdda",
+            "caller_id": "778914224613228575",
+            "caller_name": "nox1104",
+            "message_id": 1351513126528618556,
+            "thread_id": 1351513126528618556,
+            "participant_only_mode": false,
+            "mention_role_id": "1347966632483618927",
+            "datetime_obj": "2025-03-18T12:12:00",
             "status": "expired",
             "image_url": null
         }
