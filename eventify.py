@@ -11,6 +11,7 @@ from discord.ext import tasks
 import asyncio
 import sys
 from logging.handlers import RotatingFileHandler
+import glob
 
 # Logging configuration
 def setup_logging():
@@ -778,15 +779,20 @@ class MyBot(discord.Client):
     async def before_delete_old_event_threads(self):
         await self.wait_until_ready()
 
-    @tasks.loop(hours=6)  
+    @tasks.loop(hours=24)  
     async def cleanup_event_channel(self):
         """
-        Räumt den Event-Kanal vorsichtig auf. Löscht nur:
-        - Vergangene Event-Posts (bestätigt durch events.json)
-        - System-Nachrichten (z.B. "Bot ist online")
-        Alle anderen Nachrichten bleiben erhalten.
+        Bereinigt den Event-Kanal basierend auf Status und Alter:
+        - Behält aktive Events
+        - Entfernt abgelaufene Events nach 12 Tagen
+        - Entfernt reguläre Nachrichten nach 12 Tagen
         """
-        logger.info(f"{datetime.now()} - Starte vorsichtiges Aufräumen des Event-Kanals...")
+        logger.info(f"{datetime.now()} - Starte Bereinigung des Event-Kanals...")
+        
+        # Backup erstellen bevor Änderungen vorgenommen werden
+        self.create_backup()
+        
+        DAYS_TO_KEEP = 12
         
         for guild in self.guilds:
             channel = guild.get_channel(CHANNEL_ID_EVENT)
@@ -800,123 +806,102 @@ class MyBot(discord.Client):
                 logger.error("Bot hat keine Berechtigung zum Löschen von Nachrichten!")
                 continue
                 
-            # Load active events
             try:
-                with open('events.json', 'r') as f:
-                    events_data = json.load(f)
-                    id_to_event = {str(event['message_id']): event['event_id'] 
-                                 for event in events_data if 'message_id' in event and 'event_id' in event}
-            except FileNotFoundError:
-                logger.error("events.json nicht gefunden! Breche Aufräumen ab.")
-                return
-            except Exception as e:
-                logger.error(f"Kritischer Fehler beim Laden der Events: {e}")
-                return
-
-            # Counter for logging
-            counter = {
-                "system": 0,      # System messages
-                "past_event": 0,  # Past events
-                "protected": 0,   # Protected messages
-                "skipped": 0      # Skipped messages
-            }
-            
-            # List of messages to delete
-            to_delete = []
-            
-            # Collect messages to delete
-            async for message in channel.history(limit=1000):
-                try:
-                    # PROTECTED: Skip messages with threads
-                    if message.thread:
-                        logger.info(f"GESCHÜTZT: Nachricht {message.id} hat aktiven Thread")
-                        counter["protected"] += 1
-                        continue
-
-                    # PROTECTED: Skip messages from other bots (except ourselves)
-                    if message.author.bot and message.author.id != bot.user.id:
-                        logger.info(f"GESCHÜTZT: Nachricht {message.id} ist von anderem Bot")
-                        counter["protected"] += 1
-                        continue
-
-                    # PROTECTED: Skip messages with attachments
-                    if message.attachments:
-                        logger.info(f"GESCHÜTZT: Nachricht {message.id} hat Anhänge")
-                        counter["protected"] += 1
-                        continue
-
-                    # Check event posts
-                    message_id_str = str(message.id)
-                    if message_id_str in id_to_event:
-                        event_id = id_to_event[message_id_str]
-                        event_datetime_str = event_id.split('-')[0]
-                        try:
-                            event_datetime = datetime.strptime(event_datetime_str, '%Y%m%d%H%M')
-                            event_datetime = event_datetime.replace(tzinfo=timezone.utc)
-                            
-                            # Only delete if event is at least 1 hour old
-                            if event_datetime + timedelta(hours=1) < datetime.now(timezone.utc):
-                                logger.info(f"Mark vergangenes Event zur Löschung: {message.id}")
-                                to_delete.append(message)
-                                counter["past_event"] += 1
-                            else:
-                                logger.info(f"GESCHÜTZT: Event {message.id} ist noch aktiv oder zu neu")
-                                counter["protected"] += 1
-                        except ValueError as e:
-                            logger.error(f"Fehler beim Parsen des Event-Datums {event_datetime_str}: {e}")
-                            counter["skipped"] += 1
-                            continue
-                    
-                    # Check system messages from our bot
-                    elif message.author.id == bot.user.id and not message.embeds:
-                        # List of known system messages
-                        system_messages = [
-                            "bot on",
-                            "bot off",
-                            "Bot ist online",
-                            "Bot ist offline",
-                            "Thread wurde gelöscht"
-                        ]
-                        
-                        if any(msg in message.content for msg in system_messages):
-                            logger.info(f"Markiere System-Nachricht zur Löschung: {message.id}")
-                            to_delete.append(message)
-                            counter["system"] += 1
-                        else:
-                            logger.info(f"GESCHÜTZT: Unbekannte Bot-Nachricht: {message.id}")
-                            counter["protected"] += 1
+                # Events laden
+                events_data = load_upcoming_events(include_expired=True, include_cleaned=True)
+                events_to_keep = []
+                events_to_remove = []
+                
+                # IDs der AKTIVEN Event-Nachrichten sammeln
+                active_event_message_ids = set()
+                for event in events_data["events"]:
+                    if event.get("status") == "active" and event.get("message_id"):
+                        active_event_message_ids.add(int(event["message_id"]))
+                
+                # Events nach Status/Alter sortieren
+                current_time = datetime.now()
+                for event in events_data["events"]:
+                    if event.get("status") == "active":
+                        events_to_keep.append(event)
                     else:
-                        logger.info(f"GESCHÜTZT: Sonstige Nachricht: {message.id}")
-                        counter["protected"] += 1
-
-                except Exception as e:
-                    logger.error(f"Fehler bei Nachricht {message.id}: {e}")
-                    counter["skipped"] += 1
-                    continue
-
-            # SAFETY: Check again the number of messages to be deleted
-            if len(to_delete) > 100:
-                logger.warning(f"Ungewöhnlich viele Nachrichten ({len(to_delete)}) zum Löschen markiert!")
-                logger.warning("Lösche nur die ersten 100 zur Sicherheit.")
-                to_delete = to_delete[:100]
-
-            # Delete the marked messages
-            deleted = 0
-            for message in to_delete:
+                        try:
+                            event_time = datetime.fromisoformat(event["datetime_obj"])
+                            days_difference = (current_time - event_time).days
+                            
+                            if days_difference > DAYS_TO_KEEP:
+                                events_to_remove.append(event)
+                            else:
+                                events_to_keep.append(event)
+                        except (ValueError, KeyError) as e:
+                            logger.error(f"Fehler beim Verarbeiten des Events {event.get('title', 'Unbekannt')}: {e}")
+                            events_to_keep.append(event)  # Im Zweifelsfall behalten
+                
+                # Bereinigung aller alten Nachrichten (inkl. abgelaufener Events)
+                cutoff_date = datetime.now(timezone.utc) - timedelta(days=DAYS_TO_KEEP)
+                
+                def should_delete_message(message):
+                    # Aktive Events schützen
+                    if message.id in active_event_message_ids:
+                        return False
+                    # Neue Nachrichten schützen
+                    if message.created_at > cutoff_date:
+                        return False
+                    # Alte Nachrichten löschen
+                    return True
+                
+                # Purge mit Filter ausführen
                 try:
-                    await message.delete()
-                    deleted += 1
-                    await asyncio.sleep(1.2)  # Großzügige Pause zwischen Löschungen
+                    deleted_msgs = await channel.purge(check=should_delete_message, limit=100)
+                    logger.info(f"Guild {guild.id}: {len(deleted_msgs)} alte Nachrichten gelöscht")
                 except Exception as e:
-                    logger.error(f"Fehler beim Löschen von Nachricht {message.id}: {e}")
+                    logger.error(f"Fehler beim Purge: {e}")
+                
+                # Events-Datei aktualisieren
+                events_data["events"] = events_to_keep
+                save_events_to_json(events_data)
+                
+                logger.info(f"Event-Bereinigung abgeschlossen: {len(events_to_remove)} Events entfernt, {len(events_to_keep)} Events behalten")
+                
+            except Exception as e:
+                logger.error(f"Fehler bei der Bereinigung des Event-Kanals: {e}")
 
-            # Final log
-            logger.info(f"Aufräumen abgeschlossen:")
-            logger.info(f"- {counter['past_event']} vergangene Events markiert")
-            logger.info(f"- {counter['system']} System-Nachrichten markiert")
-            logger.info(f"- {counter['protected']} Nachrichten geschützt")
-            logger.info(f"- {counter['skipped']} Nachrichten übersprungen")
-            logger.info(f"- {deleted} Nachrichten erfolgreich gelöscht")
+    def create_backup(self):
+        """Erstellt ein tägliches Backup der Events-Datei."""
+        try:
+            # Backup-Ordner erstellen falls nicht vorhanden
+            os.makedirs("backups", exist_ok=True)
+            
+            # Heutiges Datum für Dateinamen
+            today = datetime.now().strftime("%Y%m%d")
+            backup_path = os.path.join("backups", f"events_backup_{today}.json")
+            
+            # Daten kopieren
+            events_data = load_upcoming_events(include_expired=True, include_cleaned=True)
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                json.dump(events_data, f, ensure_ascii=False, indent=4)
+            
+            logger.info(f"Backup erstellt: {backup_path}")
+                
+            # Alte Backups löschen (nur 42 behalten)
+            self.rotate_backups()
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Erstellen des Backups: {e}")
+    
+    def rotate_backups(self):
+        """Behält nur die neuesten 42 Backups."""
+        try:
+            MAX_BACKUPS = 42
+            backup_files = sorted(glob.glob(os.path.join("backups", "events_backup_*.json")))
+            
+            # Wenn mehr als MAX_BACKUPS Dateien, lösche die ältesten
+            if len(backup_files) > MAX_BACKUPS:
+                files_to_delete = backup_files[:-MAX_BACKUPS]
+                for file in files_to_delete:
+                    os.remove(file)
+                logger.info(f"{len(files_to_delete)} alte Backups gelöscht. {MAX_BACKUPS} Backups behalten.")
+        except Exception as e:
+            logger.error(f"Fehler bei der Backup-Rotation: {e}")
 
     # Wait until the bot is ready before starting the loop
     @cleanup_event_channel.before_loop
