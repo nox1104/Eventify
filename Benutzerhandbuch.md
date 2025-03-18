@@ -106,7 +106,7 @@ Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
 2. Gib folgende Parameter ein:
    - `user`: Der Discord-Benutzer, den du hinzufügen möchtest (per Autocomplete)
    - `role_number`: Die Nummer der Rolle, z.B. 1 für die erste Rolle
-   - `comment` (optional): Ein Kommentar, der neben dem Namen angezeigt wird
+   - `comment` (optional): Ein Kommentar, der neben dem Namen angezeigt wird (auf 20 Zeichen begrenzt)
 3. Der hinzugefügte Teilnehmer erhält automatisch eine private Nachricht mit:
    - Event-Titel
    - Zugewiesene Rolle
@@ -165,21 +165,14 @@ Um Links in Discord klickbar zu machen, verwende die folgende Markdown-Syntax:
 
 Der Bot hält den Event-Kanal automatisch sauber und übersichtlich:
 
-- **Aufräum-Intervall**: Alle 6 Stunden werden überprüft und entfernt:
-  - Normale Nachrichten
-  - Event-Übersichten
-  - Event-Posts von vergangenen Events
-  - Benachrichtigungen und System-Nachrichten
-
-- **Event-Posts bleiben erhalten** solange:
-  - Das Event noch nicht stattgefunden hat
-  - Der Thread noch aktiv ist (wird 15 Minuten nach Eventbeginn gelöscht)
-
-**Wichtiger Hinweis zur Planung**: 
-Aufgrund der Discord-Beschränkung, dass Nachrichten älter als 14 Tage nicht mehr gelöscht werden können, wird darum gebeten, Events nicht weiter als 13 Tage in die Zukunft zu planen. Dies stellt sicher, dass:
-- Der Bot alte Event-Posts automatisch entfernen kann
-- Keine "verwaisten" Event-Posts zurückbleiben
-
+- **Automatische Bereinigung** – Entfernt automatisch:
+  - nach 30 Minuten
+    - Event-Threads 
+  - nach 12 Tagen:
+    - Systemnachrichten und Benachrichtigungen
+    - Alte Event-Listen
+    - Reguläre Nachrichten, die älter als 12 Tage sind
+  - Erstellt tägliche Backups der Event-Datei und behält die neuesten 42 Backups
 
 ## Beispiele
 
