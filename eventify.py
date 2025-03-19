@@ -180,7 +180,8 @@ class MyBot(discord.Client):
 
     async def _handle_role_signup(self, message, event_title, role_number):
         try:
-            role_index = role_number - 1
+            # Zunächst Standard-Berechnung
+            visual_role_number = role_number
             
             # Load events from JSON (auch abgelaufene Events einschließen, damit Anmeldungen nach Eventstart möglich sind)
             events_data = load_upcoming_events(include_expired=True)
@@ -193,8 +194,28 @@ class MyBot(discord.Client):
             # Fallback: try to find by title (for backwards compatibility)
             if not event:
                 event = next((e for e in events_data["events"] if e.get('title') == event_title), None)
-
+            
             if event:
+                # Berechne den korrekten Rollenindex unter Berücksichtigung der Überschriften
+                role_index = -1
+                header_count = 0
+                
+                for i, role in enumerate(event['roles']):
+                    # Überschriften in Klammern überspringen
+                    if role.startswith('(') and role.endswith(')'):
+                        header_count += 1
+                        continue
+                    
+                    # Zählen der normalen Rollen
+                    if (i - header_count + 1) == visual_role_number:
+                        role_index = i
+                        break
+                
+                if role_index == -1:
+                    logger.warning(f"Invalid role number: {visual_role_number}. Event has {len(event['roles']) - header_count} roles.")
+                    await message.channel.send(f"Ungültige Rollennummer: {visual_role_number}. Das Event hat {len(event['roles']) - header_count} Rollen.", delete_after=10)
+                    return
+                
                 logger.info(f"Found matching event: {event['title']} (ID: {event.get('event_id', 'unknown')})")
                 
                 # Check if we're in participant_only_mode
@@ -2090,7 +2111,7 @@ async def eventify(
                 
                 # Get participants for Fill role
                 fill_key = f"{fill_index}:{roles_list[fill_index]}"
-                fill_participants = participants.get(fill_key, [])
+                fill_participants = event.participants.get(fill_key, [])
                 
                 if fill_participants:
                     # Sort participants by timestamp
@@ -2113,6 +2134,9 @@ async def eventify(
             event.message_id = event_post.id
             event.thread_id = thread.id
             save_event_to_json(event)
+            
+            # Debug-Log hinzufügen
+            logger.info(f"Event created: {event.title}, thread_id: {thread.id}, message_id: {event_post.id}")
             
             welcome_embed = discord.Embed(
                 title="Das Event wurde erfolgreich erstellt.",
