@@ -68,8 +68,8 @@ logger = setup_logging()
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID_EVENT = int(os.getenv("CHANNEL_ID_EVENT"))
-CHANNEL_ID_EVENT_LISTING = int(os.getenv("CHANNEL_ID_EVENT_LISTING"))
 EVENTS_JSON_FILE = "events.json"
+AUTHORIZED_GUILD_ID = int(os.getenv("AUTHORIZED_GUILD_ID", "0"))  # Default to 0 if not set
 
 # Set up proper intents
 intents = discord.Intents.default()
@@ -83,6 +83,39 @@ class MyBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def on_ready(self):
+        """Called when the bot is online"""
+        logger.info(f"{self.user} is now online.")
+        
+        # Check and leave unauthorized servers
+        if AUTHORIZED_GUILD_ID == 0:
+            logger.warning("AUTHORIZED_GUILD_ID not set in .env file. Bot will run on any server.")
+        else:
+            for guild in self.guilds:
+                if guild.id != AUTHORIZED_GUILD_ID:
+                    logger.warning(f"Leaving unauthorized server: {guild.name} (ID: {guild.id})")
+                    
+                    # Try to send a message to the server owner
+                    try:
+                        owner = guild.owner
+                        if owner:
+                            leave_message = (
+                                f"Hello {owner.name},\n\n"
+                                f"I am a specialized event management bot exclusively developed for a specific community. "
+                                f"Since I'm not configured for use on other servers, I need to leave this server.\n\n"
+                                f"If you're interested in this bot or have any questions, "
+                                f"please contact my developer on Discord: **nox1104**\n\n"
+                                f"Thank you for your understanding."
+                            )
+                            await owner.send(leave_message)
+                            logger.info(f"Sent farewell message to {owner.name} on server {guild.name}")
+                    except Exception as e:
+                        logger.error(f"Could not send message to server owner: {e}")
+                    
+                    # After attempting to send the message, leave the server
+                    await guild.leave()
+                else:
+                    logger.info(f"Bot is on authorized server: {guild.name} (ID: {guild.id})")
+                    
         print(f"Logged in as {self.user}")
         await self.tree.sync()
         print("Slash commands synchronized!")
@@ -800,15 +833,15 @@ class MyBot(discord.Client):
     async def before_delete_old_event_threads(self):
         await self.wait_until_ready()
 
-    @tasks.loop(hours=24)  
+    @tasks.loop(hours=6)  
     async def cleanup_event_channel(self):
         """
-        Bereinigt den Event-Kanal basierend auf Status und Alter:
-        - Behält aktive Events
-        - Entfernt abgelaufene Events nach 12 Tagen
-        - Entfernt reguläre Nachrichten nach 12 Tagen
+        Cleans up the event channel based on status and age:
+        - Keeps active events
+        - Removes expired events after 12 days
+        - Removes regular messages after 12 days
         """
-        logger.info(f"{datetime.now()} - Starte Bereinigung des Event-Kanals...")
+        logger.info(f"{datetime.now()} - Starting event channel cleanup...")
         
         # Backup erstellen bevor Änderungen vorgenommen werden
         self.create_backup()
@@ -966,6 +999,33 @@ class MyBot(discord.Client):
             logger.error(f"Error fetching thread by ID {thread_id}: {e}")
             return None
 
+    async def on_guild_join(self, guild):
+        """Called when the bot joins a new server"""
+        if AUTHORIZED_GUILD_ID != 0 and guild.id != AUTHORIZED_GUILD_ID:
+            logger.warning(f"Leaving unauthorized server: {guild.name} (ID: {guild.id})")
+            
+            # Try to send a message to the server owner
+            try:
+                owner = guild.owner
+                if owner:
+                    leave_message = (
+                        f"Hello {owner.name},\n\n"
+                        f"Thank you for your interest in my event management bot! Unfortunately, I'm exclusively "
+                        f"developed for a specific community and not configured for use on other servers.\n\n"
+                        f"If you're interested in this bot or have any questions, "
+                        f"please contact my developer on Discord: **nox1104**\n\n"
+                        f"Thank you for your understanding."
+                    )
+                    await owner.send(leave_message)
+                    logger.info(f"Sent farewell message to {owner.name} on server {guild.name}")
+            except Exception as e:
+                logger.error(f"Could not send message to server owner: {e}")
+            
+            # After attempting to send the message, leave the server
+            await guild.leave()
+        else:
+            logger.info(f"Bot joined authorized server: {guild.name}")
+
 class Event:
     def __init__(self, title, date, time, description, roles, datetime_obj=None, caller_id=None, caller_name=None, participant_only_mode=False, event_id=None):
         self.title = title
@@ -1121,6 +1181,33 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             else:
                 # Normaler Modus mit Rollen aus der Eingabe
                 roles = roles_input.split('\n')
+            
+            # Process section headers to ensure they're consistent
+            for i, role in enumerate(roles):
+                # Check if it's a section header (text in parentheses)
+                if role.strip().startswith('(') and role.strip().endswith(')'):
+                    # Remove parentheses and make sure it's stored without them
+                    header_text = role.strip()[1:-1].strip()  # Remove first and last character and any whitespace
+                    roles[i] = f"({header_text})"  # Store in a consistent format
+            
+            # Find the Fill role - case insensitive check
+            fill_index = next((i for i, role in enumerate(roles) if role.lower() in ["fill", "fillall"]), None)
+            if fill_index is None:
+                # If no Fill role found, add one
+                fill_index = len(roles)
+                roles.append("FillALL")
+            else:
+                # Make sure it's consistently named "FillALL"
+                roles[fill_index] = "FillALL"
+            
+            # Make sure FillALL is always the last role
+            if fill_index < len(roles) - 1:
+                # Remove FillALL from its current position
+                fill_role = roles.pop(fill_index)
+                # Add it back at the end
+                roles.append(fill_role)
+                # Update the fill_index to match the new position
+                fill_index = len(roles) - 1
             
             # Create event object - always generate a new event_id
             event = Event(
@@ -1765,12 +1852,23 @@ async def eventify(
                 # Normal mode with Fill role
                 roles_list = [role.strip() for role in roles_input.splitlines() if role.strip()]
                 
+                # Process section headers to ensure they're consistent
+                for i, role in enumerate(roles_list):
+                    # Check if it's a section header (text in parentheses)
+                    if role.strip().startswith('(') and role.strip().endswith(')'):
+                        # Remove parentheses and make sure it's stored without them
+                        header_text = role.strip()[1:-1].strip()  # Remove first and last character and any whitespace
+                        roles_list[i] = f"({header_text})"  # Store in a consistent format
+                
                 # Find the Fill role - case insensitive check
                 fill_index = next((i for i, role in enumerate(roles_list) if role.lower() in ["fill", "fillall"]), None)
                 if fill_index is None:
                     # If no Fill role found, add one
                     fill_index = len(roles_list)
                     roles_list.append("FillALL")
+                else:
+                    # Make sure it's consistently named "FillALL"
+                    roles_list[fill_index] = "FillALL"
                 
                 # Make sure FillALL is always the last role
                 if fill_index < len(roles_list) - 1:
