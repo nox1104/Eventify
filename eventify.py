@@ -668,8 +668,8 @@ class MyBot(discord.Client):
 
                 # Add Fill role section
                 if fill_index is not None:
-                    # Add Fill role header
-                    fill_text = f"{role_counter}. {roles[fill_index]}"
+                    # Add Fill role header - Make FILLALL bold to display as a category
+                    fill_text = f"**{role_counter}. {roles[fill_index]}**"
                     
                     # Get participants for Fill role
                     fill_key = f"{fill_index}:{roles[fill_index]}"
@@ -1199,14 +1199,14 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             if fill_index is None:
                 # If no Fill role found, add one
                 fill_index = len(roles)
-                roles.append("FillALL")
+                roles.append("FILLALL")
             else:
-                # Make sure it's consistently named "FillALL"
-                roles[fill_index] = "FillALL"
+                # Make sure it's consistently named "FILLALL"
+                roles[fill_index] = "FILLALL"
             
-            # Make sure FillALL is always the last role
+            # Make sure FILLALL is always the last role
             if fill_index < len(roles) - 1:
-                # Remove FillALL from its current position
+                # Remove FILLALL from its current position
                 fill_role = roles.pop(fill_index)
                 # Add it back at the end
                 roles.append(fill_role)
@@ -1277,9 +1277,52 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             
             # Add roles if not in participant-only mode
             if not event.participant_only_mode:
-                roles_text = "\n".join(f"{i+1}. {role}" for i, role in enumerate(event.roles))
-                if roles_text:
-                    embed.add_field(name="Rollen", value=roles_text, inline=False)
+                # Extract regular roles (everything except FILLALL)
+                regular_roles = []
+                section_headers = []
+                fill_index = None
+                
+                # Find the Fill role - case insensitive check
+                fill_index = next((i for i, role in enumerate(event.roles) if role.lower() in ["fill", "fillall"]), None)
+                
+                for i, role in enumerate(event.roles):
+                    if i != fill_index:  # Everything except the FILLALL role
+                        # Check if it's a section header (text in parentheses)
+                        if role.strip().startswith('(') and role.strip().endswith(')'):
+                            section_headers.append((i, role))
+                        else:
+                            regular_roles.append((i, role))
+                
+                # Create content for all regular roles
+                field_content = ""
+                role_counter = 1  # Counter for actual roles (excluding section headers)
+                
+                # Go through all roles and section headers in the original order
+                all_items = section_headers + regular_roles
+                all_items.sort(key=lambda x: x[0])  # Sort by original index
+                
+                for role_idx, role_name in all_items:
+                    # Check if it's a section header
+                    if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
+                        # Add a blank line if it's not the first header
+                        if field_content:
+                            field_content += "\n"
+                        # Remove parentheses from section header
+                        header_text = role_name.strip()[1:-1]  # Remove first and last character
+                        field_content += f"**{header_text}**\n"
+                    else:
+                        # This is a normal role
+                        field_content += f"{role_counter}. {role_name}\n"
+                        role_counter += 1
+                
+                # Add all regular roles as a single field
+                if field_content:
+                    embed.add_field(name="Rollen", value=field_content, inline=False)
+                
+                # Add Fill role section - Make FILLALL bold to display as a category
+                if fill_index is not None:
+                    fill_text = f"**{role_counter}. {event.roles[fill_index]}**"
+                    embed.add_field(name=fill_text, value="", inline=False)
             else:
                 # Im Teilnehmer-only Modus, zeige die Teilnehmer-Rolle an
                 embed.add_field(name="Rollen", value="1. Teilnehmer", inline=False)
@@ -1923,14 +1966,14 @@ async def eventify(
                 if fill_index is None:
                     # If no Fill role found, add one
                     fill_index = len(roles_list)
-                    roles_list.append("FillALL")
+                    roles_list.append("FILLALL")
                 else:
-                    # Make sure it's consistently named "FillALL"
-                    roles_list[fill_index] = "FillALL"
+                    # Make sure it's consistently named "FILLALL"
+                    roles_list[fill_index] = "FILLALL"
                 
-                # Make sure FillALL is always the last role
+                # Make sure FILLALL is always the last role
                 if fill_index < len(roles_list) - 1:
-                    # Remove FillALL from its current position
+                    # Remove FILLALL from its current position
                     fill_role = roles_list.pop(fill_index)
                     # Add it back at the end
                     roles_list.append(fill_role)
@@ -2003,11 +2046,11 @@ async def eventify(
             if image_url:
                 embed.set_image(url=image_url)
             
-            # Extract regular roles (everything except FillALL)
+            # Extract regular roles (everything except FILLALL)
             regular_roles = []
             section_headers = []
             for i, role in enumerate(roles_list):
-                if i != fill_index:  # Everything except the FillALL role
+                if i != fill_index:  # Everything except the FILLALL role
                     # Check if it's a section header (text in parentheses)
                     if role.strip().startswith('(') and role.strip().endswith(')'):
                         section_headers.append((i, role))
@@ -2042,9 +2085,25 @@ async def eventify(
             
             # Add Fill role section
             if fill_index is not None:
-                # Add Fill role header
-                fill_text = f"{role_counter}. {roles_list[fill_index]}"
-                embed.add_field(name=fill_text, value="", inline=False)
+                # Add Fill role header - Make FILLALL bold to display as a category
+                fill_text = f"**{role_counter}. {roles_list[fill_index]}**"
+                
+                # Get participants for Fill role
+                fill_key = f"{fill_index}:{roles_list[fill_index]}"
+                fill_participants = participants.get(fill_key, [])
+                
+                if fill_participants:
+                    # Sort participants by timestamp
+                    sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                    
+                    # Display all participants for FillALL
+                    fill_players_text = "\n".join([f"<@{p[1]}>" for p in sorted_fill if len(p) >= 2])
+                    
+                    # Add Fill role to embed
+                    embed.add_field(name=fill_text, value=fill_players_text or "\u200b", inline=False)
+                else:
+                    # Display empty Fill role
+                    embed.add_field(name=fill_text, value="\u200b", inline=False)
             
             # Send the event post and create a thread
             event_post = await channel.send(embed=embed)
@@ -2607,19 +2666,19 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                     await button_interaction.response.send_message("Nur der Event-Ersteller kann diesen Vorschlag annehmen.", ephemeral=True)
                     return
                 
-                # Find the FillALL role
+                # Find the FILLALL role
                 fill_index = next((i for i, role in enumerate(event['roles']) if role.lower() in ["fill", "fillall"]), None)
                 
                 # Ensure that fill_index has a value
                 if fill_index is None:
-                    # If no FillALL role is found, add the new role to the end
+                    # If no FILLALL role is found, add the new role to the end
                     event['roles'].append(self.proposed_role)
                     new_role_index = len(event['roles']) - 1
                 else:
-                    # Add the new role before the FillALL role
+                    # Add the new role before the FILLALL role
                     event['roles'].insert(fill_index, self.proposed_role)
                     new_role_index = fill_index
-                    # Update the FillALL index, since we added a role before it
+                    # Update the FILLALL index, since we added a role before it
                     fill_index += 1
                 
                 # Create role_key for the new role
@@ -2637,7 +2696,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 proposer_name = self.proposer_name
                 current_time = datetime.now().timestamp()
                 
-                # Check if the user is already registered in another role (except FillALL)
+                # Check if the user is already registered in another role (except FILLALL)
                 for r_idx, r_name in enumerate(event['roles']):
                     if r_name.lower() == "fill" or r_name.lower() == "fillall":
                         continue  # Ignore Fill roles
