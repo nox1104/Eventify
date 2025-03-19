@@ -1402,13 +1402,6 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             # Aktualisiere die Eventübersicht
             await create_event_listing(interaction.guild)
             
-            # Mention role if specified (in main channel)
-            if event.mention_role_id:
-                await channel.send(f"<@&{event.mention_role_id}> Neues Event erstellt!")
-                
-            # Erfolgsbenachrichtigung über followup - nicht mehr nötig, da der Ersteller im Kanal sieht, dass alles geklappt hat
-            # await interaction.followup.send(f"Event **{event.title}** wurde erfolgreich erstellt!", ephemeral=True)
-            
         except discord.errors.NotFound:
             # Wenn die Interaktion bereits abgelaufen ist, loggen wir das
             logger.error(f"Interaction already expired when handling event creation for {self.title}")
