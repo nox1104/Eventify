@@ -2,7 +2,7 @@
 
 ## Für Volans (Teilnehmer)
 
-Als Volan kannst du dich für Events anmelden und abmelden. Hier ist, wie du den Bot nutzen kannst:
+Als Teilnehmer brauchst du nur die ersten paar Zeilen zu lesen. Lass dich nicht abschrecken. Es ist wirklich einfach.
 
 ### Für eine Rolle anmelden
 

@@ -642,12 +642,9 @@ class MyBot(discord.Client):
                 for role_idx, role_name in all_items:
                     # Check if it's a section header
                     if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
-                        # Add a line break if it's not the first header
-                        if field_content:
-                            field_content += "\n"
                         # Remove parentheses from section header
                         header_text = role_name.strip()[1:-1]  # Remove first and last character
-                        field_content += f"**{header_text}**\n"
+                        field_content += f"*{header_text}*\n"
                     else:
                         # This is a normal role
                         # Display role and participants
@@ -689,8 +686,7 @@ class MyBot(discord.Client):
 
                 # Add Fill role section
                 if fill_index is not None:
-                    # Add Fill role header - Make FILLALL bold to display as a category
-                    fill_text = f"**{role_counter}. {roles[fill_index]}**"
+                    fill_text = f"{role_counter}. {roles[fill_index]}"
                     
                     # Get participants for Fill role
                     fill_key = f"{fill_index}:{roles[fill_index]}"
@@ -700,14 +696,14 @@ class MyBot(discord.Client):
                         # Sort participants by timestamp
                         sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                         
-                        # Display all participants for FillALL
-                        fill_players_text = "\n".join([f"<@{p[1]}>" for p in sorted_fill if len(p) >= 2])
+                        # Display all participants for FillALL without extra newline
+                        fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" for p in sorted_fill if len(p) >= 2])
                         
-                        # Add Fill role to embed
-                        embed.add_field(name=fill_text, value=fill_players_text or "\u200b", inline=False)
+                        # Add Fill role to embed with empty name to reduce spacing
+                        embed.add_field(name="", value=fill_players_text or fill_text, inline=False)
                     else:
-                        # Display empty Fill role
-                        embed.add_field(name=fill_text, value="\u200b", inline=False)
+                        # Display empty Fill role with empty name to reduce spacing
+                        embed.add_field(name="", value=fill_text, inline=False)
             
             # Update the message
             await event_message.edit(embed=embed)
@@ -1325,12 +1321,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 for role_idx, role_name in all_items:
                     # Check if it's a section header
                     if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
-                        # Add a blank line if it's not the first header
-                        if field_content:
-                            field_content += "\n"
                         # Remove parentheses from section header
                         header_text = role_name.strip()[1:-1]  # Remove first and last character
-                        field_content += f"**{header_text}**\n"
+                        field_content += f"*{header_text}*\n"
                     else:
                         # This is a normal role
                         field_content += f"{role_counter}. {role_name}\n"
@@ -1340,10 +1333,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 if field_content:
                     embed.add_field(name="Rollen", value=field_content, inline=False)
                 
-                # Add Fill role section - Make FILLALL bold to display as a category
                 if fill_index is not None:
-                    fill_text = f"**{role_counter}. {event.roles[fill_index]}**"
-                    embed.add_field(name=fill_text, value="", inline=False)
+                    fill_text = f"{role_counter}. {event.roles[fill_index]}"
+                    embed.add_field(name="\u200b", value=fill_text, inline=False)
             else:
                 # Im Teilnehmer-only Modus, zeige die Teilnehmer-Rolle an
                 embed.add_field(name="Rollen", value="1. Teilnehmer", inline=False)
@@ -1362,35 +1354,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             
             # Send welcome information to the thread
             welcome_embed = discord.Embed(
-                title="Das Event wurde erfolgreich erstellt.",
-                description="Hier findest du alle wichtigen Informationen:",
+                description="Bei Fragen hilft dir das [Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md).",
                 color=0x0dceda  # Eventify Cyan
             )
-
-            welcome_embed.add_field(
-                name="Benutzerhandbuch",
-                value="Im [Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md) findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
-                inline=False
-            )
-
-            welcome_embed.add_field(
-                name="Teilnehmer",
-                value="**Anmelden**: Schreibe einfach die Nummer der gewünschten Rolle\n"
-                      "**Abmelden**: Schreibe `-` (von allen Rollen) oder `-X` (von Rolle X)\n"
-                      "**Kommentar hinzufügen**: Schreibe nach der Rollennummer deinen Kommentar (z.B. 3 mh, dps)",
-                inline=False
-            )
-
-            welcome_embed.add_field(
-                name="Event-Ersteller",
-                value="• `/remind` - Erinnerung an alle Teilnehmer senden\n"
-                      "• `/add` - Teilnehmer zu einer Rolle hinzufügen\n"
-                      "• `/remove` - Teilnehmer aus Rollen entfernen\n"
-                      "• `/cancel` - Event absagen und alle Teilnehmer benachrichtigen",
-                inline=False
-            )
-
-            welcome_embed.add_field(name="Support", value="Fragen, Bugs oder Feature-Vorschläge gehen an <@778914224613228575>", inline=False)
 
             await thread.send(embed=welcome_embed)
             
@@ -2082,12 +2048,9 @@ async def eventify(
             for role_idx, role_name in all_items:
                 # Check if it's a section header
                 if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
-                    # Add a blank line if it's not the first header
-                    if field_content:
-                        field_content += "\n"
                     # Remove parentheses from section header
                     header_text = role_name.strip()[1:-1]  # Remove first and last character
-                    field_content += f"**{header_text}**\n"
+                    field_content += f"*{header_text}*\n"
                 else:
                     # This is a normal role
                     field_content += f"{role_counter}. {role_name}\n"
@@ -2099,8 +2062,7 @@ async def eventify(
             
             # Add Fill role section
             if fill_index is not None:
-                # Add Fill role header - Make FILLALL bold to display as a category
-                fill_text = f"**{role_counter}. {roles_list[fill_index]}**"
+                fill_text = f"{role_counter}. {roles_list[fill_index]}"
                 
                 # Get participants for Fill role
                 fill_key = f"{fill_index}:{roles_list[fill_index]}"
@@ -2110,14 +2072,14 @@ async def eventify(
                     # Sort participants by timestamp
                     sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                     
-                    # Display all participants for FillALL
-                    fill_players_text = "\n".join([f"<@{p[1]}>" for p in sorted_fill if len(p) >= 2])
+                    # Display all participants for FillALL without extra newline
+                    fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" for p in sorted_fill if len(p) >= 2])
                     
-                    # Add Fill role to embed
-                    embed.add_field(name=fill_text, value=fill_players_text or "\u200b", inline=False)
+                    # Add Fill role to embed with empty name to reduce spacing
+                    embed.add_field(name="", value=fill_players_text or fill_text, inline=False)
                 else:
-                    # Display empty Fill role
-                    embed.add_field(name=fill_text, value="\u200b", inline=False)
+                    # Display empty Fill role with empty name to reduce spacing
+                    embed.add_field(name="", value=fill_text, inline=False)
             
             # Send the event post and create a thread
             event_post = await channel.send(embed=embed)
@@ -2132,35 +2094,9 @@ async def eventify(
             logger.info(f"Event created: {event.title}, thread_id: {thread.id}, message_id: {event_post.id}")
             
             welcome_embed = discord.Embed(
-                title="Das Event wurde erfolgreich erstellt.",
-                description="Hier findest du alle wichtigen Informationen:",
+                description="Bei Fragen hilft dir das [Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md).",
                 color=0x0dceda  # Eventify Cyan
             )
-
-            welcome_embed.add_field(
-                name="RTFM",
-                value="Im ❗[Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md)❗ findest du Anleitungen zur Anmeldung für Rollen, zur Event-Verwaltung und zur Benutzung des Bots im Allgemeinen.",
-                inline=False
-            )
-
-            welcome_embed.add_field(
-                name="Teilnehmer",
-                value="**Anmelden**: Schreibe einfach die Nummer der gewünschten Rolle\n"
-                      "**Abmelden**: Schreibe `-` (von allen Rollen) oder `-X` (von Rolle X)\n"
-                      "**Kommentar hinzufügen**: Schreibe nach der Rollennummer deinen Kommentar (z.B. 3 mh, dps)",
-                inline=False
-            )
-
-            welcome_embed.add_field(
-                name="Event-Ersteller",
-                value="• `/remind` - Erinnerung an alle Teilnehmer senden\n"
-                      "• `/add` - Teilnehmer zu einer Rolle hinzufügen\n"
-                      "• `/remove` - Teilnehmer aus Rollen entfernen\n"
-                      "• `/cancel` - Event absagen und alle Teilnehmer benachrichtigen",
-                inline=False
-            )
-
-            welcome_embed.add_field(name="Support", value="Fragen, Bugs oder Feature-Vorschläge gehen an <@778914224613228575>", inline=False)
 
             await thread.send(embed=welcome_embed)
             
