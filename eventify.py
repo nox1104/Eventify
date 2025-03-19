@@ -342,6 +342,13 @@ class MyBot(discord.Client):
                                 # Automatically unregister from previous role
                                 logger.info(f"Automatically unregistering {player_name} from role {player_current_role}")
                                 
+                                # Check if the new role already has participants (except for Fill roles)
+                                if not is_fill_role and len(event['participants'][role_key]) > 0:
+                                    logger.info(f"Role {role_name} already has a participant, rejecting registration from {player_name}")
+                                    await message.add_reaction('❌')  # Rejection reaction
+                                    await message.channel.send(f"{message.author.mention} Nene, so geht das nicht. Für die Rolle war bereits jemand anderes schneller, du Schlingel.")
+                                    return
+                                
                                 # Remove player from previous role
                                 event['participants'][player_current_role_key].pop(player_current_entry_idx)
                                 
@@ -357,6 +364,13 @@ class MyBot(discord.Client):
                                 await self._update_event_and_save(message, event, events_data)
                                 await message.add_reaction('✅')  # Add confirmation reaction
                             else:
+                                # Check if role already has participants (except for Fill roles)
+                                if len(event['participants'][role_key]) > 0:
+                                    logger.info(f"Role {role_name} already has a participant, rejecting registration from {player_name}")
+                                    await message.add_reaction('❌')  # Rejection reaction
+                                    await message.channel.send(f"{message.author.mention} Nene, so geht das nicht. Für die Rolle war bereits jemand anderes schneller, du Schlingel.")
+                                    return
+                                
                                 # Add new entry with timestamp and comment
                                 if comment:
                                     event['participants'][role_key].append((player_name, player_id, current_time, comment))
@@ -2414,6 +2428,14 @@ async def add_participant(
         else:
             # Check if the participant is already registered for another role
             is_fill_role = role_name.lower() == "fill" or role_name.lower() == "fillall"
+            
+            # Check if the role already has participants (for non-Fill roles)
+            if not is_fill_role and len(event['participants'][role_key]) > 0:
+                await interaction.response.send_message(
+                    f"Nene, so geht das nicht. Für die Rolle '{role_name}' war bereits jemand anderes schneller, du Schlingel.", 
+                    ephemeral=True
+                )
+                return
             
             if not is_fill_role:
                 # For normal roles: Check if the player is already registered in another role
