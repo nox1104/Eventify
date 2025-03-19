@@ -2599,6 +2599,12 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
         
+        # Check if the event is in participant_only_mode
+        is_participant_only = event.get('participant_only_mode', False)
+        if is_participant_only:
+            await interaction.response.send_message("Rollenvorschläge sind für Events im Nur-Teilnehmer-Modus nicht verfügbar.", ephemeral=True)
+            return
+        
         # Check if the role already exists
         if role_name in event['roles']:
             await interaction.response.send_message(f"Die Rolle '{role_name}' existiert bereits in diesem Event.", ephemeral=True)
