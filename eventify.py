@@ -1385,8 +1385,8 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             if event.mention_role_id:
                 await channel.send(f"<@&{event.mention_role_id}> Neues Event erstellt!")
                 
-            # Erfolgsbenachrichtigung über followup
-            await interaction.followup.send(f"Event **{event.title}** wurde erfolgreich erstellt!", ephemeral=True)
+            # Erfolgsbenachrichtigung über followup - nicht mehr nötig, da der Ersteller im Kanal sieht, dass alles geklappt hat
+            # await interaction.followup.send(f"Event **{event.title}** wurde erfolgreich erstellt!", ephemeral=True)
             
         except discord.errors.NotFound:
             # Wenn die Interaktion bereits abgelaufen ist, loggen wir das
@@ -1566,7 +1566,7 @@ async def create_event_listing(guild):
                 # Zeige Datumsnamen nur beim ersten Feld, 
                 # für Fortsetzungen verwende einen leeren String mit Unicode Zero Width Space
                 # um das Feld in Discord korrekt darzustellen
-                field_name = f"{date}" if i == 0 else "Uff, an diesem Tag ist viel geplant..."
+                field_name = f"{date}" if i == 0 else "Oha, an diesem Tag ist viel geplant..."
                 
                 current_embed.add_field(
                     name=field_name,
