@@ -2298,7 +2298,7 @@ async def cancel_event(interaction: discord.Interaction, reason: str = None):
                     await user.send(cancel_message)
                     sent_count += 1
             except Exception as e:
-                logger.error(f"Fehler beim Senden der Absage-DM an {user_id}: {e}")
+                logger.error(f"Error sending cancellation DM to {user_id}: {e}")
 
         # Event aus der Liste entfernen und speichern
         event_id = event.get("event_id")
@@ -2612,11 +2612,13 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
         
         # Create the confirmation components
         class RoleProposalView(discord.ui.View):
-            def __init__(self, proposer_id, proposer_name, proposed_role):
+            def __init__(self, proposer_id, proposer_name, proposed_role, guild_id, thread_id):
                 super().__init__(timeout=86400)  # 24 Stunden Timeout
                 self.proposer_id = proposer_id
                 self.proposer_name = proposer_name
                 self.proposed_role = proposed_role
+                self.guild_id = guild_id
+                self.thread_id = thread_id
                 
             @discord.ui.button(label="Annehmen", style=discord.ButtonStyle.green)
             async def accept_button(self, button_interaction: discord.Interaction, button: discord.ui.Button):
@@ -2649,8 +2651,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 if new_role_key not in event['participants']:
                     event['participants'][new_role_key] = []
                 
-                # Automatically add the proposer to the new role
-                dm_sent = False
+                # Automatically add the proposer to the new role with comment
                 proposer_id = str(self.proposer_id)
                 proposer_name = self.proposer_name
                 current_time = datetime.now().timestamp()
@@ -2668,41 +2669,59 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                                 event['participants'][r_key].pop(entry_idx)
                                 break
                 
-                # Add the player to the new role
-                event['participants'][new_role_key].append((proposer_name, proposer_id, current_time))
+                # Add the player to the new role with comment "selbst vorgeschlagen"
+                event['participants'][new_role_key].append((proposer_name, proposer_id, current_time, "selbst vorgeschlagen"))
                 
                 # Update event and save
                 save_event_to_json(event)
                 
-                # Update the event message
-                await bot.update_event_message(button_interaction.channel, event)
+                # Try to update the event message in the thread
+                try:
+                    # Find the guild and thread
+                    guild = bot.get_guild(self.guild_id)
+                    if guild:
+                        thread = await bot.fetch_thread(guild, self.thread_id)
+                        if thread:
+                            await bot.update_event_message(thread, event)
+                            
+                            # Send message to thread about the accepted proposal
+                            await thread.send(f"{self.proposer_name} hat die Rolle **{self.proposed_role}** vorgeschlagen und der Vorschlag wurde angenommen.")
+                except Exception as e:
+                    logger.error(f"Failed to update thread after role proposal: {e}")
                 
                 # Disable all buttons
                 for child in self.children:
                     child.disabled = True
                 
                 # Inform the proposer
+                dm_sent = False
                 try:
-                    proposer = await button_interaction.guild.fetch_member(self.proposer_id)
-                    if proposer:
-                        event_link = f"https://discord.com/channels/{button_interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
-                        dm_message = (
-                            f"**Dein Rollenvorschlag '{self.proposed_role}' wurde angenommen!**\n"
-                            f"Event: {event['title']}\n"
-                            f"Datum: {event['date']}\n"
-                            f"Uhrzeit: {event['time']}\n"
-                            f"Du wurdest automatisch in diese Rolle eingetragen.\n"
-                            f"\n[Zum Event]({event_link})"
-                        )
-                        await proposer.send(dm_message)
-                        dm_sent = True
+                    guild = bot.get_guild(self.guild_id)
+                    if guild:
+                        proposer = await guild.fetch_member(self.proposer_id)
+                        if proposer:
+                            event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                            dm_message = (
+                                f"Dein Rollenvorschlag **{self.proposed_role}** wurde angenommen!\n"
+                                f"Event: {event['title']}\n"
+                                f"Datum: {event['date']}\n"
+                                f"Uhrzeit: {event['time']}\n"
+                                f"Du wurdest automatisch in diese Rolle eingetragen.\n"
+                                f"[Zum Event]({event_link})"
+                            )
+                            await proposer.send(dm_message)
+                            dm_sent = True
                 except Exception as e:
-                    logger.error(f"Failed to send DM to proposer {self.proposer_id}: {e}")
+                    logger.error(f"Failed to send DN to proposer {self.proposer_id}: {e}")
                 
-                # Update the message with disabled buttons and DM info
-                dm_info = " und hat eine DM erhalten" if dm_sent else ""
+                # Update the message with disabled buttons and confirmation
+                info_message = f"Rolle **{self.proposed_role}** wurde zum Event hinzugefügt. {self.proposer_name} wurde automatisch auf die neue Rolle umgebucht."
+                if dm_sent:
+                    info_message += f" Der Vorschlagende wurde per DN informiert."
+                info_message += f"\n[Zum Event]({event_link})"
+                
                 await button_interaction.response.edit_message(
-                    content=f"✅ Rolle '{self.proposed_role}' wurde zum Event hinzugefügt! {self.proposer_name} wurde automatisch auf die neue Rolle umgebucht{dm_info}.", 
+                    content=info_message, 
                     view=self
                 )
             
@@ -2720,31 +2739,67 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 # Inform the proposer
                 dm_sent = False
                 try:
-                    proposer = await button_interaction.guild.fetch_member(self.proposer_id)
-                    if proposer:
-                        await proposer.send(f"Dein Rollenvorschlag '{self.proposed_role}' für das Event '{event['title']}' wurde abgelehnt.")
-                        dm_sent = True
+                    guild = bot.get_guild(self.guild_id)
+                    if guild:
+                        proposer = await guild.fetch_member(self.proposer_id)
+                        if proposer:
+                            event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                            dm_message = (
+                                f"Dein Rollenvorschlag '**{self.proposed_role}**' für das Event '{event['title']}' wurde abgelehnt.\n[Zum Event]({event_link})"
+                            )
+                            await proposer.send(dm_message)
+                            dm_sent = True
                 except Exception as e:
-                    logger.error(f"Failed to send DM to proposer {self.proposer_id}: {e}")
+                    logger.error(f"Failed to send DN to proposer {self.proposer_id}: {e}")
                 
-                # Update the message with disabled buttons and DM info
-                dm_info = " und hat eine DM erhalten" if dm_sent else ""
+                # Update the message with disabled buttons and rejection info
+                info_message = f"Rollenvorschlag **{self.proposed_role}** wurde abgelehnt."
+                if dm_sent:
+                    info_message += f" Der Vorschlagende wurde per DN informiert."
+                
+                event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                info_message += f"\n[Zum Event]({event_link})"
+                
                 await button_interaction.response.edit_message(
-                    content=f"❌ Rollenvorschlag '{self.proposed_role}' wurde abgelehnt. {self.proposer_name} wurde informiert{dm_info}.", 
+                    content=info_message, 
                     view=self
                 )
         
-        # Create the view with the buttons
-        view = RoleProposalView(interaction.user.id, interaction.user.display_name, role_name)
+        # Create the view with the buttons for DM
+        view = RoleProposalView(interaction.user.id, interaction.user.display_name, role_name, interaction.guild.id, interaction.channel.id)
         
-        # Send the proposal message with buttons
-        caller_mention = f"<@{event['caller_id']}>" if event.get('caller_id') else "Event-Ersteller"
-        
+        # Send ephemeral confirmation to the proposer in the thread
         await interaction.response.send_message(
-            f"{caller_mention}, {interaction.user.mention} schlägt eine neue Rolle vor: **{role_name}**\n"
-            f"Möchtest du diese Rolle zum Event hinzufügen?",
-            view=view
+            f"Dein Rollenvorschlag **{role_name}** wurde an den Event-Ersteller gesendet. "
+            f"Du wirst benachrichtigt, sobald eine Entscheidung getroffen wurde.",
+            ephemeral=True
         )
+        
+        # Send DM to the event creator with buttons
+        try:
+            # Find the event creator
+            caller_id = event.get('caller_id')
+            if not caller_id:
+                await interaction.channel.send("Der Event-Ersteller konnte nicht gefunden werden.")
+                return
+            
+            caller = await interaction.guild.fetch_member(int(caller_id))
+            if not caller:
+                await interaction.channel.send("Der Event-Ersteller konnte nicht gefunden werden.")
+                return
+            
+            # Send DM with buttons
+            event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+            await caller.send(
+                f"{interaction.user.display_name} schlägt eine neue Rolle für dein Event '{event['title']}' vor: **{role_name}**\n"
+                f"Möchtest du diese Rolle zum Event hinzufügen?\n"
+                f"[Zum Event]({event_link})",
+                view=view
+            )
+            
+        except Exception as e:
+            logger.error(f"Error sending DM to event creator: {e}")
+            await interaction.channel.send("Der Rollenvorschlag konnte nicht an den Event-Ersteller gesendet werden.")
         
     except Exception as e:
         logger.error(f"Error in propose_role: {e}")
