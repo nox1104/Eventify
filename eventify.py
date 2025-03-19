@@ -67,9 +67,10 @@ logger = setup_logging()
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+AUTHORIZED_GUILD_ID = int(os.getenv("AUTHORIZED_GUILD_ID", "0"))  # Default to 0 if not set
 CHANNEL_ID_EVENT = int(os.getenv("CHANNEL_ID_EVENT"))
 EVENTS_JSON_FILE = "events.json"
-AUTHORIZED_GUILD_ID = int(os.getenv("AUTHORIZED_GUILD_ID", "0"))  # Default to 0 if not set
+
 
 # Set up proper intents
 intents = discord.Intents.default()
@@ -1153,6 +1154,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
         
     async def on_submit(self, interaction: discord.Interaction):
         try:
+            # Sofort die Interaktion beantworten, bevor irgendetwas anderes passiert
+            await interaction.response.defer(ephemeral=True)
+            
             # Parse date and time to create a datetime object
             try:
                 date_parts = self.date.split('.')
@@ -1334,19 +1338,31 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             # Aktualisiere die Eventübersicht
             await create_event_listing(interaction.guild)
             
-            # Bestätigen der Interaktion damit das Modal geschlossen wird
-            await interaction.response.defer()
-            
             # Mention role if specified (in main channel)
             if event.mention_role_id:
                 await channel.send(f"<@&{event.mention_role_id}> Neues Event erstellt!")
                 
+            # Erfolgsbenachrichtigung über followup
+            await interaction.followup.send(f"Event **{event.title}** wurde erfolgreich erstellt!", ephemeral=True)
+            
+        except discord.errors.NotFound:
+            # Wenn die Interaktion bereits abgelaufen ist, loggen wir das
+            logger.error(f"Interaction already expired when handling event creation for {self.title}")
         except Exception as e:
-            logger.error(f"Error in EventModal on_submit: {e}")
-            await interaction.response.send_message(
-                "Es gab einen Fehler beim Erstellen des Events. Bitte versuche es später erneut.",
-                ephemeral=True
-            )
+            # Allgemeine Fehlerbehandlung
+            error_msg = f"Es gab einen Fehler beim Erstellen des Events: {str(e)}"
+            logger.error(f"Error in EventModal on_submit: {str(e)}")
+            logger.error(f"Full traceback:", exc_info=True)
+            
+            # Versuche Followup zu senden, falls möglich
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(error_msg, ephemeral=True)
+                else:
+                    await interaction.followup.send(error_msg, ephemeral=True)
+            except:
+                # Falls auch das Followup nicht funktioniert, nur loggen
+                logger.error("Couldn't send error message to user")
 
 async def create_event_listing(guild):
     """Erstellt ein Event Listing mit allen anstehenden Events"""
@@ -1445,45 +1461,87 @@ async def create_event_listing(guild):
                 events_by_date[date] = []
             events_by_date[date].append(event)
         
-        # Create the embed
-        embed = discord.Embed(
+        # Create embeds with a max of 25 fields each (Discord limit)
+        embeds = []
+        current_embed = discord.Embed(
             title="Eventübersicht",
             color=0x0dceda  # Eventify Cyan
         )
+        field_count = 0
+        max_fields_per_embed = 25  # Discord limit
         
-        # Add each date with its events
+        # Process each date and its events
         for date, date_events in events_by_date.items():
-            # Create the description for this date
-            date_description = ""
+            # Create event descriptions, potentially splitting into multiple fields if too long
+            all_descriptions = []
+            current_description = ""
+            
             for event in date_events:
                 title = event.get('title', 'Unbekanntes Event')
                 time = event.get('time', '')
                 caller_id = event.get('caller_id', None)
                 message_id = event.get('message_id')
                 
-                # Add time, caller and title
+                # Create event line
+                event_line = ""
                 if caller_id:
                     if message_id and message_id != "None" and message_id != None:
-                        date_description += f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit <@{caller_id}>\n"
+                        event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit <@{caller_id}>\n"
                     else:
-                        date_description += f"{time}  {title} mit <@{caller_id}>\n"
+                        event_line = f"{time}  {title} mit <@{caller_id}>\n"
                 else:
                     if message_id and message_id != "None" and message_id != None:
-                        date_description += f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
+                        event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
                     else:
-                        date_description += f"{time}  {title}\n"
+                        event_line = f"{time}  {title}\n"
+                
+                # Check if adding this line would exceed Discord's limit
+                if len(current_description) + len(event_line) > 1000:  # Leave some buffer below 1024
+                    # This field is full, add it to the list and start a new one
+                    all_descriptions.append(current_description)
+                    current_description = event_line
+                else:
+                    # Add to current field
+                    current_description += event_line
             
-            # Add the field with this date
-            embed.add_field(
-                name=f"{date}",
-                value=date_description,
-                inline=False
-            )
+            # Don't forget the last batch
+            if current_description:
+                all_descriptions.append(current_description)
+            
+            # Add fields for this date, potentially multiple if there were a lot of events
+            for i, description in enumerate(all_descriptions):
+                # Check if we need to create a new embed (max 25 fields per embed)
+                if field_count >= max_fields_per_embed:
+                    # Current embed is full, add it to the list and create a new one
+                    embeds.append(current_embed)
+                    current_embed = discord.Embed(
+                        title="Eventübersicht (Fortsetzung)",
+                        color=0x0dceda  # Eventify Cyan
+                    )
+                    field_count = 0
+                
+                # Zeige Datumsnamen nur beim ersten Feld, 
+                # für Fortsetzungen verwende einen leeren String mit Unicode Zero Width Space
+                # um das Feld in Discord korrekt darzustellen
+                field_name = f"{date}" if i == 0 else "Uff, an diesem Tag ist viel geplant..."
+                
+                current_embed.add_field(
+                    name=field_name,
+                    value=description,
+                    inline=False
+                )
+                field_count += 1
         
-        # Send the embed to the event channel
+        # Don't forget to add the last embed
+        if field_count > 0:
+            embeds.append(current_embed)
+        
+        # Send the embeds to the event channel
         channel = guild.get_channel(CHANNEL_ID_EVENT)
-        await channel.send(embed=embed)
-        logger.info("Event listing created successfully.")
+        for embed in embeds:
+            await channel.send(embed=embed)
+        
+        logger.info(f"Event listing created successfully with {len(embeds)} embeds.")
     except Exception as e:
         logger.error(f"Error creating event listing: {e}")
         logger.exception("Full traceback:")
