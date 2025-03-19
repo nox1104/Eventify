@@ -11,6 +11,7 @@ import asyncio
 import sys
 from logging.handlers import RotatingFileHandler
 import glob
+import copy
 
 """
 LANGUAGE POLICY:
@@ -2636,11 +2637,42 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                     event['roles'].append(self.proposed_role)
                     new_role_index = len(event['roles']) - 1
                 else:
+                    # Store the current state of participants before changes
+                    old_participants = copy.deepcopy(event.get('participants', {}))
+                    
                     # Add the new role before the FILLALL role
                     event['roles'].insert(fill_index, self.proposed_role)
                     new_role_index = fill_index
+                    
                     # Update the FILLALL index, since we added a role before it
                     fill_index += 1
+                    
+                    # Update all role indices that come after the inserted role
+                    if 'participants' in event:
+                        new_participants = {}
+                        for role_key, participants_list in old_participants.items():
+                            try:
+                                idx, role_name = role_key.split(':', 1)
+                                idx = int(idx)
+                                
+                                # If this role comes after the inserted role, increment its index
+                                if idx >= new_role_index and role_name.lower() not in ['fill', 'fillall']:
+                                    new_idx = idx + 1
+                                    new_key = f"{new_idx}:{role_name}"
+                                    new_participants[new_key] = participants_list
+                                # If this is the FILLALL/FILL role that was shifted
+                                elif role_name.lower() in ['fill', 'fillall'] and idx == new_role_index:
+                                    new_key = f"{fill_index}:{role_name}"
+                                    new_participants[new_key] = participants_list
+                                # Otherwise keep the key as is
+                                else:
+                                    new_participants[role_key] = participants_list
+                            except ValueError:
+                                # If role_key is not in expected format, keep it as is
+                                new_participants[role_key] = participants_list
+                        
+                        # Update the participants dictionary
+                        event['participants'] = new_participants
                 
                 # Create role_key for the new role
                 new_role_key = f"{new_role_index}:{self.proposed_role}"
