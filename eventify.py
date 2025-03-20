@@ -897,7 +897,7 @@ class MyBot(discord.Client):
                 # Events laden
                 events_data = load_upcoming_events(include_expired=True, include_cleaned=True)
                 events_to_keep = []
-                events_to_remove = []
+                original_events_count = len(events_data.get("events", []))
                 
                 # IDs der AKTIVEN Event-Nachrichten sammeln
                 active_event_message_ids = set()
@@ -916,7 +916,8 @@ class MyBot(discord.Client):
                             days_difference = (current_time - event_time).days
                             
                             if days_difference > DAYS_TO_KEEP:
-                                events_to_remove.append(event)
+                                # Alte abgelaufene Events nicht behalten
+                                pass
                             else:
                                 events_to_keep.append(event)
                         except (ValueError, KeyError) as e:
@@ -947,7 +948,8 @@ class MyBot(discord.Client):
                 events_data["events"] = events_to_keep
                 save_events_to_json(events_data)
                 
-                logger.info(f"Event-Bereinigung abgeschlossen: {len(events_to_remove)} Events entfernt, {len(events_to_keep)} Events behalten")
+                removed_count = original_events_count - len(events_to_keep)
+                logger.info(f"Event-Bereinigung abgeschlossen: {removed_count} Events entfernt, {len(events_to_keep)} Events behalten")
                 
             except Exception as e:
                 logger.error(f"Fehler bei der Bereinigung des Event-Kanals: {e}")
@@ -1350,7 +1352,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 
                 if fill_index is not None:
                     fill_text = f"{role_counter}. {event.roles[fill_index]}"
-                    embed.add_field(name="\u200b", value=fill_text, inline=False)
+                    embed.add_field(name="", value=fill_text, inline=False)
             else:
                 # Im Teilnehmer-only Modus, zeige die Teilnehmer-Rolle an
                 embed.add_field(name="Rollen", value="1. Teilnehmer", inline=False)
@@ -1525,10 +1527,10 @@ async def create_event_listing(guild):
                 event_line = ""
                 if caller_id:
                     # We always have a message_id if we have a caller_id
-                    event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit {caller_name}\n"
+                    event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id} 'Event Details') mit {caller_name}\n"
                 else:
                     if message_id and message_id != "None" and message_id != None:
-                        event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
+                        event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id} 'Event Details')\n"
                     else:
                         event_line = f"{time}  {title}\n"
                 
