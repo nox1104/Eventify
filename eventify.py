@@ -1518,15 +1518,14 @@ async def create_event_listing(guild):
                 title = event.get('title', 'Unbekanntes Event')
                 time = event.get('time', '')
                 caller_id = event.get('caller_id', None)
+                caller_name = event.get('caller_name', None)  # Get the caller's name
                 message_id = event.get('message_id')
                 
                 # Create event line
                 event_line = ""
                 if caller_id:
-                    if message_id and message_id != "None" and message_id != None:
-                        event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit <@{caller_id}>\n"
-                    else:
-                        event_line = f"{time}  {title} mit <@{caller_id}>\n"
+                    # We always have a message_id if we have a caller_id
+                    event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit {caller_name}\n"
                 else:
                     if message_id and message_id != "None" and message_id != None:
                         event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
