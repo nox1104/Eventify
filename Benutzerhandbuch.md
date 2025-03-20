@@ -54,7 +54,7 @@ Mit dem Befehl `/eventify` kannst du ein neues Event erstellen. Folgende Paramet
 - `date`: Das Datum des Events im Format TT.MM.JJJJ
 - `time`: Die Uhrzeit des Events im Format HH:mm
 - `description` (optional): Die Beschreibung des Events (mit \n für Zeilenumbrüche)
-- `roles` (optional): Liste der Rollen, getrennt durch \n (für den Nur-Teilnehmer-Modus diesen Parameter weglassen)
+- `roles` (optional): Liste der Rollen, getrennt durch \n (für den Nur-Teilnehmer-Modus diesen Parameter weglassen, aber descroption setzen)
 - `mention_role` (optional): Eine Rolle, die beim Event erwähnt werden soll
 - `image_url` (optional): Ein Link zu einem Bild, das im Event angezeigt werden soll
   - Das Bild wird unter der Beschreibung angezeigt

@@ -1503,7 +1503,7 @@ async def create_event_listing(guild):
         embeds = []
         current_embed = discord.Embed(
             title="Eventübersicht",
-            color=0x0dceda  # Eventify Cyan
+            color=0xe076ed  # Eventify Pink
         )
         field_count = 0
         max_fields_per_embed = 25  # Discord limit
@@ -1554,7 +1554,7 @@ async def create_event_listing(guild):
                     embeds.append(current_embed)
                     current_embed = discord.Embed(
                         title="Eventübersicht (Fortsetzung)",
-                        color=0x0dceda  # Eventify Cyan
+                        color=0xe076ed  # Eventify Pink
                     )
                     field_count = 0
                 
