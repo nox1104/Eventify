@@ -659,7 +659,7 @@ class MyBot(discord.Client):
                     if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
                         # Remove parentheses from section header
                         header_text = role_name.strip()[1:-1]  # Remove first and last character
-                        field_content += f"*{header_text}*\n"
+                        field_content += f"*-----{header_text}-----*\n"
                     else:
                         # This is a normal role
                         # Display role and participants
@@ -1338,7 +1338,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                     if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
                         # Remove parentheses from section header
                         header_text = role_name.strip()[1:-1]  # Remove first and last character
-                        field_content += f"*{header_text}*\n"
+                        field_content += f"*-----{header_text}-----*\n"
                     else:
                         # This is a normal role
                         field_content += f"{role_counter}. {role_name}\n"
@@ -2000,7 +2000,7 @@ async def eventify(
             save_event_to_json(event)
             
             # Respond to interaction to avoid timeout
-            await interaction.response.defer(ephemeral=True)
+            await interaction.response.defer(ephemeral=True, thinking=False)
             
             channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
             
@@ -2065,7 +2065,7 @@ async def eventify(
                 if role_name.strip().startswith('(') and role_name.strip().endswith(')'):
                     # Remove parentheses from section header
                     header_text = role_name.strip()[1:-1]  # Remove first and last character
-                    field_content += f"*{header_text}*\n"
+                    field_content += f"*-----{header_text}-----*\n"
                 else:
                     # This is a normal role
                     field_content += f"{role_counter}. {role_name}\n"
@@ -2123,8 +2123,8 @@ async def eventify(
             # Create the event listing after creating the event
             await create_event_listing(interaction.guild)
             
-            # Removing the confirmation message
-            # await interaction.followup.send("Event wurde erfolgreich erstellt!", ephemeral=True)
+            # Send ephemeral confirmation message
+            await interaction.followup.send("Dein Event wurde erstellt.", ephemeral=True)
         else:
             # Create and show the modal
             modal = EventModal(
