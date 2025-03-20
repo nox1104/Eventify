@@ -48,36 +48,52 @@ Als Event-Ersteller kannst du neue Events planen und verwalten. Hier ist, wie du
 
 ### Event erstellen
 
-Mit dem Befehl `/eventify` kannst du ein neues Event erstellen. Folgende Parameter sind verfügbar:
+Mit dem Befehl `/eventify` kannst du ein neues Event erstellen. Du hast zwei Möglichkeiten:
 
-- `title`: Der Titel des Events
+1. **Slash-Befehl**: Gib alle Informationen direkt an (so kannst du dir Templates für wiederkehrende Events bauen)
+   ```
+   /eventify title: date: time: description: Wöchentlicher Raid\nBringt Buffs und Flasks mit\nSeid pünktlich! roles: Tank\nHealer\nDPS\nRanged DPS
+   ```
+
+2. **Modal-Formular**: Wenn du `description` und `roles` weglässt, öffnet sich ein Formular mit zusätzlichen Eingabefeldern
+   ```
+   /eventify title: date: time:
+   ```
+
+Folgende Parameter sind verfügbar:
+
+- `title`: Der Titel des Events (maximale Länge: 40 Zeichen)
 - `date`: Das Datum des Events im Format TT.MM.JJJJ
 - `time`: Die Uhrzeit des Events im Format HH:mm
 - `description` (optional): Die Beschreibung des Events (mit \n für Zeilenumbrüche)
-- `roles` (optional): Liste der Rollen, getrennt durch \n (für den Nur-Teilnehmer-Modus diesen Parameter weglassen, aber descroption setzen)
+  - Detaillierte Informationen zum Event
+  - Falls eine Rolle ausgewählt wurde, wird diese automatisch am Anfang der Beschreibung erwähnt
+  - 1020 Zeichen Platz, danach wird der Text mit "..." abgeschnitten
+- `roles` (optional): Liste der Rollen, getrennt durch \n (für den Nur-Teilnehmer-Modus diesen Parameter weglassen, aber description setzen)
+  - Liste der verfügbaren Rollen, eine pro Zeile
+  - Leerzeilen werden ignoriert
+  - Mit Text in Klammern, z.B. "(Core)" setzt man Abschnittsüberschriften
+  - Lasse das "Rollen"-Feld einfach leer für Events ohne spezifische Rollen (z.B. Gildenversammlungen, Gatherevents) - es wird dann automatisch eine einfache Teilnehmerliste erstellt
 - `mention_role` (optional): Eine Rolle, die beim Event erwähnt werden soll
 - `image_url` (optional): Ein Link zu einem Bild, das im Event angezeigt werden soll
   - Das Bild wird unter der Beschreibung angezeigt
   - Unterstützte Bildformate: PNG, JPG, GIF
   - Der Link muss direkt zum Bild führen
 
-Du hast zwei Möglichkeiten, ein Event zu erstellen:
+### Nur-Teilnehmer-Modus
 
-1. **Schnelles Erstellen mit allen Parametern**: Gib alle Informationen direkt an, inklusive Beschreibung und Rollen
-   ```
-  /eventify title: date: time: description: Wöchentlicher Raid\nBringt Buffs und Flasks mit\nSeid pünktlich! roles: Tank\nHealer\nDPS\nRanged DPS
-   ```
+Der Nur-Teilnehmer-Modus ist für Events gedacht, bei denen keine spezifischen Rollen benötigt werden, sondern nur eine einfache Teilnehmerliste:
 
-2. **Modal-Formular**: Wenn du `description` und `roles` weglässt, öffnet sich ein Formular:
-   - **Beschreibung**: 
-     - Detaillierte Informationen zum Event
-     - Falls eine Rolle ausgewählt wurde, wird diese automatisch am Anfang der Beschreibung erwähnt
-     - 1020 Zeichen Platz, danach wird der Text mit "..." abgeschnitten
-   - **Rollen**: 
-     - Liste der verfügbaren Rollen, eine pro Zeile
-     - Leerzeilen werden ignoriert
-     - Mit Text in Klammern, z.B. "(Core)" setzt man Abschnittsüberschriften
-     - Lasse das "Rollen"-Feld einfach leer für Events ohne spezifische Rollen (z.B. Gildenversammlungen, Gatherevents) - es wird dann automatisch eine einfache Teilnehmerliste erstellt
+- **Wann verwenden?** Ideal für Gathern, Versammlungen, Meetings, soziale Treffen oder andere Events, bei denen alle Teilnehmer die gleiche Rolle haben
+- **Wie aktivieren?** Lasse einfach das `roles`-Feld leer und fülle mindestens `description` zusätzlich zu den Pflichtfeldern aus
+- **Wie funktioniert es?** 
+  - Es wird automatisch eine einzelne Rolle namens "Teilnehmer" erstellt
+  - Teilnehmer können sich mit der Nummer "1" für das Event anmelden
+  - Kommentare sind wie bei normalen Rollen möglich (z.B. "1 komme später")
+  - Jeder kann sich eintragen, ohne andere Teilnehmer zu verdrängen (ähnlich wie bei der Fill-Rolle)
+- **Besonderheiten:**
+  - Der `/propose`-Befehl zum Vorschlagen neuer Rollen ist im Nur-Teilnehmer-Modus nicht verfügbar
+  - Die Anzeige ist übersichtlicher, da nur eine einzelne Teilnehmerliste angezeigt wird
 
 ### Teilnehmer erinnern
 
@@ -168,9 +184,7 @@ Nur der Event-Ersteller kann diese Befehle verwenden. Die automatischen PN-Benac
 - Im Thread kannst du weitere Informationen teilen und mit den Teilnehmern kommunizieren
 - Das Event wird automatisch in der Event-Liste angezeigt
 - Dein Name wird als Ersteller unter dem Titel des Events angezeigt
-- Event-Threads werden 15 Minuten nach Eventbeginn automatisch gelöscht
-  - Eine kurze Benachrichtigung wird gesendet, wenn ein Thread gelöscht wurde
-  - Diese Nachricht verschwindet nach 5 Minuten automatisch
+- Event-Threads werden 30 Minuten nach Eventbeginn automatisch gelöscht
 
 ### Nutzung von Links in Discord
 
@@ -205,9 +219,11 @@ Der Bot hält den Event-Kanal automatisch sauber und übersichtlich:
 ### Event nur per Prompt erstellen
 ```
 /eventify title: date: time: description: Wöchentlicher Raid\nBringt Buffs und Flasks mit\nSeid pünktlich! roles: Tank\nHealer\nDPS\nRanged DPS
+/eventify title:Testevent date: time:2000 description:Wöchentlicher Raid\nBringt Food und Pots mit. roles:(Core)\nTank\nHealer\nDPS\nRanged DPS\n(Additional)\nDPS\nDPS\n(Reserve)\nShadowcaller\nLC\nSpirithunter mention_role: image_url:https://historiasdeastronomia.es/vistas/images/artistic/volans.jpg 
+
 ```
 
-### Event im Nur-Teilnehmer-Modus erstellen (ohne 'roles', aber mind. einen Parameter zusätzlich zu 'title', 'date' und 'time')
+### Event im Nur-Teilnehmer-Modus erstellen (ohne 'roles', aber mind. 'decription' zusätzlich zu 'title', 'date' und 'time')
 ```
 /eventify title: date: time: description: Monatliches Meeting\nThemen:\n- Gildenbank\n- Events\n- Sonstiges
 ```

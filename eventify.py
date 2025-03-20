@@ -1527,10 +1527,10 @@ async def create_event_listing(guild):
                 event_line = ""
                 if caller_id:
                     # We always have a message_id if we have a caller_id
-                    event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id} 'Event Details') mit {caller_name}\n"
+                    event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit {caller_name}\n"
                 else:
                     if message_id and message_id != "None" and message_id != None:
-                        event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id} 'Event Details')\n"
+                        event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
                     else:
                         event_line = f"{time}  {title}\n"
                 
@@ -1917,6 +1917,11 @@ async def eventify(
 
         if not parsed_date or not parsed_time:
             await interaction.response.send_message("Ungültiges Datum oder ungültige Zeit. Bitte verwende die Formate DD.MM.YYYY und HH:MM.", ephemeral=True)
+            return
+
+        # Check title length (max 40 characters)
+        if len(title) > 40:
+            await interaction.response.send_message("Der Titel darf maximal 40 Zeichen lang sein.", ephemeral=True)
             return
 
         # Combine date and time into a datetime object
