@@ -296,8 +296,13 @@ class MyBot(discord.Client):
                             # For FillALL, we ignore comments and allow multiple roles
                             if is_fillall_role:
                                 # Add new entry with timestamp (ignore comment for FillALL)
-                                event['participants'][role_key].append((player_name, player_id, current_time))
-                                logger.info(f"Added {player_name} to FillALL role")
+                                # Modified to include comment for FillALL roles
+                                if comment:
+                                    event['participants'][role_key].append((player_name, player_id, current_time, comment))
+                                    logger.info(f"Adding {player_name} to FillALL role with comment: '{comment}'")
+                                else:
+                                    event['participants'][role_key].append((player_name, player_id, current_time))
+                                    logger.info(f"Added {player_name} to FillALL role")
                                 
                                 # Update the event message and save to JSON
                                 await self._update_event_and_save(message, event, events_data)
@@ -712,7 +717,7 @@ class MyBot(discord.Client):
                         sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                         
                         # Display all participants for FillALL without extra newline
-                        fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" for p in sorted_fill if len(p) >= 2])
+                        fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" + (f" {p[3]}" if len(p) > 3 and p[3] else "") for p in sorted_fill if len(p) >= 2])
                         
                         # Add Fill role to embed with empty name to reduce spacing
                         embed.add_field(name="", value=fill_players_text or fill_text, inline=False)
@@ -2094,7 +2099,7 @@ async def eventify(
                     sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                     
                     # Display all participants for FillALL without extra newline
-                    fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" for p in sorted_fill if len(p) >= 2])
+                    fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" + (f" {p[3]}" if len(p) > 3 and p[3] else "") for p in sorted_fill if len(p) >= 2])
                     
                     # Add Fill role to embed with empty name to reduce spacing
                     embed.add_field(name="", value=fill_players_text or fill_text, inline=False)
