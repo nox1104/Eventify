@@ -944,7 +944,7 @@ class MyBot(discord.Client):
                 
                 # Purge mit Filter ausführen
                 try:
-                    deleted_msgs = await channel.purge(check=should_delete_message, limit=100)
+                    deleted_msgs = await channel.purge(check=should_delete_message, limit=10000)
                     logger.info(f"Guild {guild.id}: {len(deleted_msgs)} alte Nachrichten gelöscht")
                 except Exception as e:
                     logger.error(f"Fehler beim Purge: {e}")
