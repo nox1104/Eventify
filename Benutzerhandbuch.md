@@ -213,7 +213,7 @@ Der Bot hält den Event-Kanal automatisch sauber und übersichtlich:
 
 ### Event erstellen mit der Modal-Methode (nur 'title', 'date' und 'time' ausfüllen)
 ```
-/eventify 
+/eventify title: date: time: description:
 ```
 
 ### Event nur per Prompt erstellen
