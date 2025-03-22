@@ -134,7 +134,7 @@ Als Event-Ersteller kannst du ein Event absagen und alle Teilnehmer automatisch 
 
 Nur der Event-Ersteller kann diesen Befehl verwenden und nur im Event-Thread.
 
-### Teilnehmer verwalten (für Event-Ersteller)
+### Teilnehmer verwalten
 
 Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
 
@@ -162,7 +162,10 @@ Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
    - Datum und Uhrzeit
    - Link zum Event
 
-Nur der Event-Ersteller kann diese Befehle verwenden. Die automatischen PN-Benachrichtigungen helfen den Teilnehmern, über Änderungen ihrer Rollenzuweisung informiert zu bleiben.
+### Formatierung der Beschreibung
+
+Discord erlaubt ja einige Formatierungsooptionen von Markdown. Leider sind in Embeds (also das, wo unsere Events drin angezeigt werden), Überschriften nicht nutzbar. Also `# Überschrift` wird leider genauso auch im Embed erscheinen. Lustigerweise kann man die Verkleinerung verwenden. '-# kleiner Text' wird dann also klein dargestellt. Frag nicht warum, das habe ich tatsächlich aufgegeben. Einige Restriktionen von Discord scheinen tatsächlich keinen Sinn zu ergeben.
+[Hier](https://support.discord.com/hc/en-us/articles/210298617-Markdown-Text-101-Chat-Formatting-Bold-Italic-Underline) ist beschrieben, welche Formatierungen Discord uns erlaubt.
 
 ### Rollenformatierung
 
