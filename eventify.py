@@ -282,8 +282,19 @@ class MyBot(discord.Client):
                             # Just acknowledge if no comment to update
                             logger.info(f"{player_name} already assigned to role {role_name} at index {role_index}")
                             await message.add_reaction('ℹ️')  # Info reaction
-                            # Send a joke message without auto-deletion
-                            await message.channel.send(f"{message.author.mention} Für die Rolle '{role_name}' bist du doch schon angemeldet, du Pappnase!")
+                            # Send a joke message as DM instead of in channel
+                            try:
+                                event_link = f"https://discord.com/channels/{message.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                                dm_message = (
+                                    f"**Für die Rolle '{role_name}' bist du doch schon angemeldet, du Pappnase!**\n"
+                                    f"Event: {event['title']}\n"
+                                    f"Datum: {event['date']}\n"
+                                    f"Uhrzeit: {event['time']}\n"
+                                    f"\n[Zum Event]({event_link})"
+                                )
+                                await message.author.send(dm_message)
+                            except Exception as e:
+                                logger.error(f"Failed to send DM to user {message.author.id}: {e}")
                     else:
                         # For Fill role, no limit on players and can be added even if already registered for another role
                         if is_fill_role:
@@ -350,8 +361,25 @@ class MyBot(discord.Client):
                                 # Check if the new role already has participants (except for Fill roles)
                                 if not is_fill_role and len(event['participants'][role_key]) > 0:
                                     logger.info(f"Role {role_name} already has a participant, rejecting registration from {player_name}")
-                                    await message.add_reaction('❌')  # Rejection reaction
-                                    await message.channel.send(f"{message.author.mention} Nene, so geht das nicht. Für die Rolle war bereits jemand anderes schneller, du Schlingel.")
+                                    await message.add_reaction('ℹ️')  # Rejection reaction
+                                    # Send as DM instead of in channel
+                                    try:
+                                        event_link = f"https://discord.com/channels/{message.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                                        
+                                        # Get current role holder info
+                                        current_holder = event['participants'][role_key][0]
+                                        current_holder_id = current_holder[1]
+                                        
+                                        dm_message = (
+                                            f"Nene, so geht das nicht. Die Rolle **{role_name}** hat sich bereits <@{current_holder_id}> ausgesucht, du Schlingel.\n"
+                                            f"Event: {event['title']}\n"
+                                            f"Datum: {event['date']}\n"
+                                            f"Uhrzeit: {event['time']}\n"
+                                            f"[Zum Event]({event_link})"
+                                        )
+                                        await message.author.send(dm_message)
+                                    except Exception as e:
+                                        logger.error(f"Failed to send DM to user {message.author.id}: {e}")
                                     return
                                 
                                 # Remove player from previous role
@@ -372,8 +400,25 @@ class MyBot(discord.Client):
                                 # Check if role already has participants (except for Fill roles)
                                 if len(event['participants'][role_key]) > 0:
                                     logger.info(f"Role {role_name} already has a participant, rejecting registration from {player_name}")
-                                    await message.add_reaction('❌')  # Rejection reaction
-                                    await message.channel.send(f"{message.author.mention} Nene, so geht das nicht. Für die Rolle war bereits jemand anderes schneller, du Schlingel.")
+                                    await message.add_reaction('ℹ️')  # Rejection reaction
+                                    # Send as DM instead of in channel
+                                    try:
+                                        event_link = f"https://discord.com/channels/{message.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                                        
+                                        # Get current role holder info
+                                        current_holder = event['participants'][role_key][0]
+                                        current_holder_id = current_holder[1]
+                                        
+                                        dm_message = (
+                                            f"Nene, so geht das nicht. Die Rolle **{role_name}** hat sich bereits <@{current_holder_id}> ausgesucht, du Schlingel.\n"
+                                            f"Event: {event['title']}\n"
+                                            f"Datum: {event['date']}\n"
+                                            f"Uhrzeit: {event['time']}\n"
+                                            f"[Zum Event]({event_link})"
+                                        )
+                                        await message.author.send(dm_message)
+                                    except Exception as e:
+                                        logger.error(f"Failed to send DM to user {message.author.id}: {e}")
                                     return
                                 
                                 # Add new entry with timestamp and comment
@@ -393,10 +438,10 @@ class MyBot(discord.Client):
                     # No message to user
             else:
                 logger.warning(f"No event found matching thread name: {event_title}")
-                await message.channel.send("Kein passendes Event für diesen Thread gefunden.")
+                await message.channel.send("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
         except Exception as e:
             logger.error(f"Error processing role assignment: {e}")
-            await message.channel.send(f"Fehler bei der Verarbeitung deiner Anfrage: {str(e)}")
+            await message.channel.send(f"Fehler bei der Verarbeitung deiner Anfrage: {str(e)}", ephemeral=True)
 
     async def _handle_unregister(self, message, is_specific_role=False, role_number=None, role_index=None):
         try:
@@ -474,10 +519,10 @@ class MyBot(discord.Client):
                         await message.add_reaction('❓')  # Invalid role
             else:
                 logger.warning(f"No event found matching thread name: {message.channel.name}")
-                await message.channel.send("Kein passendes Event für diesen Thread gefunden.")
+                await message.channel.send("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
         except Exception as e:
             logger.error(f"Error processing unregister: {e}")
-            await message.channel.send(f"Fehler bei der Verarbeitung deiner Anfrage: {str(e)}")
+            await message.channel.send(f"Fehler bei der Verarbeitung deiner Anfrage: {str(e)}", ephemeral=True)
 
     async def _update_event_and_save(self, message, event, events):
         try:
@@ -622,10 +667,10 @@ class MyBot(discord.Client):
                             if len(p) >= 2:
                                 # Check if a comment is present
                                 if len(p) >= 4 and p[3]:
-                                    # Truncate comment to 20 characters if necessary
+                                    # Truncate comment to 30 characters if necessary
                                     comment = p[3]
-                                    if len(comment) > 20:
-                                        comment = comment[:20] + "..."
+                                    if len(comment) > 30:
+                                        comment = comment[:30] + "..."
                                     participants_text += f"<@{p[1]}> - {comment}\n"
                                 else:
                                     participants_text += f"<@{p[1]}>\n"
@@ -1223,7 +1268,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 roles = ["Teilnehmer"]
             else:
                 # Normaler Modus mit Rollen aus der Eingabe
-                roles = roles_input.split('\n')
+                roles = [role.strip() for role in roles_input.splitlines() if role.strip()]
             
             # Process section headers to ensure they're consistent
             for i, role in enumerate(roles):
@@ -2426,7 +2471,7 @@ async def add_participant(
                 event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                 dm_message = (
                     f"**Update zu Event: {event['title']}**\n"
-                    f"Der Eventersteller hat deinen Kommentar für die Rolle {role_name} aktualisiert.\n"
+                    f"**Der Eventersteller hat deinen Kommentar für die Rolle {role_name} aktualisiert.**\n"
                     f"Datum: {event['date']}\n"
                     f"Uhrzeit: {event['time']}\n"
                     f"Neuer Kommentar: {comment}\n"
@@ -2442,8 +2487,12 @@ async def add_participant(
             
             # Check if the role already has participants (for non-Fill roles)
             if not is_fill_role and len(event['participants'][role_key]) > 0:
+                # Get current role holder info
+                current_holder = event['participants'][role_key][0]
+                current_holder_id = current_holder[1]
+                
                 await interaction.response.send_message(
-                    f"Nene, so geht das nicht. Für die Rolle '{role_name}' war bereits jemand anderes schneller, du Schlingel.", 
+                    f"Nene, so geht das nicht. Für die Rolle **{role_name}** ist bereits <@{current_holder_id}> eingetragen. Mach nochmal. Aber richtig.", 
                     ephemeral=True
                 )
                 return
@@ -2550,7 +2599,7 @@ async def remove_participant(
                     event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                     dm_message = (
                         f"**Du wurdest aus einem Event entfernt: {event['title']}**\n"
-                        f"Du wurdest aus folgenden Rollen entfernt: {', '.join(removed_roles)}\n"
+                        f"**Du wurdest aus folgenden Rollen entfernt: {', '.join(removed_roles)}**\n"
                         f"Datum: {event['date']}\n"
                         f"Uhrzeit: {event['time']}\n"
                         f"\n[Zum Event]({event_link})"
@@ -2586,7 +2635,7 @@ async def remove_participant(
                         event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                         dm_message = (
                             f"**Du wurdest aus einer Rolle entfernt: {event['title']}**\n"
-                            f"Rolle: {role_name}\n"
+                            f"**Rolle: {role_name}**\n"
                             f"Datum: {event['date']}\n"
                             f"Uhrzeit: {event['time']}\n"
                             f"\n[Zum Event]({event_link})"
@@ -2767,11 +2816,11 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                         if proposer:
                             event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                             dm_message = (
-                                f"Dein Rollenvorschlag **{self.proposed_role}** wurde angenommen!\n"
+                                f"**Dein Rollenvorschlag {self.proposed_role} wurde angenommen!**\n"
                                 f"Event: {event['title']}\n"
                                 f"Datum: {event['date']}\n"
                                 f"Uhrzeit: {event['time']}\n"
-                                f"Du wurdest automatisch in diese Rolle eingetragen.\n"
+                                f"**Du wurdest automatisch in diese Rolle eingetragen.**\n"
                                 f"[Zum Event]({event_link})"
                             )
                             await proposer.send(dm_message)
@@ -2810,7 +2859,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                         if proposer:
                             event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                             dm_message = (
-                                f"Dein Rollenvorschlag '**{self.proposed_role}**' für das Event '{event['title']}' wurde abgelehnt.\n[Zum Event]({event_link})"
+                                f"**Dein Rollenvorschlag '{self.proposed_role}' für das Event '{event['title']}' wurde abgelehnt.**\n[Zum Event]({event_link})"
                             )
                             await proposer.send(dm_message)
                             dm_sent = True
