@@ -50,7 +50,7 @@ Als Event-Ersteller kannst du neue Events planen und verwalten. Hier ist, wie du
 
 Mit dem Befehl `/eventify` kannst du ein neues Event erstellen. Du hast zwei Möglichkeiten:
 
-1. **Slash-Befehl**: Gib alle Informationen direkt an (so kannst du dir Templates für wiederkehrende Events bauen)
+1. **Slash-Befehl**: Gib alle Informationen direkt an (so kannst du dir Templates für wiederkehrende Events bauen, `\n` für Zeilenumbrüche)
    ```
    /eventify title: date: time: description: Wöchentlicher Raid\nBringt Buffs und Flasks mit\nSeid pünktlich! roles: Tank\nHealer\nDPS\nRanged DPS
    ```
@@ -97,8 +97,6 @@ Der Nur-Teilnehmer-Modus ist für Events gedacht, bei denen keine spezifischen R
 
 ### Teilnehmer erinnern
 
-Als Event-Ersteller kannst du allen eingetragenen Teilnehmern eine Erinnerung schicken:
-
 1. Gehe in den Event-Thread
 2. Verwende den Slash-Befehl `/remind`
    - Optional kannst du eine zusätzliche Nachricht mit `message:` hinzufügen
@@ -111,11 +109,7 @@ Als Event-Ersteller kannst du allen eingetragenen Teilnehmern eine Erinnerung sc
      - Link zum Event
    - Eine Bestätigung an dich, wie viele Erinnerungen erfolgreich versendet wurden
 
-Nur der Event-Ersteller kann diesen Befehl verwenden.
-
 ### Event absagen
-
-Als Event-Ersteller kannst du ein Event absagen und alle Teilnehmer automatisch informieren:
 
 1. Gehe in den Event-Thread
 2. Verwende den Slash-Befehl `/cancel`
@@ -132,8 +126,6 @@ Als Event-Ersteller kannst du ein Event absagen und alle Teilnehmer automatisch 
    - Eine neue Eventübersicht ohne das abgesagte Event wird erstellt
    - Der Event-Thread wird sofort gelöscht, um zu verhindern, dass sich weitere Teilnehmer anmelden
 
-Nur der Event-Ersteller kann diesen Befehl verwenden und nur im Event-Thread.
-
 ### Teilnehmer verwalten
 
 Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
@@ -147,8 +139,8 @@ Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
 3. Der hinzugefügte Teilnehmer erhält automatisch eine private Nachricht mit:
    - Event-Titel
    - Zugewiesene Rolle
+   - Kommentar (falls vorhanden)
    - Datum und Uhrzeit
-   - Kommentar (falls angegeben)
    - Link zum Event
 
 #### Teilnehmer entfernen:
@@ -159,6 +151,7 @@ Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
 3. Der entfernte Teilnehmer erhält automatisch eine private Nachricht mit:
    - Event-Titel
    - Entfernte Rolle(n)
+   - Kommentar (falls vorhanden)
    - Datum und Uhrzeit
    - Link zum Event
 
@@ -222,8 +215,9 @@ Der Bot hält den Event-Kanal automatisch sauber und übersichtlich:
 ### Event nur per Prompt erstellen
 ```
 /eventify title: date: time: description: Wöchentlicher Raid\nBringt Buffs und Flasks mit\nSeid pünktlich! roles: Tank\nHealer\nDPS\nRanged DPS
+```
+```
 /eventify title:Testevent date: time:2000 description:Wöchentlicher Raid\nBringt Food und Pots mit. roles:(Core)\nTank\nHealer\nDPS\nRanged DPS\n(Additional)\nDPS\nDPS\n(Reserve)\nShadowcaller\nLC\nSpirithunter mention_role: image_url:https://historiasdeastronomia.es/vistas/images/artistic/volans.jpg 
-
 ```
 
 ### Event im Nur-Teilnehmer-Modus erstellen (ohne 'roles', aber mind. 'decription' zusätzlich zu 'title', 'date' und 'time')

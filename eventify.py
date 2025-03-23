@@ -269,28 +269,29 @@ class MyBot(discord.Client):
                     
                     if existing_entry is not None:
                         # Player is already signed up, update comment if provided
-                        if comment:
-                            existing_data = event['participants'][role_key][existing_entry]
+                        existing_data = event['participants'][role_key][existing_entry]
+                        existing_comment = existing_data[3] if len(existing_data) > 3 else None
+                        
+                        # If comment is different or provided when none existed before, update it
+                        if comment != existing_comment:
                             # Update with comment (name, id, timestamp, comment)
-                            if len(existing_data) >= 4:
-                                event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
-                            else:
-                                event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
+                            event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
                             await self._update_event_and_save(message, event, events_data)
                             await message.add_reaction('✅')  # Add confirmation reaction
                         else:
-                            # Just acknowledge if no comment to update
+                            # Just acknowledge if no change in comment status
                             logger.info(f"{player_name} already assigned to role {role_name} at index {role_index}")
                             await message.add_reaction('ℹ️')  # Info reaction
                             # Send a joke message as DM instead of in channel
                             try:
                                 event_link = f"https://discord.com/channels/{message.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                                 dm_message = (
-                                    f"**Für die Rolle '{role_name}' bist du doch schon angemeldet, du Pappnase!**\n"
+                                    f"Für die Rolle **{role_name}** bist du doch schon angemeldet, du Pappnase!\n"
+                                    f"Ändere doch wenigstens den Kommentar ;)\n"
                                     f"Event: {event['title']}\n"
                                     f"Datum: {event['date']}\n"
                                     f"Uhrzeit: {event['time']}\n"
-                                    f"\n[Zum Event]({event_link})"
+                                    f"[Zum Event]({event_link})"
                                 )
                                 await message.author.send(dm_message)
                             except Exception as e:
@@ -671,7 +672,7 @@ class MyBot(discord.Client):
                                     comment = p[3]
                                     if len(comment) > 30:
                                         comment = comment[:30] + "..."
-                                    participants_text += f"<@{p[1]}> - {comment}\n"
+                                    participants_text += f"<@{p[1]}> {comment}\n"
                                 else:
                                     participants_text += f"<@{p[1]}>\n"
                         
@@ -2256,7 +2257,7 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
                         reminder_message += f"\n{message}\n"
                     
                     if event_link:
-                        reminder_message += f"\n[Zum Event]({event_link})"
+                        reminder_message += f"[Zum Event]({event_link})"
                     
                     await user.send(reminder_message)
                     success_count += 1
@@ -2357,7 +2358,7 @@ async def cancel_event(interaction: discord.Interaction, reason: str = None):
         if reason:
             cancel_message += f"\n**Grund:** {reason}"
         if event_link:
-            cancel_message += f"\n[Zum Event-Post]({event_link})"
+            cancel_message += f"[Zum Event-Post]({event_link})"
         
         # Sende Nachricht an alle Teilnehmer
         sent_count = 0
@@ -2470,12 +2471,11 @@ async def add_participant(
             try:
                 event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                 dm_message = (
-                    f"**Update zu Event: {event['title']}**\n"
-                    f"**Der Eventersteller hat deinen Kommentar für die Rolle {role_name} aktualisiert.**\n"
+                    f"**{event['caller_name']}** hat deinen Kommentar für die Rolle **{role_name}** aktualisiert.\n"
+                    f"Neuer Kommentar: **{comment}**\n"
                     f"Datum: {event['date']}\n"
                     f"Uhrzeit: {event['time']}\n"
-                    f"Neuer Kommentar: {comment}\n"
-                    f"\n[Zum Event]({event_link})"
+                    f"[Zum Event]({event_link})"
                 )
                 await user.send(dm_message)
             except Exception as e:
@@ -2523,14 +2523,16 @@ async def add_participant(
             try:
                 event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                 dm_message = (
-                    f"**Du wurdest einem Event hinzugefügt: {event['title']}**\n"
-                    f"Rolle: {role_name}\n"
+                    f"Du wurdest von **{event['caller_name']}** zu einem Event hinzugefügt: **{event['title']}**\n"
+                )
+                if comment:
+                    dm_message += f"Kommentar: **{comment}**\n"
+                dm_message += (
+                    f"Rolle: **{role_name}**\n"
                     f"Datum: {event['date']}\n"
                     f"Uhrzeit: {event['time']}\n"
                 )
-                if comment:
-                    dm_message += f"Kommentar: {comment}\n"
-                dm_message += f"\n[Zum Event]({event_link})"
+                dm_message += f"[Zum Event]({event_link})"
                 
                 await user.send(dm_message)
             except Exception as e:
@@ -2549,7 +2551,8 @@ async def add_participant(
 async def remove_participant(
     interaction: discord.Interaction, 
     user: discord.Member, 
-    role_number: int = None
+    role_number: int = None,
+    comment: str = None
 ):
     try:
         # Check if the command is executed in a thread
@@ -2598,11 +2601,14 @@ async def remove_participant(
                 try:
                     event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                     dm_message = (
-                        f"**Du wurdest aus einem Event entfernt: {event['title']}**\n"
-                        f"**Du wurdest aus folgenden Rollen entfernt: {', '.join(removed_roles)}**\n"
+                        f"Du wurdest von **{event['caller_name']}** aus der Rolle **{', '.join(removed_roles)}** im Event **{event['title']}** entfernt.\n"
+                    )
+                    if comment:
+                        dm_message += f"Kommentar: **{comment}**\n"
+                    dm_message += (
                         f"Datum: {event['date']}\n"
                         f"Uhrzeit: {event['time']}\n"
-                        f"\n[Zum Event]({event_link})"
+                        f"[Zum Event]({event_link})"
                     )
                     await user.send(dm_message)
                     await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt und hat eine DN erhalten.")
@@ -2634,11 +2640,14 @@ async def remove_participant(
                     try:
                         event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                         dm_message = (
-                            f"**Du wurdest aus einer Rolle entfernt: {event['title']}**\n"
-                            f"**Rolle: {role_name}**\n"
+                            f"Du wurdest von **{event['caller_name']}** aus der Rolle **{role_name}** im Event **{event['title']}** entfernt.\n"
+                        )
+                        if comment:
+                            dm_message += f"Kommentar: **{comment}**\n"
+                        dm_message += (
                             f"Datum: {event['date']}\n"
                             f"Uhrzeit: {event['time']}\n"
-                            f"\n[Zum Event]({event_link})"
+                            f"[Zum Event]({event_link})"
                         )
                         await user.send(dm_message)
                         await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt und hat eine DN erhalten.")
@@ -2816,11 +2825,11 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                         if proposer:
                             event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                             dm_message = (
-                                f"**Dein Rollenvorschlag {self.proposed_role} wurde angenommen!**\n"
-                                f"Event: {event['title']}\n"
+                                f"Dein Rollenvorschlag **{self.proposed_role}** wurde angenommen!\n"
+                                f"Du wurdest automatisch in diese Rolle eingetragen.\n"
+                                f"Event: **{event['title']}**\n"
                                 f"Datum: {event['date']}\n"
                                 f"Uhrzeit: {event['time']}\n"
-                                f"**Du wurdest automatisch in diese Rolle eingetragen.**\n"
                                 f"[Zum Event]({event_link})"
                             )
                             await proposer.send(dm_message)
@@ -2832,7 +2841,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 info_message = f"Rolle **{self.proposed_role}** wurde zum Event hinzugefügt. {self.proposer_name} wurde automatisch auf die neue Rolle umgebucht."
                 if dm_sent:
                     info_message += f" Der Vorschlagende wurde per DN informiert."
-                info_message += f"\n[Zum Event]({event_link})"
+                info_message += f"[Zum Event]({event_link})"
                 
                 await button_interaction.response.edit_message(
                     content=info_message, 
@@ -2859,7 +2868,9 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                         if proposer:
                             event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                             dm_message = (
-                                f"**Dein Rollenvorschlag '{self.proposed_role}' für das Event '{event['title']}' wurde abgelehnt.**\n[Zum Event]({event_link})"
+                                f"Dein Rollenvorschlag **{self.proposed_role}** für das Event **{event['title']}** wurde abgelehnt.\n"
+                                f"Sorry, ich war das nicht, wallah! Das war **{event['caller_name']}**"
+                                f"[Zum Event]({event_link})"
                             )
                             await proposer.send(dm_message)
                             dm_sent = True
@@ -2872,7 +2883,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                     info_message += f" Der Vorschlagende wurde per DN informiert."
                 
                 event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
-                info_message += f"\n[Zum Event]({event_link})"
+                info_message += f"[Zum Event]({event_link})"
                 
                 await button_interaction.response.edit_message(
                     content=info_message, 
