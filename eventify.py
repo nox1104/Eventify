@@ -1411,31 +1411,91 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             # Send event post and create thread
             channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
             event_post = await channel.send(embed=embed)
-            thread = await event_post.create_thread(name=event.title)
+            logger.info(f"Event post created for '{event.title}' with message ID: {event_post.id}")
             
-            # Save both message ID and thread ID
-            event.message_id = event_post.id
-            event.thread_id = thread.id
-            
-            # Save event to JSON
-            save_event_to_json(event)
-            
-            # Send welcome information to the thread
-            welcome_embed = discord.Embed(
-                description="Bei Fragen hilft dir das [Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md).",
-                color=0x0dceda  # Eventify Cyan
-            )
+            try:
+                logger.info(f"Attempting to create thread for '{event.title}'")
+                thread = await event_post.create_thread(name=event.title)
+                logger.info(f"Thread successfully created for '{event.title}' with thread ID: {thread.id}")
+                
+                # Save both message ID and thread ID
+                event.message_id = event_post.id
+                event.thread_id = thread.id
+                logger.info(f"Saving event with thread_id: {thread.id} and message_id: {event_post.id}")
+                
+                # Save event to JSON
+                save_event_to_json(event)
+                
+                # Send welcome information to the thread
+                welcome_embed = discord.Embed(
+                    description="Bei Fragen hilft dir das [Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md).",
+                    color=0x0dceda  # Eventify Cyan
+                )
 
-            await thread.send(embed=welcome_embed)
-            
-            # Send a separate mention message if a mention role is specified
-            if event.mention_role_id:
-                # Send mention but delete it right after (will still notify users)
-                await thread.send(f"<@&{event.mention_role_id}> - {event.title}, {event.date}, {event.time}", delete_after=0.1)
-            
-            # Aktualisiere die Eventübersicht
-            await create_event_listing(interaction.guild)
-            
+                await thread.send(embed=welcome_embed)
+                
+                # Send a separate mention message if a mention role is specified
+                if event.mention_role_id:
+                    # Send mention but delete it right after (will still notify users)
+                    await thread.send(f"<@&{event.mention_role_id}> - {event.title}, {event.date}, {event.time}", delete_after=0.1)
+                
+                # Aktualisiere die Eventübersicht
+                await create_event_listing(interaction.guild)
+            except discord.Forbidden as e:
+                error_msg = f"Keine Berechtigung zum Erstellen des Threads für '{event.title}': {str(e)}"
+                logger.error(error_msg)
+                # Try to delete the event post since we couldn't create a thread
+                try:
+                    await event_post.delete()
+                    logger.info(f"Deleted event post for '{event.title}' due to thread creation failure")
+                except:
+                    logger.error(f"Failed to delete event post for '{event.title}' after thread creation failure")
+                
+                # Try to send error message
+                try:
+                    await interaction.response.send_message(error_msg, ephemeral=True)
+                except:
+                    try:
+                        await interaction.followup.send(error_msg, ephemeral=True)
+                    except:
+                        logger.error("Couldn't send error message to user")
+            except discord.HTTPException as e:
+                error_msg = f"Discord API Fehler beim Erstellen des Threads für '{event.title}': {str(e)}"
+                logger.error(error_msg)
+                # Try to delete the event post since we couldn't create a thread
+                try:
+                    await event_post.delete()
+                    logger.info(f"Deleted event post for '{event.title}' due to thread creation failure")
+                except:
+                    logger.error(f"Failed to delete event post for '{event.title}' after thread creation failure")
+                
+                # Try to send error message
+                try:
+                    await interaction.response.send_message(error_msg, ephemeral=True)
+                except:
+                    try:
+                        await interaction.followup.send(error_msg, ephemeral=True)
+                    except:
+                        logger.error("Couldn't send error message to user")
+            except Exception as e:
+                error_msg = f"Unerwarteter Fehler beim Erstellen des Threads für '{event.title}': {str(e)}"
+                logger.error(error_msg)
+                logger.error("Stack trace:", exc_info=True)
+                # Try to delete the event post since we couldn't create a thread
+                try:
+                    await event_post.delete()
+                    logger.info(f"Deleted event post for '{event.title}' due to thread creation failure")
+                except:
+                    logger.error(f"Failed to delete event post for '{event.title}' after thread creation failure")
+                
+                # Try to send error message
+                try:
+                    await interaction.response.send_message(error_msg, ephemeral=True)
+                except:
+                    try:
+                        await interaction.followup.send(error_msg, ephemeral=True)
+                    except:
+                        logger.error("Couldn't send error message to user")
         except discord.errors.NotFound:
             # Wenn die Interaktion bereits abgelaufen ist, loggen wir das
             logger.error(f"Interaction already expired when handling event creation for {self.title}")
@@ -2155,33 +2215,73 @@ async def eventify(
             
             # Send the event post and create a thread
             event_post = await channel.send(embed=embed)
-            thread = await event_post.create_thread(name=event.title)
+            logger.info(f"Event post created for '{event.title}' with message ID: {event_post.id}")
             
-            # Save both the message ID and thread ID
-            event.message_id = event_post.id
-            event.thread_id = thread.id
-            save_event_to_json(event)
-            
-            # Debug-Log hinzufügen
-            logger.info(f"Event created: {event.title}, thread_id: {thread.id}, message_id: {event_post.id}")
-            
-            welcome_embed = discord.Embed(
-                description="Bei Fragen hilft dir das [Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md).",
-                color=0x0dceda  # Eventify Cyan
-            )
+            try:
+                logger.info(f"Attempting to create thread for '{event.title}'")
+                thread = await event_post.create_thread(name=event.title)
+                logger.info(f"Thread successfully created for '{event.title}' with thread ID: {thread.id}")
+                
+                # Save both the message ID and thread ID
+                event.message_id = event_post.id
+                event.thread_id = thread.id
+                logger.info(f"Saving event with thread_id: {thread.id} and message_id: {event_post.id}")
+                save_event_to_json(event)
+                
+                # Debug-Log hinzufügen
+                logger.info(f"Event created: {event.title}, thread_id: {thread.id}, message_id: {event_post.id}")
+                
+                welcome_embed = discord.Embed(
+                    description="Bei Fragen hilft dir das [Benutzerhandbuch](https://github.com/nox1104/Eventify/blob/main/Benutzerhandbuch.md).",
+                    color=0x0dceda  # Eventify Cyan
+                )
 
-            await thread.send(embed=welcome_embed)
-            
-            # Send a separate mention message if a mention role is specified
-            if event.mention_role_id:
-                # Send mention but delete it right after (will still notify users)
-                await thread.send(f"<@&{event.mention_role_id}> - {event.title}, {event.date}, {event.time}", delete_after=0.1)
-            
-            # Create the event listing after creating the event
-            await create_event_listing(interaction.guild)
-            
-            # Send ephemeral confirmation message
-            await interaction.followup.send("Dein Event wurde erstellt.", ephemeral=True)
+                await thread.send(embed=welcome_embed)
+                
+                # Send a separate mention message if a mention role is specified
+                if event.mention_role_id:
+                    # Send mention but delete it right after (will still notify users)
+                    await thread.send(f"<@&{event.mention_role_id}> - {event.title}, {event.date}, {event.time}", delete_after=0.1)
+                
+                # Create the event listing after creating the event
+                await create_event_listing(interaction.guild)
+                
+                # Send ephemeral confirmation message
+                await interaction.followup.send("Dein Event wurde erstellt.", ephemeral=True)
+            except discord.Forbidden as e:
+                error_msg = f"Keine Berechtigung zum Erstellen des Threads für '{event.title}': {str(e)}"
+                logger.error(error_msg)
+                # Try to delete the event post since we couldn't create a thread
+                try:
+                    await event_post.delete()
+                    logger.info(f"Deleted event post for '{event.title}' due to thread creation failure")
+                except:
+                    logger.error(f"Failed to delete event post for '{event.title}' after thread creation failure")
+                
+                await interaction.followup.send(f"Fehler beim Erstellen des Events: {error_msg}", ephemeral=True)
+            except discord.HTTPException as e:
+                error_msg = f"Discord API Fehler beim Erstellen des Threads für '{event.title}': {str(e)}"
+                logger.error(error_msg)
+                # Try to delete the event post since we couldn't create a thread
+                try:
+                    await event_post.delete()
+                    logger.info(f"Deleted event post for '{event.title}' due to thread creation failure")
+                except:
+                    logger.error(f"Failed to delete event post for '{event.title}' after thread creation failure")
+                
+                await interaction.followup.send(f"Fehler beim Erstellen des Events: {error_msg}", ephemeral=True)
+            except Exception as e:
+                error_msg = f"Unerwarteter Fehler beim Erstellen des Threads für '{event.title}': {str(e)}"
+                logger.error(error_msg)
+                logger.error("Stack trace:", exc_info=True)
+                # Try to delete the event post since we couldn't create a thread
+                try:
+                    await event_post.delete()
+                    logger.info(f"Deleted event post for '{event.title}' due to thread creation failure")
+                except:
+                    logger.error(f"Failed to delete event post for '{event.title}' after thread creation failure")
+                
+                await interaction.followup.send(f"Fehler beim Erstellen des Events: {error_msg}", ephemeral=True)
         else:
             # Create and show the modal
             modal = EventModal(
@@ -2482,65 +2582,34 @@ async def add_participant(
                 logger.error(f"Failed to send DM to user {user.id}: {e}")
                 
         else:
-            # Check if the participant is already registered for another role
-            is_fill_role = role_name.lower() == "fill" or role_name.lower() == "fillall"
+            # Check if we're in participant_only_mode - in that case, we can add multiple people to the same role
+            is_participant_only = event.get('participant_only_mode', False)
             
-            # Check if the role already has participants (for non-Fill roles)
-            if not is_fill_role and len(event['participants'][role_key]) > 0:
-                # Get current role holder info
-                current_holder = event['participants'][role_key][0]
-                current_holder_id = current_holder[1]
-                
-                await interaction.response.send_message(
-                    f"Nene, so geht das nicht. Für die Rolle **{role_name}** ist bereits <@{current_holder_id}> eingetragen. Mach nochmal. Aber richtig.", 
-                    ephemeral=True
-                )
-                return
-            
-            if not is_fill_role:
-                # For normal roles: Check if the player is already registered in another role
-                for r_idx, r_name in enumerate(event['roles']):
-                    if r_name.lower() == "fill" or r_name.lower() == "fillall":
-                        continue  # Ignore Fill roles
-                        
-                    r_key = f"{r_idx}:{r_name}"
-                    if r_key in event.get('participants', {}):
-                        for entry_idx, entry in enumerate(event['participants'][r_key]):
-                            if entry[1] == player_id:
-                                # Remove player from old role
-                                event['participants'][r_key].pop(entry_idx)
-                                break
-            
-            # Add the player to the new role
+            # Add the participant to the role
+            entry_data = (player_name, player_id, current_time)
             if comment:
-                event['participants'][role_key].append((player_name, player_id, current_time, comment))
-            else:
-                event['participants'][role_key].append((player_name, player_id, current_time))
-                
-            await interaction.response.send_message(f"{player_name} wurde zu Rolle \"{role_name}\" hinzugefügt und hat eine DN erhalten.")
+                entry_data = entry_data + (comment,)
             
-            # Inform the participant about the role assignment
+            event['participants'][role_key].append(entry_data)
+            
+            save_event_to_json(event)
+            await bot.update_event_message(interaction.channel, event)
+            
+            await interaction.response.send_message(f"{player_name} wurde zu Rolle {role_name} hinzugefügt.", ephemeral=True)
+            
+            # Notify the user
             try:
                 event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                 dm_message = (
-                    f"Du wurdest von **{event['caller_name']}** zu einem Event hinzugefügt: **{event['title']}**\n"
-                )
-                if comment:
-                    dm_message += f"Kommentar: **{comment}**\n"
-                dm_message += (
-                    f"Rolle: **{role_name}**\n"
+                    f"**{event['caller_name']}** hat dich für die Rolle **{role_name}** eingetragen.\n"
+                    f"{comment if comment else ''}\n"
                     f"Datum: {event['date']}\n"
                     f"Uhrzeit: {event['time']}\n"
+                    f"[Zum Event]({event_link})"
                 )
-                dm_message += f"[Zum Event]({event_link})"
-                
                 await user.send(dm_message)
             except Exception as e:
                 logger.error(f"Failed to send DM to user {user.id}: {e}")
-        
-        # Update the event
-        save_event_to_json(event)
-        await bot.update_event_message(interaction.channel, event)
         
     except Exception as e:
         logger.error(f"Error in add_participant: {e}")
@@ -2837,16 +2906,19 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 except Exception as e:
                     logger.error(f"Failed to send DN to proposer {self.proposer_id}: {e}")
                 
-                # Update the message with disabled buttons and confirmation
-                info_message = f"Rolle **{self.proposed_role}** wurde zum Event hinzugefügt. {self.proposer_name} wurde automatisch auf die neue Rolle umgebucht."
-                if dm_sent:
-                    info_message += f" Der Vorschlagende wurde per DN informiert."
-                info_message += f"[Zum Event]({event_link})"
-                
+                # Update the original message with disabled buttons only
                 await button_interaction.response.edit_message(
-                    content=info_message, 
+                    content=f"Rollenvorschlag: **{self.proposed_role}** von **{self.proposer_name}**", 
                     view=self
                 )
+                
+                # Send additional message to event creator with detailed info
+                additional_message = f"Rolle **{self.proposed_role}** wurde zum Event hinzugefügt.\n{self.proposer_name} wurde automatisch auf die neue Rolle eingetragen.\n"
+                if dm_sent:
+                    additional_message += f"{self.proposer_name} wurde per DN informiert.\n"
+                additional_message += f"[Zum Event]({event_link})"
+                
+                await button_interaction.followup.send(content=additional_message)
             
             @discord.ui.button(label="Ablehnen", style=discord.ButtonStyle.red)
             async def reject_button(self, button_interaction: discord.Interaction, button: discord.ui.Button):
@@ -2869,7 +2941,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                             event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                             dm_message = (
                                 f"Dein Rollenvorschlag **{self.proposed_role}** für das Event **{event['title']}** wurde abgelehnt.\n"
-                                f"Sorry, ich war das nicht, wallah! Das war **{event['caller_name']}**"
+                                f"Sorry, ich war das nicht, wallah! Das war **{event['caller_name']}**\n"
                                 f"[Zum Event]({event_link})"
                             )
                             await proposer.send(dm_message)
@@ -2878,17 +2950,25 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                     logger.error(f"Failed to send DN to proposer {self.proposer_id}: {e}")
                 
                 # Update the message with disabled buttons and rejection info
-                info_message = f"Rollenvorschlag **{self.proposed_role}** wurde abgelehnt."
+                info_message = f"Rollenvorschlag **{self.proposed_role}** wurde abgelehnt.\n"
                 if dm_sent:
-                    info_message += f" Der Vorschlagende wurde per DN informiert."
+                    info_message += f" Der Vorschlagende wurde per DN informiert.\n"
                 
                 event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                 info_message += f"[Zum Event]({event_link})"
                 
                 await button_interaction.response.edit_message(
-                    content=info_message, 
+                    content=f"Rollenvorschlag: **{self.proposed_role}** von **{self.proposer_name}**", 
                     view=self
                 )
+                
+                # Send additional message with rejection details
+                additional_message = f"Rollenvorschlag **{self.proposed_role}** wurde abgelehnt.\n"
+                if dm_sent:
+                    additional_message += f"{self.proposer_name} wurde per DN informiert.\n"
+                additional_message += f"[Zum Event]({event_link})"
+                
+                await button_interaction.followup.send(content=additional_message)
         
         # Create the view with the buttons for DM
         view = RoleProposalView(interaction.user.id, interaction.user.display_name, role_name, interaction.guild.id, interaction.channel.id)
@@ -2916,8 +2996,8 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
             # Send DM with buttons
             event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
             await caller.send(
-                f"{interaction.user.display_name} schlägt eine neue Rolle für dein Event '{event['title']}' vor: **{role_name}**\n"
-                f"Möchtest du diese Rolle zum Event hinzufügen?\n"
+                f"**{interaction.user.display_name}** schlägt eine neue Rolle für dein Event **{event['title']}** vor: **{role_name}**\n"
+                f"Möchtest du **{interaction.user.display_name}** mit dieser Rolle zum Event hinzufügen?\n"
                 f"[Zum Event]({event_link})",
                 view=view
             )

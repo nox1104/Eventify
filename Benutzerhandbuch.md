@@ -80,6 +80,8 @@ Folgende Parameter sind verfügbar:
   - Unterstützte Bildformate: PNG, JPG, GIF
   - Der Link muss direkt zum Bild führen
 
+In dieser Methode kommt es leider selten vor, dass der Thread nicht gebaut wird. Ich habe Logging implementiert, um die Ursache für diesen Fehler zu finden. 
+
 ### Nur-Teilnehmer-Modus
 
 Der Nur-Teilnehmer-Modus ist für Events gedacht, bei denen keine spezifischen Rollen benötigt werden, sondern nur eine einfache Teilnehmerliste:
@@ -173,14 +175,6 @@ Discord erlaubt ja einige Formatierungsooptionen von Markdown. Leider sind in Em
 - **Zeilenumbrüche im Direktmodus**: Verwende `\n` für Zeilenumbrüche bei der direkten Eingabe über den `/eventify` Befehl
   - Beispiel für Rollen: `roles: Tank\nHealer\nDPS`
   - Beispiel für Beschreibung: `description: Zeile 1\nZeile 2\nZeile 3`
-
-### Event verwalten
-
-- Der Bot erstellt automatisch einen Thread für dein Event
-- Im Thread kannst du weitere Informationen teilen und mit den Teilnehmern kommunizieren
-- Das Event wird automatisch in der Event-Liste angezeigt
-- Dein Name wird als Ersteller unter dem Titel des Events angezeigt
-- Event-Threads werden 30 Minuten nach Eventbeginn automatisch gelöscht
 
 ### Nutzung von Links in Discord
 
