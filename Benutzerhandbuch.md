@@ -16,7 +16,7 @@ Als Teilnehmer brauchst du nur die ersten paar Zeilen zu lesen. Lass dich nicht 
 ### Für FillALL anmelden
 
 1. Gehe in den Event-Thread
-2. Schreibe die Nummer der FillALL-Rolle (normalerweise die letzte Nummer in der Liste)
+2. Schreibe die Nummer der FillALL-Rolle (die letzte Nummer in der Liste)
 3. Du wirst als flexibler Teilnehmer eingetragen und kannst bei Bedarf verschiedene Rollen übernehmen
 4. Die FillALL-Anmeldung bleibt bestehen, auch wenn du dich für eine andere Rolle an- oder abmeldest
 
@@ -156,6 +156,20 @@ Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
    - Kommentar (falls vorhanden)
    - Datum und Uhrzeit
    - Link zum Event
+
+### Rollenbesetzung anzeigen
+
+Die Anzahl der besetzten Rollen wird automatisch am Anfang der Rollenliste angezeigt:
+- Die erste Zahl zeigt, wie viele Rollen besetzt sind
+- Die zweite Zahl zeigt die Gesamtzahl der verfügbaren Rollen
+- Beispiel: "Rollen 4/5" bedeutet, dass 4 von 5 Rollen besetzt sind
+
+Die Zählung berücksichtigt:
+- Alle besetzten regulären Rollen
+- FillALL-Teilnehmer, die nicht in einer regulären Rolle sind
+- Teilnehmer, die sowohl in einer regulären Rolle als auch in FillALL sind, werden nur einmal gezählt
+
+
 
 ### Formatierung der Beschreibung
 

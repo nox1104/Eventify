@@ -700,6 +700,11 @@ class MyBot(discord.Client):
                 # Creation of content for all regular roles
                 field_content = ""
                 role_counter = 1  # Counter for actual roles (excluding section headers)
+                filled_roles = 0  # Counter for filled roles
+                total_roles = 0   # Counter for total roles (excluding section headers)
+                
+                # Track users in regular roles to avoid double counting with FillALL
+                users_in_regular_roles = set()
 
                 # Go through all roles and section headers in the original order
                 all_items = section_headers + regular_roles
@@ -713,11 +718,18 @@ class MyBot(discord.Client):
                         field_content += f"*-----{header_text}-----*\n"
                     else:
                         # This is a normal role
+                        total_roles += 1
                         # Display role and participants
                         role_key = f"{role_idx}:{role_name}"
                         role_participants = participants.get(role_key, [])
                         
                         if role_participants:
+                            filled_roles += 1
+                            # Add user to set of users in regular roles
+                            for p in role_participants:
+                                if len(p) >= 2:  # Ensure we have at least name and ID
+                                    users_in_regular_roles.add(p[1])
+                            
                             # Sort participants by timestamp and show only the first
                             sorted_participants = sorted(role_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                             p_data = sorted_participants[0]
@@ -746,9 +758,18 @@ class MyBot(discord.Client):
                         # Increment the role counter for actual roles
                         role_counter += 1
 
-                # Add all regular roles as a single field
+                # Add all regular roles as a single field with occupancy count
                 if field_content:
-                    embed.add_field(name="Rollen", value=field_content, inline=False)
+                    # Count FillALL participants who aren't in regular roles
+                    fillall_count = 0
+                    if fill_index is not None:
+                        fill_key = f"{fill_index}:{roles[fill_index]}"
+                        fill_participants = participants.get(fill_key, [])
+                        if fill_participants:
+                            fillall_count = len([p for p in fill_participants if len(p) >= 2 and p[1] not in users_in_regular_roles])
+                    
+                    # Add occupancy count in the field name
+                    embed.add_field(name=f"Rollen {filled_roles + fillall_count}/{total_roles}", value=field_content, inline=True)
 
                 # Add Fill role section
                 if fill_index is not None:
@@ -761,6 +782,9 @@ class MyBot(discord.Client):
                     if fill_participants:
                         # Sort participants by timestamp
                         sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
+                        
+                        # Count FillALL participants who aren't in regular roles
+                        fillall_participants = [p for p in sorted_fill if len(p) >= 2 and p[1] not in users_in_regular_roles]
                         
                         # Display all participants for FillALL without extra newline
                         fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" + (f" {p[3]}" if len(p) > 3 and p[3] else "") for p in sorted_fill if len(p) >= 2])
