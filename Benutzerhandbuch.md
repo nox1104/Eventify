@@ -63,8 +63,8 @@ Mit dem Befehl `/eventify` kannst du ein neues Event erstellen. Du hast zwei Mö
 Folgende Parameter sind verfügbar:
 
 - `title`: Der Titel des Events (maximale Länge: 40 Zeichen)
-- `date`: Das Datum des Events im Format TT.MM.JJJJ
-- `time`: Die Uhrzeit des Events im Format HH:mm
+- `date`: Das Datum des Events im Format DDMMYYYY (oder DD.MM.YYYY)
+- `time`: Die Uhrzeit des Events im Format HHMM (oder HH:MM)
 - `description` (optional): Die Beschreibung des Events (mit \n für Zeilenumbrüche)
   - Detaillierte Informationen zum Event
   - Falls eine Rolle ausgewählt wurde, wird diese automatisch am Anfang der Beschreibung erwähnt

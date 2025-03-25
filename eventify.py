@@ -1662,10 +1662,10 @@ async def create_event_listing(guild):
                 event_line = ""
                 if caller_id:
                     # We always have a message_id if we have a caller_id
-                    event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit {caller_name}\n"
+                    event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit {caller_name}\n"
                 else:
                     if message_id and message_id != "None" and message_id != None:
-                        event_line = f"{time}  [#{title}](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
+                        event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
                     else:
                         event_line = f"{time}  {title}\n"
                 
@@ -2028,8 +2028,8 @@ def save_events_to_json(events):
 @bot.tree.command(name="eventify", description="Erstelle ein Event")
 @app_commands.describe(
     title="Der Titel des Events",
-    date="Das Datum des Events (TT.MM.JJJJ)",
-    time="Die Uhrzeit des Events (HH:mm)",
+    date="Das Datum des Events (DDMMYYYY)",
+    time="Die Uhrzeit des Events (HHMM)",
     description="Optional: Die Beschreibung des Events (\\n für Zeilenumbrüche)",
     roles="Optional: Gib die Rollen ein (diesen Parameter weglassen für Nur-Teilnehmer-Modus)",
     mention_role="Optional: Eine Rolle, die beim Event erwähnt werden soll",
@@ -2051,7 +2051,7 @@ async def eventify(
         parsed_time = parse_time(time)
 
         if not parsed_date or not parsed_time:
-            await interaction.response.send_message("Ungültiges Datum oder ungültige Zeit. Bitte verwende die Formate DD.MM.YYYY und HH:MM.", ephemeral=True)
+            await interaction.response.send_message("Ungültiges Datum oder ungültige Zeit. Bitte verwende die Formate DDMMYYYY und HHMM.", ephemeral=True)
             return
 
         # Check title length (max 40 characters)
