@@ -742,10 +742,10 @@ class MyBot(discord.Client):
                                 
                                 # Comment if available
                                 if len(p_data) >= 4 and p_data[3]:
-                                    # Truncate comment to 20 characters if necessary
+                                    # Truncate comment to 30 characters if necessary
                                     comment = p_data[3]
-                                    if len(comment) > 20:
-                                        comment = comment[:20] + "..."
+                                    if len(comment) > 30:
+                                        comment = comment[:30] + "..."
                                     field_content += f" {comment}"
                                     logger.info(f"Including comment for role {role_name}: '{p_data[3]}'")
                                 
@@ -2478,11 +2478,11 @@ async def cancel_event(interaction: discord.Interaction, reason: str = None):
                     participants.append(participant)
         
         # Erstelle die Absage-Nachricht
-        cancel_message = f"**Event abgesagt:** {event['title']}\n**Datum:** {event['date']} {event['time']}"
+        cancel_message = f"**Event abgesagt:** {event['title']}\n**Datum:** {event['date']} **Zeit:** {event['time']}"
         if reason:
             cancel_message += f"\n**Grund:** {reason}"
         if event_link:
-            cancel_message += f"[Zum Event-Post]({event_link})"
+            cancel_message += f"\n[Zum Event-Post]({event_link})"
         
         # Sende Nachricht an alle Teilnehmer
         sent_count = 0
@@ -2609,6 +2609,23 @@ async def add_participant(
             # Check if we're in participant_only_mode - in that case, we can add multiple people to the same role
             is_participant_only = event.get('participant_only_mode', False)
             
+            # Check if this is the "Fill" role by name
+            is_fill_role = role_name.lower() == "fill" or role_name.lower() == "fillall"
+            
+            # Check if the role already has participants (except for Fill roles or participant_only_mode)
+            if not is_fill_role and not is_participant_only and len(event['participants'][role_key]) > 0:
+                # Get current role holder info
+                current_holder = event['participants'][role_key][0]
+                current_holder_id = current_holder[1]
+                current_holder_name = current_holder[0]
+                
+                await interaction.response.send_message(
+                    f"Die Rolle {role_name} ist bereits von {current_holder_name} besetzt. "
+                    f"Entferne zunächst diesen Teilnehmer mit `/remove`, bevor du einen neuen hinzufügst.", 
+                    ephemeral=True
+                )
+                return
+            
             # Add the participant to the role
             entry_data = (player_name, player_id, current_time)
             if comment:
@@ -2704,10 +2721,10 @@ async def remove_participant(
                         f"[Zum Event]({event_link})"
                     )
                     await user.send(dm_message)
-                    await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt und hat eine DN erhalten.")
+                    await interaction.response.send_message(f"{player_name} wurde aus **{', '.join(removed_roles)}** entfernt und hat eine DN erhalten.")
                 except Exception as e:
                     logger.error(f"Failed to send DM to user {user.id}: {e}")
-                    await interaction.response.send_message(f"{player_name} wurde aus {removed_count} Rollen entfernt. Eine DN konnte nicht gesendet werden!")
+                    await interaction.response.send_message(f"{player_name} wurde aus **{', '.join(removed_roles)}** entfernt. Eine DN konnte nicht gesendet werden!")
             else:
                 await interaction.response.send_message(f"{player_name} war für keine Rolle eingetragen.", ephemeral=True)
         else:
@@ -2812,27 +2829,41 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                     await button_interaction.response.send_message("Nur der Event-Ersteller kann diesen Vorschlag annehmen.", ephemeral=True)
                     return
                 
-                # Find the FILLALL role
-                fill_index = next((i for i, role in enumerate(event['roles']) if role.lower() in ["fill", "fillall"]), None)
+                # Load the most current version of the event to ensure we have the latest changes
+                current_events_data = load_upcoming_events(include_expired=True)
+                # First try to find the event by thread_id (most reliable)
+                thread_id = self.thread_id
+                current_event = next((e for e in current_events_data["events"] if e.get('thread_id') == thread_id), None)
+                
+                # Fallback: try to find by title (for backwards compatibility)
+                if not current_event:
+                    current_event = next((e for e in current_events_data["events"] if e.get('title') == event.get('title')), None)
+
+                if not current_event:
+                    await button_interaction.response.send_message("Das Event konnte nicht gefunden werden. Möglicherweise wurde es gelöscht.", ephemeral=True)
+                    return
+                
+                # Find the FILLALL role in the current event state
+                fill_index = next((i for i, role in enumerate(current_event['roles']) if role.lower() in ["fill", "fillall"]), None)
                 
                 # Ensure that fill_index has a value
                 if fill_index is None:
                     # If no FILLALL role is found, add the new role to the end
-                    event['roles'].append(self.proposed_role)
-                    new_role_index = len(event['roles']) - 1
+                    current_event['roles'].append(self.proposed_role)
+                    new_role_index = len(current_event['roles']) - 1
                 else:
                     # Store the current state of participants before changes
-                    old_participants = copy.deepcopy(event.get('participants', {}))
+                    old_participants = copy.deepcopy(current_event.get('participants', {}))
                     
                     # Add the new role before the FILLALL role
-                    event['roles'].insert(fill_index, self.proposed_role)
+                    current_event['roles'].insert(fill_index, self.proposed_role)
                     new_role_index = fill_index
                     
                     # Update the FILLALL index, since we added a role before it
                     fill_index += 1
                     
                     # Update all role indices that come after the inserted role
-                    if 'participants' in event:
+                    if 'participants' in current_event:
                         new_participants = {}
                         for role_key, participants_list in old_participants.items():
                             try:
@@ -2856,16 +2887,16 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                                 new_participants[role_key] = participants_list
                         
                         # Update the participants dictionary
-                        event['participants'] = new_participants
+                        current_event['participants'] = new_participants
                 
                 # Create role_key for the new role
                 new_role_key = f"{new_role_index}:{self.proposed_role}"
                 
                 # Initialize participants dict for the new role if necessary
-                if 'participants' not in event:
-                    event['participants'] = {}
-                if new_role_key not in event['participants']:
-                    event['participants'][new_role_key] = []
+                if 'participants' not in current_event:
+                    current_event['participants'] = {}
+                if new_role_key not in current_event['participants']:
+                    current_event['participants'][new_role_key] = []
                 
                 # Automatically add the proposer to the new role with comment
                 proposer_id = str(self.proposer_id)
@@ -2873,23 +2904,23 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                 current_time = datetime.now().timestamp()
                 
                 # Check if the user is already registered in another role (except FILLALL)
-                for r_idx, r_name in enumerate(event['roles']):
+                for r_idx, r_name in enumerate(current_event['roles']):
                     if r_name.lower() == "fill" or r_name.lower() == "fillall":
                         continue  # Ignore Fill roles
                     
                     r_key = f"{r_idx}:{r_name}"
-                    if r_key in event.get('participants', {}):
-                        for entry_idx, entry in enumerate(event['participants'][r_key]):
+                    if r_key in current_event.get('participants', {}):
+                        for entry_idx, entry in enumerate(current_event['participants'][r_key]):
                             if entry[1] == proposer_id:
                                 # Remove the player from the old role
-                                event['participants'][r_key].pop(entry_idx)
+                                current_event['participants'][r_key].pop(entry_idx)
                                 break
                 
                 # Add the player to the new role with comment "selbst vorgeschlagen"
-                event['participants'][new_role_key].append((proposer_name, proposer_id, current_time, "selbst vorgeschlagen"))
+                current_event['participants'][new_role_key].append((proposer_name, proposer_id, current_time, "selbst vorgeschlagen"))
                 
                 # Update event and save
-                save_event_to_json(event)
+                save_event_to_json(current_event)
                 
                 # Try to update the event message in the thread
                 try:
@@ -2898,7 +2929,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                     if guild:
                         thread = await bot.fetch_thread(guild, self.thread_id)
                         if thread:
-                            await bot.update_event_message(thread, event)
+                            await bot.update_event_message(thread, current_event)
                             
                             # Send message to thread about the accepted proposal
                             await thread.send(f"{self.proposer_name} hat die Rolle **{self.proposed_role}** vorgeschlagen und der Vorschlag wurde angenommen.")
@@ -2916,13 +2947,13 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                     if guild:
                         proposer = await guild.fetch_member(self.proposer_id)
                         if proposer:
-                            event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                            event_link = f"https://discord.com/channels/{self.guild_id}/{CHANNEL_ID_EVENT}/{current_event.get('message_id')}"
                             dm_message = (
                                 f"Dein Rollenvorschlag **{self.proposed_role}** wurde angenommen!\n"
                                 f"Du wurdest automatisch in diese Rolle eingetragen.\n"
-                                f"Event: **{event['title']}**\n"
-                                f"Datum: {event['date']}\n"
-                                f"Uhrzeit: {event['time']}\n"
+                                f"Event: **{current_event['title']}**\n"
+                                f"Datum: {current_event['date']}\n"
+                                f"Uhrzeit: {current_event['time']}\n"
                                 f"[Zum Event]({event_link})"
                             )
                             await proposer.send(dm_message)

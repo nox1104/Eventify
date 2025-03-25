@@ -137,7 +137,7 @@ Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
 2. Gib folgende Parameter ein:
    - `user`: Der Discord-Benutzer, den du hinzufügen möchtest (per Autocomplete)
    - `role_number`: Die Nummer der Rolle, z.B. 1 für die erste Rolle
-   - `comment` (optional): Ein Kommentar, der neben dem Namen angezeigt wird (auf 20 Zeichen begrenzt)
+   - `comment` (optional): Ein Kommentar, der neben dem Namen angezeigt wird (auf 30 Zeichen begrenzt)
 3. Der hinzugefügte Teilnehmer erhält automatisch eine private Nachricht mit:
    - Event-Titel
    - Zugewiesene Rolle
@@ -173,7 +173,7 @@ Die Zählung berücksichtigt:
 
 ### Formatierung der Beschreibung
 
-Discord erlaubt ja einige Formatierungsooptionen von Markdown. Leider sind in Embeds (also das, wo unsere Events drin angezeigt werden), Überschriften nicht nutzbar. Also `# Überschrift` wird leider genauso auch im Embed erscheinen. Lustigerweise kann man die Verkleinerung verwenden. '-# kleiner Text' wird dann also klein dargestellt. Frag nicht warum, das habe ich tatsächlich aufgegeben. Einige Restriktionen von Discord scheinen tatsächlich keinen Sinn zu ergeben.
+Discord erlaubt ja einige Formatierungsoptionen von Markdown. Leider sind in Embeds (also das, wo unsere Events drin angezeigt werden), Überschriften nicht nutzbar. Also `# Überschrift` wird leider genauso auch im Embed erscheinen. Lustigerweise kann man die Verkleinerung verwenden. '-# kleiner Text' wird dann also klein dargestellt. Frag nicht warum, das habe ich tatsächlich aufgegeben. Einige Restriktionen von Discord scheinen tatsächlich keinen Sinn zu ergeben.
 [Hier](https://support.discord.com/hc/en-us/articles/210298617-Markdown-Text-101-Chat-Formatting-Bold-Italic-Underline) ist beschrieben, welche Formatierungen Discord uns erlaubt.
 
 ### Rollenformatierung
