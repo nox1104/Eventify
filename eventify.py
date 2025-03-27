@@ -157,14 +157,14 @@ class MyBot(discord.Client):
 
             # Process role signup (single digit number)
             if message.content.strip().isdigit():
-                await self._handle_role_signup(message, event, int(message.content))
+                await self._handle_role_signup(message, event['title'], int(message.content))
                 
             # Process role signup with comment (number followed by text)
             elif message.content.strip() and message.content.strip()[0].isdigit():
                 # Extract the number part
                 parts = message.content.strip().split(' ', 1)
                 if parts[0].isdigit():
-                    await self._handle_role_signup(message, event, int(parts[0]))
+                    await self._handle_role_signup(message, event['title'], int(parts[0]))
                 
             # Process role unregister
             elif message.content.strip() == '-':
@@ -3169,10 +3169,8 @@ async def process_individual_deletions(messages, counter):
 
 def save_overview_id(message_id):
     """Speichert die ID der aktuellen Event-Übersicht"""
-    filepath = "data/overview.json"
+    filepath = "overview.json"
     try:
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump({"message_id": message_id}, f)
         
@@ -3184,7 +3182,7 @@ def save_overview_id(message_id):
 
 def load_overview_id():
     """Lädt die ID der aktuellen Event-Übersicht"""
-    filepath = "data/overview.json"
+    filepath = "overview.json"
     try:
         if os.path.exists(filepath):
             with open(filepath, "r", encoding="utf-8") as f:
@@ -3200,10 +3198,13 @@ async def refresh_overview(interaction: discord.Interaction):
     """Aktualisiert die Eventübersicht manuell"""
     try:
         # Defer die Antwort, da die Operation länger dauern könnte
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         
         # Erstelle neue Übersicht
         await create_event_listing(interaction.guild)
+        
+        # Bestätigungsnachricht senden um die "denkt nach" Nachricht zu beenden
+        await interaction.followup.send("✅ Eventübersicht wurde aktualisiert.", ephemeral=True)
             
     except Exception as e:
         error_msg = f"Fehler beim Aktualisieren der Eventübersicht: {str(e)}"
