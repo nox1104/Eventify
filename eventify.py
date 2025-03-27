@@ -1423,7 +1423,9 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 
                 # Add all regular roles as a single field
                 if field_content:
-                    embed.add_field(name="Rollen", value=field_content, inline=False)
+                    # Count total roles (excluding section headers and FILLALL)
+                    total_roles = len([r for r in event.roles if not (r.strip().startswith('(') and r.strip().endswith(')')) and r.lower() not in ["fill", "fillall"]])
+                    embed.add_field(name=f"Rollen 0/{total_roles}", value=field_content, inline=False)
                 
                 if fill_index is not None:
                     fill_text = f"{role_counter}. {event.roles[fill_index]}"
@@ -1439,8 +1441,19 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             
             try:
                 logger.info(f"Attempting to create thread for '{event.title}'")
+                logger.info(f"Event post exists with ID: {event_post.id}, channel ID: {event_post.channel.id}")
+                logger.info(f"Thread creation parameters: name='{event.title}', auto_archive_duration={thread_archive_duration if 'thread_archive_duration' in locals() else 'default'}")
+                logger.info(f"Bot permissions in channel: {channel.permissions_for(interaction.guild.me).value}")
+                logger.info(f"Channel type: {type(channel).__name__}")
+                logger.info(f"Event post type: {type(event_post).__name__}")
+                logger.info(f"Guild ID: {interaction.guild.id}, Channel ID: {channel.id}")
+                
                 thread = await event_post.create_thread(name=event.title)
+                
                 logger.info(f"Thread successfully created for '{event.title}' with thread ID: {thread.id}")
+                logger.info(f"Thread details: name='{thread.name}', owner_id={thread.owner_id}, parent_id={thread.parent_id}, archived={thread.archived}, locked={thread.locked}")
+                logger.info(f"Thread type: {type(thread).__name__}")
+                logger.info(f"Thread channel ID: {thread.channel.id if hasattr(thread, 'channel') else 'N/A'}")
                 
                 # Save both message ID and thread ID
                 event.message_id = event_post.id
@@ -1540,185 +1553,209 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 logger.error("Couldn't send error message to user")
 
 async def create_event_listing(guild):
-    """Erstellt ein Event Listing mit allen anstehenden Events"""
-    try:
-        # Lade nur aktive Events (keine abgelaufenen oder bereinigten)
-        events_data = load_upcoming_events(include_expired=False, include_cleaned=False)
-        
-        if not events_data or not events_data.get("events"):
-            logger.info("No upcoming events to list.")
-            return
-        
-        # Get the guild ID for links
-        guild_id = guild.id
-        event_channel = guild.get_channel(CHANNEL_ID_EVENT)
-        
-        if not event_channel:
-            logger.error(f"Event channel not found in guild {guild.name}")
-            return
-        
-        # Filter events where no corresponding event post exists
-        valid_events = []
-        for event in events_data["events"]:
-            if not isinstance(event, dict):
-                logger.warning(f"Invalid event format: {event}")
-                continue
-                
-            message_id = event.get("message_id")
-            
-            # Skip events without message_id
-            if not message_id:
-                logger.warning(f"Event {event.get('title')} has no message_id and will be skipped.")
-                continue
-                
-            # Check if the event post still exists
-            try:
-                await event_channel.fetch_message(int(message_id))
-                # If no error, add the event to the valid list
-                valid_events.append(event)
-            except (discord.NotFound, discord.HTTPException, ValueError) as e:
-                logger.warning(f"Event-Post für '{event.get('title')}' (ID: {message_id}) existiert nicht mehr: {e}")
-                continue
-        
-        # Update the events.json to remove orphaned events
-        if len(valid_events) < len(events_data["events"]):
-            logger.info(f"Remove {len(events_data['events']) - len(valid_events)} orphaned events from the JSON.")
-            save_events_to_json({"events": valid_events})
-        
-        if not valid_events:
-            logger.info("No valid events with existing posts found.")
-            return
-        
-        # Sort events by date and time
+    # Lösche alte Übersicht
+    channel = guild.get_channel(CHANNEL_ID_EVENT)
+    old_message_id = load_overview_id()
+    
+    if channel and old_message_id:
         try:
-            # Sort by datetime_obj, if available
-            events_with_datetime = []
-            for event in valid_events:
-                # Try to convert date and time to a datetime object
-                if 'datetime_obj' in event and event['datetime_obj']:
-                    try:
-                        dt_obj = datetime.fromisoformat(event['datetime_obj'])
-                        events_with_datetime.append((event, dt_obj))
-                    except (ValueError, TypeError):
-                        # If datetime_obj parsing fails, try date and time fields
-                        dt_obj = None
-                else:
-                    dt_obj = None
-                
-                # If datetime_obj is not available or invalid, parse date and time
-                if dt_obj is None:
-                    try:
-                        date_str = event['date']
-                        time_str = event['time']
-                        # Convert German date format (dd.mm.yyyy) to datetime
-                        day, month, year = map(int, date_str.split('.'))
-                        hour, minute = map(int, time_str.split(':'))
-                        dt_obj = datetime(year, month, day, hour, minute)
-                    except (ValueError, KeyError) as e:
-                        logger.error(f"Error parsing date/time for event {event.get('title', 'unknown')}: {e}")
-                        # Add the event with the current timestamp so it is displayed
-                        dt_obj = datetime.now()
-                    
+            old_message = await channel.fetch_message(int(old_message_id))
+            await old_message.delete()
+            logger.info(f"Alte Eventübersicht gelöscht: {old_message_id}")
+        except discord.NotFound:
+            logger.info(f"Alte Übersichtsnachricht existiert nicht mehr")
+        except discord.HTTPException as e:
+            logger.warning(f"Konnte alte Übersicht nicht löschen: {e}")
+    
+    # Lade nur aktive Events (keine abgelaufenen oder bereinigten)
+    events_data = load_upcoming_events(include_expired=False, include_cleaned=False)
+    
+    # Create base embed
+    base_embed = discord.Embed(
+        title="Eventübersicht",
+        color=0xe076ed  # Eventify Pink
+    )
+    
+    if not events_data or not events_data.get("events"):
+        logger.info("No upcoming events to list.")
+        base_embed.description = "Aktuell sind keine Events geplant."
+        message = await channel.send(embed=base_embed)
+        save_overview_id(message.id)
+        return message
+    
+    # Get the guild ID for links
+    guild_id = guild.id
+    event_channel = guild.get_channel(CHANNEL_ID_EVENT)
+    
+    if not event_channel:
+        logger.error(f"Event channel not found in guild {guild.name}")
+        return
+    
+    # Filter events where no corresponding event post exists
+    valid_events = []
+    for event in events_data["events"]:
+        if not isinstance(event, dict):
+            logger.warning(f"Invalid event format: {event}")
+            continue
+            
+        message_id = event.get("message_id")
+        
+        # Skip events without message_id
+        if not message_id:
+            logger.warning(f"Event {event.get('title')} has no message_id and will be skipped.")
+            continue
+            
+        valid_events.append(event)
+    
+    # Update the events.json to remove orphaned events
+    if len(valid_events) < len(events_data["events"]):
+        logger.info(f"Remove {len(events_data['events']) - len(valid_events)} orphaned events from the JSON.")
+        save_events_to_json({"events": valid_events})
+    
+    if not valid_events:
+        logger.info("No valid events with existing posts found.")
+        base_embed.description = "Aktuell sind keine Events geplant."
+        message = await channel.send(embed=base_embed)
+        save_overview_id(message.id)
+        return message
+    
+    # Sort events by date and time
+    try:
+        # Sort by datetime_obj, if available
+        events_with_datetime = []
+        for event in valid_events:
+            # Try to convert date and time to a datetime object
+            if 'datetime_obj' in event and event['datetime_obj']:
+                try:
+                    dt_obj = datetime.fromisoformat(event['datetime_obj'])
                     events_with_datetime.append((event, dt_obj))
+                except (ValueError, TypeError):
+                    # If datetime_obj parsing fails, try date and time fields
+                    dt_obj = None
+            else:
+                dt_obj = None
             
-            # Sort the events by timestamp
-            events_with_datetime.sort(key=lambda x: x[1])
-            sorted_events = [event for event, _ in events_with_datetime]
-        except Exception as e:
-            logger.error(f"Error sorting events: {e}")
-            sorted_events = valid_events  # Fallback: Unsorted events
-        
-        # Group events by date
-        events_by_date = {}
-        for event in sorted_events:
-            date = event.get('date', 'Unknown date')
-            if date not in events_by_date:
-                events_by_date[date] = []
-            events_by_date[date].append(event)
-        
-        # Create embeds with a max of 25 fields each (Discord limit)
-        embeds = []
-        current_embed = discord.Embed(
-            title="Eventübersicht",
-            color=0xe076ed  # Eventify Pink
-        )
-        field_count = 0
-        max_fields_per_embed = 25  # Discord limit
-        
-        # Process each date and its events
-        for date, date_events in events_by_date.items():
-            # Create event descriptions, potentially splitting into multiple fields if too long
-            all_descriptions = []
-            current_description = ""
-            
-            for event in date_events:
-                title = event.get('title', 'Unbekanntes Event')
-                time = event.get('time', '')
-                caller_id = event.get('caller_id', None)
-                caller_name = event.get('caller_name', None)  # Get the caller's name
-                message_id = event.get('message_id')
+            # If datetime_obj is not available or invalid, parse date and time
+            if dt_obj is None:
+                try:
+                    date_str = event['date']
+                    time_str = event['time']
+                    # Convert German date format (dd.mm.yyyy) to datetime
+                    day, month, year = map(int, date_str.split('.'))
+                    hour, minute = map(int, time_str.split(':'))
+                    dt_obj = datetime(year, month, day, hour, minute)
+                except (ValueError, KeyError) as e:
+                    logger.error(f"Error parsing date/time for event {event.get('title', 'unknown')}: {e}")
+                    # Add the event with the current timestamp so it is displayed
+                    dt_obj = datetime.now()
                 
-                # Create event line
-                event_line = ""
-                if caller_id:
-                    # We always have a message_id if we have a caller_id
-                    event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit {caller_name}\n"
-                else:
-                    if message_id and message_id != "None" and message_id != None:
-                        event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
-                    else:
-                        event_line = f"{time}  {title}\n"
-                
-                # Check if adding this line would exceed Discord's limit
-                if len(current_description) + len(event_line) > 1000:  # Leave some buffer below 1024
-                    # This field is full, add it to the list and start a new one
-                    all_descriptions.append(current_description)
-                    current_description = event_line
-                else:
-                    # Add to current field
-                    current_description += event_line
-            
-            # Don't forget the last batch
-            if current_description:
-                all_descriptions.append(current_description)
-            
-            # Add fields for this date, potentially multiple if there were a lot of events
-            for i, description in enumerate(all_descriptions):
-                # Check if we need to create a new embed (max 25 fields per embed)
-                if field_count >= max_fields_per_embed:
-                    # Current embed is full, add it to the list and create a new one
-                    embeds.append(current_embed)
-                    current_embed = discord.Embed(
-                        title="Eventübersicht (Fortsetzung)",
-                        color=0xe076ed  # Eventify Pink
-                    )
-                    field_count = 0
-                
-                # Zeige Datumsnamen nur beim ersten Feld, 
-                # für Fortsetzungen verwende einen leeren String mit Unicode Zero Width Space
-                # um das Feld in Discord korrekt darzustellen
-                field_name = f"{date}" if i == 0 else "Oha, an diesem Tag ist viel geplant..."
-                
-                current_embed.add_field(
-                    name=field_name,
-                    value=description,
-                    inline=False
-                )
-                field_count += 1
+                events_with_datetime.append((event, dt_obj))
         
-        # Don't forget to add the last embed
-        if field_count > 0:
-            embeds.append(current_embed)
-        
-        # Send the embeds to the event channel
-        channel = guild.get_channel(CHANNEL_ID_EVENT)
-        for embed in embeds:
-            await channel.send(embed=embed)
-        
-        logger.info(f"Event listing created successfully with {len(embeds)} embeds.")
+        # Sort the events by timestamp
+        events_with_datetime.sort(key=lambda x: x[1])
+        sorted_events = [event for event, _ in events_with_datetime]
     except Exception as e:
-        logger.error(f"Error creating event listing: {e}")
-        logger.exception("Full traceback:")
+        logger.error(f"Error sorting events: {e}")
+        sorted_events = valid_events  # Fallback: Unsorted events
+    
+    # Group events by date
+    events_by_date = {}
+    for event in sorted_events:
+        date = event.get('date', 'Unknown date')
+        if date not in events_by_date:
+            events_by_date[date] = []
+        events_by_date[date].append(event)
+    
+    # Create embeds with a max of 25 fields each (Discord limit)
+    embeds = []
+    current_embed = discord.Embed(
+        title="Eventübersicht",
+        color=0xe076ed  # Eventify Pink
+    )
+    field_count = 0
+    max_fields_per_embed = 25  # Discord limit
+    
+    # Process each date and its events
+    for date, date_events in events_by_date.items():
+        # Create event descriptions, potentially splitting into multiple fields if too long
+        all_descriptions = []
+        current_description = ""
+        
+        for event in date_events:
+            title = event.get('title', 'Unbekanntes Event')
+            time = event.get('time', '')
+            caller_id = event.get('caller_id', None)
+            caller_name = event.get('caller_name', None)  # Get the caller's name
+            message_id = event.get('message_id')
+            
+            # Create event line
+            event_line = ""
+            if caller_id:
+                # We always have a message_id if we have a caller_id
+                event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit {caller_name}\n"
+            else:
+                if message_id and message_id != "None" and message_id != None:
+                    event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
+                else:
+                    event_line = f"{time}  {title}\n"
+            
+            # Check if adding this line would exceed Discord's limit
+            if len(current_description) + len(event_line) > 1000:  # Leave some buffer below 1024
+                # This field is full, add it to the list and start a new one
+                all_descriptions.append(current_description)
+                current_description = event_line
+            else:
+                # Add to current field
+                current_description += event_line
+        
+        # Don't forget the last batch
+        if current_description:
+            all_descriptions.append(current_description)
+        
+        # Add fields for this date, potentially multiple if there were a lot of events
+        for i, description in enumerate(all_descriptions):
+            # Check if we need to create a new embed (max 25 fields per embed)
+            if field_count >= max_fields_per_embed:
+                # Current embed is full, add it to the list and create a new one
+                embeds.append(current_embed)
+                current_embed = discord.Embed(
+                    title="Eventübersicht (Fortsetzung)",
+                    color=0xe076ed  # Eventify Pink
+                )
+                field_count = 0
+            
+            # Zeige Datumsnamen nur beim ersten Feld, 
+            # für Fortsetzungen verwende einen leeren String mit Unicode Zero Width Space
+            # um das Feld in Discord korrekt darzustellen
+            field_name = f"{date}" if i == 0 else "Oha, an diesem Tag ist viel geplant..."
+            
+            current_embed.add_field(
+                name=field_name,
+                value=description,
+                inline=False
+            )
+            field_count += 1
+    
+    # Don't forget to add the last embed
+    if field_count > 0:
+        embeds.append(current_embed)
+    
+    # Send the embeds to the event channel and store the ID of the first message
+    channel = guild.get_channel(CHANNEL_ID_EVENT)
+    first_message = None
+    
+    for i, embed in enumerate(embeds):
+        message = await channel.send(embed=embed)
+        if i == 0:  # Store the ID of the first message only
+            first_message = message
+    
+    if first_message:
+        # Speichere die ID der ersten Übersichtsnachricht
+        save_overview_id(first_message.id)
+        logger.info(f"Neue Eventübersicht erstellt: {first_message.id}")
+    
+    logger.info(f"Event listing created successfully with {len(embeds)} embeds.")
+    return first_message
 
 bot = MyBot()
 
@@ -2214,7 +2251,9 @@ async def eventify(
 
             # Add all regular roles as a single field
             if field_content:
-                embed.add_field(name="Rollen", value=field_content, inline=False)
+                # Count total roles (excluding section headers and FILLALL)
+                total_roles = len([r for r in roles_list if not (r.strip().startswith('(') and r.strip().endswith(')')) and r.lower() not in ["fill", "fillall"]])
+                embed.add_field(name=f"Rollen 0/{total_roles}", value=field_content, inline=False)
             
             # Add Fill role section
             if fill_index is not None:
@@ -2243,10 +2282,15 @@ async def eventify(
             
             try:
                 logger.info(f"Attempting to create thread for '{event.title}'")
-                thread = await event_post.create_thread(name=event.title)
-                logger.info(f"Thread successfully created for '{event.title}' with thread ID: {thread.id}")
+                logger.info(f"Event post exists with ID: {event_post.id}, channel ID: {event_post.channel.id}")
+                logger.info(f"Discord permissions in channel: {channel.permissions_for(interaction.guild.me).value}")
                 
-                # Save both the message ID and thread ID
+                thread = await event_post.create_thread(name=event.title)
+                
+                logger.info(f"Thread successfully created for '{event.title}' with thread ID: {thread.id}")
+                logger.info(f"Thread details: name='{thread.name}', owner_id={thread.owner_id}, parent_id={thread.parent_id}, archived={thread.archived}, locked={thread.locked}")
+                
+                # Save both message ID and thread ID
                 event.message_id = event_post.id
                 event.thread_id = thread.id
                 logger.info(f"Saving event with thread_id: {thread.id} and message_id: {event_post.id}")
@@ -3122,6 +3166,54 @@ async def process_individual_deletions(messages, counter):
         finally:
             # Additional small pause after each deletion attempt
             await asyncio.sleep(0.3)
+
+def save_overview_id(message_id):
+    """Speichert die ID der aktuellen Event-Übersicht"""
+    filepath = "data/overview.json"
+    try:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump({"message_id": message_id}, f)
+        
+        logger.info(f"Event-Übersichts-ID gespeichert: {message_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Fehler beim Speichern der Übersichts-ID: {e}")
+        return False
+
+def load_overview_id():
+    """Lädt die ID der aktuellen Event-Übersicht"""
+    filepath = "data/overview.json"
+    try:
+        if os.path.exists(filepath):
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("message_id")
+        return None
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Übersichts-ID: {e}")
+        return None
+
+@bot.tree.command(name="refresh", description="Aktualisiert die Eventübersicht manuell")
+async def refresh_overview(interaction: discord.Interaction):
+    """Aktualisiert die Eventübersicht manuell"""
+    try:
+        # Defer die Antwort, da die Operation länger dauern könnte
+        await interaction.response.defer()
+        
+        # Erstelle neue Übersicht
+        await create_event_listing(interaction.guild)
+            
+    except Exception as e:
+        error_msg = f"Fehler beim Aktualisieren der Eventübersicht: {str(e)}"
+        logger.error(error_msg)
+        logger.error("Stack trace:", exc_info=True)
+        
+        try:
+            await interaction.followup.send(error_msg, ephemeral=True)
+        except:
+            logger.error("Konnte Fehlermeldung nicht senden")
 
 bot.run(DISCORD_TOKEN)
             

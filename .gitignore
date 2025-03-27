@@ -1,5 +1,29 @@
-.env 
-backups/ 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Environment Variables
+.env
+
+# Logs
 logs/
+*.log
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+
+# Other files
+backups/ 
 nox/ 
 events.json
