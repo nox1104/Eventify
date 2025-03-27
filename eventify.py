@@ -310,6 +310,9 @@ class MyBot(discord.Client):
                                 # Add new entry with timestamp (ignore comment for FillALL)
                                 # Modified to include comment for FillALL roles
                                 if comment:
+                                    # Limit comment to 30 characters for FillALL roles
+                                    if len(comment) > 30:
+                                        comment = comment[:30] + "..."
                                     event['participants'][role_key].append((player_name, player_id, current_time, comment))
                                     logger.info(f"Adding {player_name} to FillALL role with comment: '{comment}'")
                                 else:
@@ -796,7 +799,7 @@ class MyBot(discord.Client):
                         fillall_participants = [p for p in sorted_fill if len(p) >= 2 and p[1] not in users_in_regular_roles]
                         
                         # Display all participants for FillALL without extra newline
-                        fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" + (f" {p[3]}" if len(p) > 3 and p[3] else "") for p in sorted_fill if len(p) >= 2])
+                        fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" + (f" {p[3][:30] + '...' if len(p) > 3 and p[3] and len(p[3]) > 30 else p[3]}" if len(p) > 3 and p[3] else "") for p in sorted_fill if len(p) >= 2])
                         
                         # Add Fill role to embed with empty name to reduce spacing
                         embed.add_field(name="", value=fill_players_text or fill_text, inline=False)
@@ -2364,7 +2367,7 @@ async def eventify(
                     sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                     
                     # Display all participants for FillALL without extra newline
-                    fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" + (f" {p[3]}" if len(p) > 3 and p[3] else "") for p in sorted_fill if len(p) >= 2])
+                    fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" + (f" {p[3][:30] + '...' if len(p) > 3 and p[3] and len(p[3]) > 30 else p[3]}" if len(p) > 3 and p[3] else "") for p in sorted_fill if len(p) >= 2])
                     
                     # Add Fill role to embed with empty name to reduce spacing
                     embed.add_field(name="", value=fill_players_text or fill_text, inline=False)
@@ -2721,6 +2724,9 @@ async def add_participant(
         if existing_entry is not None:
             # Participant is already registered, update only the comment if it exists
             if comment:
+                # Limit comment to 30 characters
+                if len(comment) > 30:
+                    comment = comment[:30] + "..."
                 existing_data = event['participants'][role_key][existing_entry]
                 if len(existing_data) >= 4:
                     event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
@@ -2769,6 +2775,9 @@ async def add_participant(
             # Add the participant to the role
             entry_data = (player_name, player_id, current_time)
             if comment:
+                # Limit comment to 30 characters for all roles (including FILLALL)
+                if len(comment) > 30:
+                    comment = comment[:30] + "..."
                 entry_data = entry_data + (comment,)
             
             event['participants'][role_key].append(entry_data)
