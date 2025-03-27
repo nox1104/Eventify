@@ -534,6 +534,15 @@ class MyBot(discord.Client):
                 logger.error("Invalid events format in _update_event_and_save")
                 return False
 
+            # If event is a dictionary, recalculate the role counts
+            if isinstance(event, dict):
+                # Berechne Rollenanzahl über die zentrale Hilfsfunktion
+                filled_slots, total_slots = calculate_role_counts(event.get('roles', []), event.get('participants', {}))
+                
+                # Update the counts
+                event['total_slots'] = total_slots
+                event['filled_slots'] = filled_slots
+
             # Find the event by ID if available, otherwise by title
             event_id = event.get("event_id")
             if event_id:
@@ -1136,6 +1145,63 @@ class MyBot(discord.Client):
         else:
             logger.info(f"Bot joined authorized server: {guild.name}")
 
+# Füge die Hilfsfunktion direkt vor der Event-Klasse ein
+def calculate_role_counts(roles, participants):
+    """
+    Berechnet die Anzahl der besetzten und insgesamt verfügbaren Rollen für ein Event.
+    Berücksichtigt FILLALL-Teilnehmer nur, wenn sie nicht bereits in anderen Rollen sind.
+    
+    Args:
+        roles: Liste der Rollen im Event
+        participants: Dictionary mit den Teilnehmern pro Rolle
+    
+    Returns:
+        Tuple (filled_slots, total_slots)
+    """
+    filled_slots = 0
+    total_slots = 0
+    
+    # Set zum Speichern bereits gezählter User-IDs
+    users_in_regular_roles = set()
+    
+    # Finde den Index der FILLALL-Rolle
+    fill_index = None
+    for i, role in enumerate(roles):
+        if isinstance(role, str) and role.lower() in ["fill", "fillall"]:
+            fill_index = i
+            break
+    
+    # Erst normale Rollen zählen und User-IDs sammeln
+    for i, role in enumerate(roles):
+        # Überschriften und FILL/FILLALL-Rollen überspringen
+        if (isinstance(role, str) and 
+            ((role.strip().startswith('(') and role.strip().endswith(')')) or 
+             role.lower() in ["fill", "fillall"])):
+            continue
+            
+        # Als Slot zählen
+        total_slots += 1
+        
+        # Prüfen ob dieser Slot besetzt ist
+        role_key = f"{i}:{role}"
+        if role_key in participants and len(participants[role_key]) > 0:
+            filled_slots += 1
+            
+            # Teilnehmer-IDs zu den bereits gezählten hinzufügen
+            for participant in participants[role_key]:
+                if len(participant) >= 2:
+                    users_in_regular_roles.add(participant[1])
+    
+    # Danach FILLALL-Teilnehmer zählen, die nicht schon in anderen Rollen sind
+    if fill_index is not None:
+        fill_key = f"{fill_index}:{roles[fill_index]}"
+        if fill_key in participants:
+            for participant in participants[fill_key]:
+                if len(participant) >= 2 and participant[1] not in users_in_regular_roles:
+                    filled_slots += 1
+    
+    return filled_slots, total_slots
+
 class Event:
     def __init__(self, title, date, time, description, roles, datetime_obj=None, caller_id=None, caller_name=None, participant_only_mode=False, event_id=None):
         self.title = title
@@ -1212,6 +1278,9 @@ class Event:
             except:
                 logger.warning(f"Could not convert datetime_obj to ISO format for event: {self.title}")
         
+        # Berechne Rollenanzahl über die zentrale Hilfsfunktion
+        filled_slots, total_slots = calculate_role_counts(self.roles, self.participants)
+        
         return {
             "title": self.title,
             "date": self.date,
@@ -1228,7 +1297,9 @@ class Event:
             "mention_role_id": self.mention_role_id,  # Store the mention role ID
             "datetime_obj": datetime_str,  # Store the datetime as ISO format string
             "status": getattr(self, 'status', 'active'),  # Store the status, default to "active" if not set
-            "image_url": self.image_url  # Store the image URL
+            "image_url": self.image_url,  # Store the image URL
+            "total_slots": total_slots,  # Store total role slots
+            "filled_slots": filled_slots  # Store filled role slots
         }
 
 class EventModal(discord.ui.Modal, title="Eventify"):
@@ -1688,16 +1759,25 @@ async def create_event_listing(guild):
             caller_name = event.get('caller_name', None)  # Get the caller's name
             message_id = event.get('message_id')
             
+            # Berechne die Rollenanzahl neu für die korrekte Anzeige
+            # Falls keine Rollen im Event sind, bleiben die Werte bei 0
+            filled_slots, total_slots = calculate_role_counts(event.get('roles', []), event.get('participants', {}))
+            
+            # Create role count display
+            role_count_display = ""
+            if total_slots > 0:
+                role_count_display = f" ({filled_slots}/{total_slots})"
+            
             # Create event line
             event_line = ""
             if caller_id:
                 # We always have a message_id if we have a caller_id
-                event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}) mit {caller_name}\n"
+                event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}){role_count_display} mit {caller_name}\n"
             else:
                 if message_id and message_id != "None" and message_id != None:
-                    event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id})\n"
+                    event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}){role_count_display}\n"
                 else:
-                    event_line = f"{time}  {title}\n"
+                    event_line = f"{time}  {title}{role_count_display}\n"
             
             # Check if adding this line would exceed Discord's limit
             if len(current_description) + len(event_line) > 1000:  # Leave some buffer below 1024
@@ -1836,6 +1916,14 @@ def save_event_to_json(event):
         # Clean old events (past events)
         events_data = clean_old_events(events_data)
         logger.info(f"After cleaning old events, {len(events_data.get('events', []))} events remain")
+        
+        # Falls das Event ein Dictionary ist, berechne die Rollenanzahl neu
+        if isinstance(event, dict) and not hasattr(event, 'to_dict'):
+            # Berechne filled_slots und total_slots direkt hier
+            filled_slots, total_slots = calculate_role_counts(event.get('roles', []), event.get('participants', {}))
+            event['filled_slots'] = filled_slots
+            event['total_slots'] = total_slots
+            logger.info(f"Updated role counts for event: {event.get('title', 'Unknown')}, slots: {filled_slots}/{total_slots}")
         
         # Check if the event already exists by the event_id
         event_exists = False
@@ -2046,6 +2134,14 @@ def save_events_to_json(events):
         else:
             logger.error("Invalid events format for save_events_to_json")
             return False
+            
+        # Aktualisiere Rollenanzahl für alle Dictionary-Events
+        for event in events_data.get("events", []):
+            if isinstance(event, dict) and not hasattr(event, 'to_dict'):
+                # Berechne filled_slots und total_slots
+                filled_slots, total_slots = calculate_role_counts(event.get('roles', []), event.get('participants', {}))
+                event['filled_slots'] = filled_slots
+                event['total_slots'] = total_slots
             
         # Aktualisiere Event-Status (markiere abgelaufene Events)
         events_data = clean_old_events(events_data)
