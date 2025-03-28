@@ -12,6 +12,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 import glob
 import copy
+import re
 
 """
 LANGUAGE POLICY:
@@ -569,6 +570,10 @@ class MyBot(discord.Client):
             # Update the event message
             thread = message.channel
             await self.update_event_message(thread, event)
+            
+            # Also refresh the event overview
+            if thread.guild:
+                await create_event_listing(thread.guild)
             
             return True
         except Exception as e:
@@ -1522,7 +1527,39 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 logger.info(f"Event post type: {type(event_post).__name__}")
                 logger.info(f"Guild ID: {interaction.guild.id}, Channel ID: {channel.id}")
                 
-                thread = await event_post.create_thread(name=event.title)
+                # Detailed logging before thread creation attempt
+                logger.info(f"[Thread Creation] Starting thread creation attempt for event '{event.title}'")
+                logger.info(f"[Thread Creation] Discord API state before attempt: Session ID: N/A")
+                logger.info(f"[Thread Creation] Event message creation timestamp: {event_post.created_at}")
+                
+                # Add retry mechanism for thread creation
+                max_retries = 3
+                retry_delay = 2  # seconds
+                thread = None
+                
+                for retry_count in range(max_retries):
+                    try:
+                        logger.info(f"[Thread Creation] Attempt {retry_count + 1}/{max_retries} to create thread")
+                        thread = await event_post.create_thread(name=event.title)
+                        logger.info(f"[Thread Creation] Thread creation API call completed successfully on attempt {retry_count + 1}")
+                        break  # Exit loop on success
+                    except discord.HTTPException as e:
+                        logger.error(f"[Thread Creation] HTTP exception during thread creation attempt {retry_count + 1}: {str(e)}")
+                        if retry_count < max_retries - 1:
+                            logger.info(f"[Thread Creation] Waiting {retry_delay} seconds before retry...")
+                            await asyncio.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                        else:
+                            logger.error(f"[Thread Creation] All {max_retries} thread creation attempts failed")
+                            raise  # Re-raise after all retries fail
+                    except Exception as e:
+                        logger.error(f"[Thread Creation] Exception during thread creation API call: {str(e)}")
+                        raise  # Non-HTTP exceptions are immediately re-raised
+                
+                if not thread:
+                    error_msg = f"Konnte keinen Thread für '{event.title}' nach {max_retries} Versuchen erstellen"
+                    logger.error(f"[Thread Creation] {error_msg}")
+                    raise Exception(error_msg)
                 
                 logger.info(f"Thread successfully created for '{event.title}' with thread ID: {thread.id}")
                 logger.info(f"Thread details: name='{thread.name}', owner_id={thread.owner_id}, parent_id={thread.parent_id}, archived={thread.archived}, locked={thread.locked}")
@@ -1536,6 +1573,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 
                 # Save event to JSON
                 save_event_to_json(event)
+                logger.info(f"[Thread Creation] Event saved to JSON with thread_id: {thread.id}")
                 
                 # Send welcome information to the thread
                 welcome_embed = discord.Embed(
@@ -1543,15 +1581,49 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                     color=0x0dceda  # Eventify Cyan
                 )
 
-                await thread.send(embed=welcome_embed)
+                # Log thread state before sending message
+                logger.info(f"[Thread Creation] Thread state before welcome message: archived={thread.archived}, locked={thread.locked}, type={type(thread).__name__}")
+                
+                try:
+                    welcome_msg = await thread.send(embed=welcome_embed)
+                    logger.info(f"[Thread Creation] Welcome message sent successfully with ID: {welcome_msg.id}")
+                except Exception as e:
+                    logger.error(f"[Thread Creation] Failed to send welcome message: {str(e)}")
+                    # Continue despite welcome message failure
                 
                 # Send a separate mention message if a mention role is specified
                 if event.mention_role_id:
-                    # Send mention but delete it right after (will still notify users)
-                    await thread.send(f"<@&{event.mention_role_id}> - {event.title}, {event.date}, {event.time}", delete_after=0.1)
+                    try:
+                        # Send mention but delete it right after (will still notify users)
+                        mention_msg = await thread.send(f"<@&{event.mention_role_id}> - {event.title}, {event.date}, {event.time}", delete_after=0.1)
+                        logger.info(f"[Thread Creation] Mention message sent successfully with ID: {mention_msg.id}")
+                    except Exception as e:
+                        logger.error(f"[Thread Creation] Failed to send mention message: {str(e)}")
+                        # Continue despite mention message failure
+                
+                # Verify event data is properly stored
+                try:
+                    # Reload events from JSON to verify the event was properly saved
+                    verification_events = load_upcoming_events(include_expired=True)
+                    verification_event = next((e for e in verification_events["events"] if e.get('thread_id') == thread.id), None)
+                    
+                    if verification_event:
+                        logger.info(f"[Thread Creation] Event verification successful - found event in JSON with thread_id: {thread.id}")
+                    else:
+                        logger.error(f"[Thread Creation] Event verification FAILED - could not find event in JSON with thread_id: {thread.id}")
+                        # Try to save again
+                        logger.info(f"[Thread Creation] Attempting to save event again...")
+                        save_event_to_json(event)
+                except Exception as e:
+                    logger.error(f"[Thread Creation] Error during event verification: {str(e)}")
                 
                 # Aktualisiere die Eventübersicht
-                await create_event_listing(interaction.guild)
+                try:
+                    await create_event_listing(interaction.guild)
+                    logger.info(f"[Thread Creation] Event listing updated successfully")
+                except Exception as e:
+                    logger.error(f"[Thread Creation] Failed to update event listing: {str(e)}")
+                    # Continue despite event listing failure
             except discord.Forbidden as e:
                 error_msg = f"Keine Berechtigung zum Erstellen des Threads für '{event.title}': {str(e)}"
                 logger.error(error_msg)
@@ -1592,6 +1664,10 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 error_msg = f"Unerwarteter Fehler beim Erstellen des Threads für '{event.title}': {str(e)}"
                 logger.error(error_msg)
                 logger.error("Stack trace:", exc_info=True)
+                
+                # Save diagnostic information about the failure
+                save_thread_failure_info(event.title, event_post.id, {"error_type": type(e).__name__, "error_message": str(e)})
+                
                 # Try to delete the event post since we couldn't create a thread
                 try:
                     await event_post.delete()
@@ -1916,17 +1992,19 @@ def save_event_to_json(event):
             logger.warning(f"Invalid format in {EVENTS_JSON_FILE}, resetting to empty events list")
             events_data = {"events": []}
         
-        # Clean old events (past events)
-        events_data = clean_old_events(events_data)
-        logger.info(f"After cleaning old events, {len(events_data.get('events', []))} events remain")
-        
         # Falls das Event ein Dictionary ist, berechne die Rollenanzahl neu
         if isinstance(event, dict) and not hasattr(event, 'to_dict'):
             # Berechne filled_slots und total_slots direkt hier
             filled_slots, total_slots = calculate_role_counts(event.get('roles', []), event.get('participants', {}))
             event['filled_slots'] = filled_slots
             event['total_slots'] = total_slots
-            logger.info(f"Updated role counts for event: {event.get('title', 'Unknown')}, slots: {filled_slots}/{total_slots}")
+            
+            # Stelle sicher, dass der Status auf "active" gesetzt ist, falls es ein neues Event ist
+            if 'status' not in event:
+                event['status'] = "active"
+                logger.info(f"Setting initial status 'active' for event: {event.get('title', 'Unknown')}")
+            
+            logger.info(f"Updated role counts for event: {event.get('title', 'Unknown')}, slots: {filled_slots}/{total_slots}, status: {event.get('status', 'active')}")
         
         # Check if the event already exists by the event_id
         event_exists = False
@@ -1967,9 +2045,20 @@ def save_event_to_json(event):
         if not event_exists:
             event_title = event["title"] if isinstance(event, dict) else event.title
             logger.info(f"Adding new event: {event_title} with ID: {event_id}")
+            
+            # Stelle sicher, dass neue Events immer den Status "active" haben
             if hasattr(event, 'to_dict'):
-                events_data["events"].append(event.to_dict())
+                event_dict = event.to_dict()
+                # Überprüfe und setze den Status für neue Events
+                if event_dict.get('status') != "active":
+                    logger.info(f"Ensuring new event '{event_title}' has status 'active' instead of '{event_dict.get('status')}'")
+                    event_dict['status'] = "active"
+                events_data["events"].append(event_dict)
             else:
+                # Überprüfe und setze den Status für neue Events
+                if isinstance(event, dict) and event.get('status') != "active":
+                    logger.info(f"Ensuring new event '{event_title}' has status 'active' instead of '{event.get('status')}'")
+                    event['status'] = "active"
                 events_data["events"].append(event)
         
         # Save back to file
@@ -1995,6 +2084,10 @@ def clean_old_events(events_data):
     # Neue Liste für Events, die nicht als "cleaned" markiert sind
     updated_events = []
     
+    # Zusätzliches Logging: Aktuelle Zeit und Anzahl der Events vor der Bereinigung
+    logger.info(f"[CLEAN_EVENTS DEBUG] Current time: {now}")
+    logger.info(f"[CLEAN_EVENTS DEBUG] Processing {len(events_data['events'])} events for cleanup")
+    
     for event in events_data["events"]:
         if not isinstance(event, dict):
             logger.warning(f"Invalid event format: {event}")
@@ -2007,14 +2100,21 @@ def clean_old_events(events_data):
             continue
             
         event_title = event.get("title", "Unknown Event")
+        current_status = event.get("status", "active")
+        
+        # Zusätzliches Logging: Status des Events vor der Prüfung
+        logger.info(f"[CLEAN_EVENTS DEBUG] Processing event: {event_title}, current status: {current_status}")
         
         try:
             # Try to use datetime_obj first if available
             if "datetime_obj" in event:
                 try:
                     event_dt = datetime.fromisoformat(event["datetime_obj"])
+                    # Zusätzliches Logging: Datum/Zeit des Events
+                    logger.info(f"[CLEAN_EVENTS DEBUG] Event datetime from datetime_obj: {event_dt}")
                 except (ValueError, TypeError):
                     event_dt = None
+                    logger.warning(f"[CLEAN_EVENTS DEBUG] Could not parse datetime_obj: {event['datetime_obj']}")
             else:
                 event_dt = None
             
@@ -2041,24 +2141,39 @@ def clean_old_events(events_data):
                 
                 # Create datetime object
                 event_dt = datetime(year, month, day, hour, minute)
+                # Zusätzliches Logging: Datum/Zeit des Events
+                logger.info(f"[CLEAN_EVENTS DEBUG] Event datetime from parsing: {event_dt}")
             
             # Wenn das Event begonnen hat und noch "active" ist, setze auf "expired"
             if event_dt < now and event.get("status") == "active":
+                # Zusätzliches Logging: Zeitvergleich
+                logger.info(f"[CLEAN_EVENTS DEBUG] Event time {event_dt} is before current time {now}, difference: {now - event_dt}")
                 event["status"] = "expired"
                 expired_count += 1
                 logger.info(f"Marking event as expired: {event_title} (Date: {event.get('date', 'N/A')}, Time: {event.get('time', 'N/A')})")
+            else:
+                # Zusätzliches Logging: Warum das Event nicht als abgelaufen markiert wurde
+                if event_dt >= now:
+                    logger.info(f"[CLEAN_EVENTS DEBUG] Event time {event_dt} is not before current time {now}, keeping status: {current_status}")
+                elif event.get("status") != "active":
+                    logger.info(f"[CLEAN_EVENTS DEBUG] Event already has non-active status: {current_status}")
                 
         except (ValueError, TypeError, KeyError, IndexError) as e:
             logger.warning(f"Failed to parse date/time for event {event_title}: {e}")
         
         # Füge das Event zur aktualisierten Liste hinzu (unabhängig vom Status, solange nicht "cleaned")
         updated_events.append(event)
+        # Zusätzliches Logging: Finaler Status des Events
+        logger.info(f"[CLEAN_EVENTS DEBUG] Keeping event: {event_title}, final status: {event.get('status', 'active')}")
     
     if expired_count > 0:
         logger.info(f"Marked {expired_count} events as expired")
     
     if cleaned_count > 0:
         logger.info(f"Removed {cleaned_count} cleaned events")
+    
+    # Zusätzliches Logging: Anzahl der Events nach der Bereinigung
+    logger.info(f"[CLEAN_EVENTS DEBUG] After cleanup: {len(updated_events)} events remain")
     
     events_data["events"] = updated_events
     return events_data
@@ -2384,7 +2499,39 @@ async def eventify(
                 logger.info(f"Event post exists with ID: {event_post.id}, channel ID: {event_post.channel.id}")
                 logger.info(f"Discord permissions in channel: {channel.permissions_for(interaction.guild.me).value}")
                 
-                thread = await event_post.create_thread(name=event.title)
+                # Detailed logging before thread creation attempt
+                logger.info(f"[Thread Creation] Starting thread creation attempt for event '{event.title}'")
+                logger.info(f"[Thread Creation] Discord API state before attempt: Session ID: N/A")
+                logger.info(f"[Thread Creation] Event message creation timestamp: {event_post.created_at}")
+                
+                # Add retry mechanism for thread creation
+                max_retries = 3
+                retry_delay = 2  # seconds
+                thread = None
+                
+                for retry_count in range(max_retries):
+                    try:
+                        logger.info(f"[Thread Creation] Attempt {retry_count + 1}/{max_retries} to create thread")
+                        thread = await event_post.create_thread(name=event.title)
+                        logger.info(f"[Thread Creation] Thread creation API call completed successfully on attempt {retry_count + 1}")
+                        break  # Exit loop on success
+                    except discord.HTTPException as e:
+                        logger.error(f"[Thread Creation] HTTP exception during thread creation attempt {retry_count + 1}: {str(e)}")
+                        if retry_count < max_retries - 1:
+                            logger.info(f"[Thread Creation] Waiting {retry_delay} seconds before retry...")
+                            await asyncio.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                        else:
+                            logger.error(f"[Thread Creation] All {max_retries} thread creation attempts failed")
+                            raise  # Re-raise after all retries fail
+                    except Exception as e:
+                        logger.error(f"[Thread Creation] Exception during thread creation API call: {str(e)}")
+                        raise  # Non-HTTP exceptions are immediately re-raised
+                
+                if not thread:
+                    error_msg = f"Konnte keinen Thread für '{event.title}' nach {max_retries} Versuchen erstellen"
+                    logger.error(f"[Thread Creation] {error_msg}")
+                    raise Exception(error_msg)
                 
                 logger.info(f"Thread successfully created for '{event.title}' with thread ID: {thread.id}")
                 logger.info(f"Thread details: name='{thread.name}', owner_id={thread.owner_id}, parent_id={thread.parent_id}, archived={thread.archived}, locked={thread.locked}")
@@ -2394,6 +2541,7 @@ async def eventify(
                 event.thread_id = thread.id
                 logger.info(f"Saving event with thread_id: {thread.id} and message_id: {event_post.id}")
                 save_event_to_json(event)
+                logger.info(f"[Thread Creation] Event saved to JSON with thread_id: {thread.id}")
                 
                 # Debug-Log hinzufügen
                 logger.info(f"Event created: {event.title}, thread_id: {thread.id}, message_id: {event_post.id}")
@@ -2403,15 +2551,49 @@ async def eventify(
                     color=0x0dceda  # Eventify Cyan
                 )
 
-                await thread.send(embed=welcome_embed)
+                # Log thread state before sending message
+                logger.info(f"[Thread Creation] Thread state before welcome message: archived={thread.archived}, locked={thread.locked}, type={type(thread).__name__}")
+                
+                try:
+                    welcome_msg = await thread.send(embed=welcome_embed)
+                    logger.info(f"[Thread Creation] Welcome message sent successfully with ID: {welcome_msg.id}")
+                except Exception as e:
+                    logger.error(f"[Thread Creation] Failed to send welcome message: {str(e)}")
+                    # Continue despite welcome message failure
                 
                 # Send a separate mention message if a mention role is specified
                 if event.mention_role_id:
-                    # Send mention but delete it right after (will still notify users)
-                    await thread.send(f"<@&{event.mention_role_id}> - {event.title}, {event.date}, {event.time}", delete_after=0.1)
+                    try:
+                        # Send mention but delete it right after (will still notify users)
+                        mention_msg = await thread.send(f"<@&{event.mention_role_id}> - {event.title}, {event.date}, {event.time}", delete_after=0.1)
+                        logger.info(f"[Thread Creation] Mention message sent successfully with ID: {mention_msg.id}")
+                    except Exception as e:
+                        logger.error(f"[Thread Creation] Failed to send mention message: {str(e)}")
+                        # Continue despite mention message failure
                 
-                # Create the event listing after creating the event
-                await create_event_listing(interaction.guild)
+                # Verify event data is properly stored
+                try:
+                    # Reload events from JSON to verify the event was properly saved
+                    verification_events = load_upcoming_events(include_expired=True)
+                    verification_event = next((e for e in verification_events["events"] if e.get('thread_id') == thread.id), None)
+                    
+                    if verification_event:
+                        logger.info(f"[Thread Creation] Event verification successful - found event in JSON with thread_id: {thread.id}")
+                    else:
+                        logger.error(f"[Thread Creation] Event verification FAILED - could not find event in JSON with thread_id: {thread.id}")
+                        # Try to save again
+                        logger.info(f"[Thread Creation] Attempting to save event again...")
+                        save_event_to_json(event)
+                except Exception as e:
+                    logger.error(f"[Thread Creation] Error during event verification: {str(e)}")
+                
+                # Aktualisiere die Eventübersicht
+                try:
+                    await create_event_listing(interaction.guild)
+                    logger.info(f"[Thread Creation] Event listing updated successfully")
+                except Exception as e:
+                    logger.error(f"[Thread Creation] Failed to update event listing: {str(e)}")
+                    # Continue despite event listing failure
                 
                 # Send ephemeral confirmation message
                 await interaction.followup.send("Dein Event wurde erstellt.", ephemeral=True)
@@ -2425,7 +2607,14 @@ async def eventify(
                 except:
                     logger.error(f"Failed to delete event post for '{event.title}' after thread creation failure")
                 
-                await interaction.followup.send(f"Fehler beim Erstellen des Events: {error_msg}", ephemeral=True)
+                # Try to send error message
+                try:
+                    await interaction.response.send_message(error_msg, ephemeral=True)
+                except:
+                    try:
+                        await interaction.followup.send(error_msg, ephemeral=True)
+                    except:
+                        logger.error("Couldn't send error message to user")
             except discord.HTTPException as e:
                 error_msg = f"Discord API Fehler beim Erstellen des Threads für '{event.title}': {str(e)}"
                 logger.error(error_msg)
@@ -2436,11 +2625,22 @@ async def eventify(
                 except:
                     logger.error(f"Failed to delete event post for '{event.title}' after thread creation failure")
                 
-                await interaction.followup.send(f"Fehler beim Erstellen des Events: {error_msg}", ephemeral=True)
+                # Try to send error message
+                try:
+                    await interaction.response.send_message(error_msg, ephemeral=True)
+                except:
+                    try:
+                        await interaction.followup.send(error_msg, ephemeral=True)
+                    except:
+                        logger.error("Couldn't send error message to user")
             except Exception as e:
                 error_msg = f"Unerwarteter Fehler beim Erstellen des Threads für '{event.title}': {str(e)}"
                 logger.error(error_msg)
                 logger.error("Stack trace:", exc_info=True)
+                
+                # Save diagnostic information about the failure
+                save_thread_failure_info(event.title, event_post.id, {"error_type": type(e).__name__, "error_message": str(e)})
+                
                 # Try to delete the event post since we couldn't create a thread
                 try:
                     await event_post.delete()
@@ -2448,7 +2648,14 @@ async def eventify(
                 except:
                     logger.error(f"Failed to delete event post for '{event.title}' after thread creation failure")
                 
-                await interaction.followup.send(f"Fehler beim Erstellen des Events: {error_msg}", ephemeral=True)
+                # Try to send error message
+                try:
+                    await interaction.response.send_message(error_msg, ephemeral=True)
+                except:
+                    try:
+                        await interaction.followup.send(error_msg, ephemeral=True)
+                    except:
+                        logger.error("Couldn't send error message to user")
         else:
             # Create and show the modal
             modal = EventModal(
@@ -2615,17 +2822,21 @@ async def cancel_event(interaction: discord.Interaction, reason: str = None):
 
         # Alle Teilnehmer benachrichtigen
         participants = []
+        notified_user_ids = set()  # Track user IDs that have already been notified
         for role_key, role_participants in event.get("participants", {}).items():
             for participant in role_participants:
-                if participant not in participants and len(participant) >= 2:
-                    participants.append(participant)
+                if len(participant) >= 2:
+                    user_id = int(participant[1])
+                    if user_id not in notified_user_ids:
+                        participants.append(participant)
+                        notified_user_ids.add(user_id)
         
         # Erstelle die Absage-Nachricht
         cancel_message = f"**Event abgesagt:** {event['title']}\n**Datum:** {event['date']} **Zeit:** {event['time']}"
         if reason:
             cancel_message += f"\n**Grund:** {reason}"
         if event_link:
-            cancel_message += f"\n[Zum Event-Post]({event_link})"
+            cancel_message += f"\n[Zum Event]({event_link})"
         
         # Sende Nachricht an alle Teilnehmer
         sent_count = 0
@@ -2772,7 +2983,89 @@ async def add_participant(
                 )
                 return
             
-            # Add the participant to the role
+            # NEW CODE: Check if user is already assigned to another role in this event (except Fill/FillALL)
+            if not is_fill_role:  # Only check for regular roles
+                already_in_role = None
+                already_in_role_index = None
+                already_in_role_key = None
+                
+                for r_idx, r_name in enumerate(event['roles']):
+                    # Skip Fill/FillALL roles in the check
+                    if r_name.lower() == "fill" or r_name.lower() == "fillall":
+                        continue
+                    
+                    r_key = f"{r_idx}:{r_name}"
+                    if r_key in event.get('participants', {}):
+                        for entry_idx, entry in enumerate(event['participants'][r_key]):
+                            if entry[1] == player_id:
+                                already_in_role = r_name
+                                already_in_role_index = r_idx
+                                already_in_role_key = r_key
+                                already_in_entry_idx = entry_idx
+                                break
+                        
+                        if already_in_role:
+                            break
+                
+                if already_in_role:
+                    # Remove player from previous role
+                    event['participants'][already_in_role_key].pop(already_in_entry_idx)
+                    
+                    # Notify about the role change
+                    await interaction.response.send_message(
+                        f"{player_name} wurde von Rolle **{already_in_role}** entfernt und zu Rolle **{role_name}** hinzugefügt.", 
+                        ephemeral=True
+                    )
+                    
+                    # Notify the user about being moved to a different role
+                    try:
+                        event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                        dm_message = (
+                            f"**{event['caller_name']}** hat dich von der Rolle **{already_in_role}** zur Rolle **{role_name}** verschoben.\n"
+                            f"{comment if comment else ''}\n"
+                            f"Datum: {event['date']}\n"
+                            f"Uhrzeit: {event['time']}\n"
+                            f"[Zum Event]({event_link})"
+                        )
+                        await user.send(dm_message)
+                    except Exception as e:
+                        logger.error(f"Failed to send DM to user {user.id}: {e}")
+                else:
+                    # Regular confirmation message if user wasn't in another role
+                    await interaction.response.send_message(f"{player_name} wurde zu Rolle **{role_name}** hinzugefügt.", ephemeral=True)
+                    
+                    # Regular notification for new role assignment
+                    try:
+                        event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                        dm_message = (
+                            f"**{event['caller_name']}** hat dich für die Rolle **{role_name}** eingetragen.\n"
+                            f"{comment if comment else ''}\n"
+                            f"Datum: {event['date']}\n"
+                            f"Uhrzeit: {event['time']}\n"
+                            f"[Zum Event]({event_link})"
+                        )
+                        await user.send(dm_message)
+                    except Exception as e:
+                        logger.error(f"Failed to send DM to user {user.id}: {e}")
+            else:
+                # For Fill/FillALL roles, proceed as before
+                await interaction.response.send_message(f"{player_name} wurde zu Rolle **{role_name}** hinzugefügt.", ephemeral=True)
+                
+                # Notify the user about the role assignment
+                try:
+                    event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                    dm_message = (
+                        f"**{event['caller_name']}** hat dich für die Rolle **{role_name}** eingetragen.\n"
+                        f"{comment if comment else ''}\n"
+                        f"Datum: {event['date']}\n"
+                        f"Uhrzeit: {event['time']}\n"
+                        f"[Zum Event]({event_link})"
+                    )
+                    await user.send(dm_message)
+                except Exception as e:
+                    logger.error(f"Failed to send DM to user {user.id}: {e}")
+            
+            # Add the participant to the new role
             entry_data = (player_name, player_id, current_time)
             if comment:
                 # Limit comment to 30 characters for all roles (including FILLALL)
@@ -2784,22 +3077,6 @@ async def add_participant(
             
             save_event_to_json(event)
             await bot.update_event_message(interaction.channel, event)
-            
-            await interaction.response.send_message(f"{player_name} wurde zu Rolle {role_name} hinzugefügt.", ephemeral=True)
-            
-            # Notify the user
-            try:
-                event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
-                dm_message = (
-                    f"**{event['caller_name']}** hat dich für die Rolle **{role_name}** eingetragen.\n"
-                    f"{comment if comment else ''}\n"
-                    f"Datum: {event['date']}\n"
-                    f"Uhrzeit: {event['time']}\n"
-                    f"[Zum Event]({event_link})"
-                )
-                await user.send(dm_message)
-            except Exception as e:
-                logger.error(f"Failed to send DM to user {user.id}: {e}")
         
     except Exception as e:
         logger.error(f"Error in add_participant: {e}")
@@ -3298,6 +3575,29 @@ def load_overview_id():
         logger.error(f"Fehler beim Laden der Übersichts-ID: {e}")
         return None
 
+def save_thread_failure_info(event_title, message_id, error_info):
+    """Log information about a failed thread creation attempt for diagnostic purposes"""
+    try:
+        error_type = error_info.get("error_type", "Unknown")
+        error_message = error_info.get("error_message", "No message")
+        
+        # Log directly in a readable format
+        logger.error(f"THREAD_FAILURE: Event: '{event_title}', Message ID: {message_id}, Error: {error_type} - {error_message}")
+        return True
+    except Exception as e:
+        logger.error(f"Error logging thread failure information: {e}")
+        return False
+
+def get_thread_failure_stats():
+    """Get statistics about thread creation failures from logs"""
+    try:
+        return {
+            "message": "Thread failure statistics are now logged directly. Please check the log files."
+        }
+    except Exception as e:
+        logger.error(f"Error getting thread failure statistics: {e}")
+        return {"error": str(e)}
+
 @bot.tree.command(name="refresh", description="Aktualisiert die Eventübersicht manuell")
 async def refresh_overview(interaction: discord.Interaction):
     """Aktualisiert die Eventübersicht manuell"""
@@ -3305,6 +3605,11 @@ async def refresh_overview(interaction: discord.Interaction):
         # Defer die Antwort, da die Operation länger dauern könnte
         await interaction.response.defer(ephemeral=True)
         
+        # Nur für autorisierte Server erlauben
+        if AUTHORIZED_GUILD_ID != 0 and interaction.guild.id != AUTHORIZED_GUILD_ID:
+            await interaction.followup.send("Dieser Befehl ist auf diesem Server nicht verfügbar.", ephemeral=True)
+            return
+            
         # Erstelle neue Übersicht
         await create_event_listing(interaction.guild)
         
