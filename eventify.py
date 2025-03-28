@@ -2467,7 +2467,10 @@ async def eventify(
             if field_content:
                 # Count total roles (excluding section headers and FILLALL)
                 total_roles = len([r for r in roles_list if not (r.strip().startswith('(') and r.strip().endswith(')')) and r.lower() not in ["fill", "fillall"]])
-                embed.add_field(name=f"Rollen 0/{total_roles}", value=field_content, inline=False)
+                if is_participant_only_mode:
+                    embed.add_field(name="Rollen", value=field_content, inline=False)
+                else:
+                    embed.add_field(name=f"Rollen 0/{total_roles}", value=field_content, inline=False)
             
             # Add Fill role section
             if fill_index is not None:
@@ -3077,6 +3080,9 @@ async def add_participant(
             
             save_event_to_json(event)
             await bot.update_event_message(interaction.channel, event)
+            
+            # Also refresh the event overview
+            await create_event_listing(interaction.guild)
         
     except Exception as e:
         logger.error(f"Error in add_participant: {e}")
@@ -3199,6 +3205,9 @@ async def remove_participant(
         if removed_count > 0:
             save_event_to_json(event)
             await bot.update_event_message(interaction.channel, event)
+            
+            # Also refresh the event overview
+            await create_event_listing(interaction.guild)
             
     except Exception as e:
         logger.error(f"Error in remove_participant: {e}")
