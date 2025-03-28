@@ -674,6 +674,16 @@ class MyBot(discord.Client):
                     # Get participant list
                     role_participants = participants.get(role_key, [])
                     
+                    # Count unique participants
+                    unique_participants = set()
+                    for p in role_participants:
+                        if len(p) >= 2:
+                            unique_participants.add(p[1])
+                    participant_count = len(unique_participants)
+                    
+                    # Combine role name and number with participant count
+                    participant_title = f"1. {role_name} ({participant_count})"
+                    
                     # If participants are present, format them with comments (different from FillALL)
                     if role_participants:
                         # Sort participants by timestamp
@@ -786,7 +796,7 @@ class MyBot(discord.Client):
                             fillall_count = len([p for p in fill_participants if len(p) >= 2 and p[1] not in users_in_regular_roles])
                     
                     # Add occupancy count in the field name
-                    embed.add_field(name=f"Rollen {filled_roles + fillall_count}/{total_roles}", value=field_content, inline=True)
+                    embed.add_field(name=f"Rollen ({filled_roles + fillall_count}/{total_roles})", value=field_content, inline=True)
 
                 # Add Fill role section
                 if fill_index is not None:
@@ -1504,14 +1514,14 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 if field_content:
                     # Count total roles (excluding section headers and FILLALL)
                     total_roles = len([r for r in event.roles if not (r.strip().startswith('(') and r.strip().endswith(')')) and r.lower() not in ["fill", "fillall"]])
-                    embed.add_field(name=f"Rollen 0/{total_roles}", value=field_content, inline=False)
+                    embed.add_field(name=f"Rollen (0/{total_roles})", value=field_content, inline=False)
                 
                 if fill_index is not None:
                     fill_text = f"{role_counter}. {event.roles[fill_index]}"
                     embed.add_field(name="", value=fill_text, inline=False)
             else:
                 # Im Teilnehmer-only Modus, zeige die Teilnehmer-Rolle an
-                embed.add_field(name="Rollen", value="1. Teilnehmer", inline=False)
+                embed.add_field(name="Rollen (0)", value="1. Teilnehmer", inline=False)
             
             # Send event post and create thread
             channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
@@ -1844,7 +1854,21 @@ async def create_event_listing(guild):
             
             # Create role count display
             role_count_display = ""
-            if total_slots > 0:
+            if event.get('participant_only_mode', False):
+                # Für Nur-Teilnehmer-Modus zählen wir einfach die Anzahl der Teilnehmer
+                participant_count = 0
+                if event.get('roles', []) and event.get('participants', {}):
+                    # Im participant_only_mode ist nur die erste Rolle relevant (Index 0)
+                    role_key = f"0:{event['roles'][0]}"
+                    if role_key in event['participants']:
+                        # Zähle die eindeutigen Teilnehmer
+                        unique_participants = set()
+                        for participant in event['participants'][role_key]:
+                            if len(participant) >= 2:
+                                unique_participants.add(participant[1])
+                        participant_count = len(unique_participants)
+                role_count_display = f" ({participant_count})"
+            elif total_slots > 0:
                 role_count_display = f" ({filled_slots}/{total_slots})"
             
             # Create event line
@@ -2468,9 +2492,9 @@ async def eventify(
                 # Count total roles (excluding section headers and FILLALL)
                 total_roles = len([r for r in roles_list if not (r.strip().startswith('(') and r.strip().endswith(')')) and r.lower() not in ["fill", "fillall"]])
                 if is_participant_only_mode:
-                    embed.add_field(name="Rollen", value=field_content, inline=False)
+                    embed.add_field(name="Rollen (0)", value=field_content, inline=False)
                 else:
-                    embed.add_field(name=f"Rollen 0/{total_roles}", value=field_content, inline=False)
+                    embed.add_field(name=f"Rollen (0/{total_roles})", value=field_content, inline=False)
             
             # Add Fill role section
             if fill_index is not None:
