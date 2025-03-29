@@ -943,6 +943,14 @@ class MyBot(discord.Client):
                                     # Markiere Event als "cleaned"
                                     event["status"] = "cleaned"
                                     events_cleaned += 1
+                                    
+                                    # Aktualisiere die Eventübersicht sofort nachdem ein Thread gelöscht wurde
+                                    try:
+                                        await create_event_listing(guild)
+                                        logger.info(f"Event overview refreshed for guild {guild.name} after deleting thread for '{event_title}'")
+                                    except Exception as e:
+                                        logger.error(f"Error refreshing event overview after deleting thread: {e}")
+                                    
                                     break
                                 except Exception as e:
                                     logger.error(f"Error deleting thread for event '{event_title}': {e}")
@@ -957,6 +965,15 @@ class MyBot(discord.Client):
             if events_cleaned > 0:
                 logger.info(f"Marked {events_cleaned} events as cleaned")
                 save_events_to_json(events_data)
+                
+                # Aktualisiere die Eventübersicht nachdem Events gelöscht wurden
+                logger.info(f"Refreshing event overview after cleaning {events_cleaned} events")
+                for guild in self.guilds:
+                    try:
+                        await create_event_listing(guild)
+                        logger.info(f"Event overview successfully refreshed for guild {guild.name}")
+                    except Exception as e:
+                        logger.error(f"Error refreshing event overview for guild {guild.name}: {e}")
                 
         except Exception as e:
             logger.error(f"Error in delete_old_event_threads: {e}")
@@ -2755,7 +2772,7 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
                     
                     # Add the custom message if it exists
                     if message:
-                        reminder_message += f"\n{message}\n"
+                        reminder_message += f"{message}\n"
                     
                     if event_link:
                         reminder_message += f"[Zum Event]({event_link})"
@@ -3392,6 +3409,9 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                             
                             # Send message to thread about the accepted proposal
                             await thread.send(f"{self.proposer_name} hat die Rolle **{self.proposed_role}** vorgeschlagen und der Vorschlag wurde angenommen.")
+                            
+                            # Also refresh the event overview
+                            await create_event_listing(guild)
                 except Exception as e:
                     logger.error(f"Failed to update thread after role proposal: {e}")
                 
