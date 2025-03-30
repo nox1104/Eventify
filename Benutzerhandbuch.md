@@ -164,10 +164,7 @@ Die Anzahl der besetzten Rollen wird automatisch am Anfang der Rollenliste angez
 - Die zweite Zahl zeigt die Gesamtzahl der verfügbaren Rollen
 - Beispiel: "Rollen 4/5" bedeutet, dass 4 von 5 Rollen besetzt sind
 
-Die Zählung berücksichtigt:
-- Alle besetzten regulären Rollen
-- FillALL-Teilnehmer, die nicht in einer regulären Rolle sind
-- Teilnehmer, die sowohl in einer regulären Rolle als auch in FillALL sind, werden nur einmal gezählt
+Wichtig: Ein Spieler wird immer nur einmal gezählt, auch wenn er in mehreren Rollen (inkl. FillALL) eingetragen ist.
 
 
 
