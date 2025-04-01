@@ -1927,7 +1927,7 @@ async def create_event_listing(guild):
             # Zeige Datumsnamen nur beim ersten Feld, 
             # für Fortsetzungen verwende einen leeren String mit Unicode Zero Width Space
             # um das Feld in Discord korrekt darzustellen
-            field_name = f"{date}" if i == 0 else "Oha, an diesem Tag ist viel geplant..."
+            field_name = f"{date} ({get_weekday_abbr(date)})" if i == 0 else "Oha, an diesem Tag ist viel geplant..."
             
             current_embed.add_field(
                 name=field_name,
@@ -2766,7 +2766,7 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
                 if user:
                     reminder_message = (
                         f"**Erinnerung an Event: {event['title']}**\n"
-                        f"Datum: {event['date']}\n"
+                        f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
                         f"Uhrzeit: {event['time']}\n"
                     )
                     
