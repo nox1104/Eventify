@@ -13,6 +13,7 @@ from logging.handlers import RotatingFileHandler
 import glob
 import copy
 import re
+from zoneinfo import ZoneInfo
 
 """
 LANGUAGE POLICY:
@@ -80,26 +81,76 @@ intents.guilds = True  # Important for slash command sync
 intents.messages = True  # Allow the bot to see messages
 intents.message_content = True  # Allow the bot to read message content
 
+# Definiere europäische Zeitzone (CET/CEST)
+EUROPE_BERLIN = ZoneInfo("Europe/Berlin")
+
 # UTC conversion helper functions
-def local_to_utc(local_dt):
-    """Konvertiert lokale Zeit zu UTC"""
-    if local_dt.tzinfo is None:
-        # Wenn keine Zeitzone, als lokale Zeit betrachten
-        local_dt = local_dt.astimezone()
-    # Nach UTC konvertieren
-    return local_dt.astimezone(timezone.utc)
+def local_to_utc(local_dt, is_date_time_string=False, date_str=None, time_str=None):
+    """
+    Konvertiert CET/CEST zu UTC mit korrekter Behandlung von Sommer/Winterzeit
+    
+    Args:
+        local_dt: Lokales Datetime-Objekt oder None wenn Strings verwendet werden
+        is_date_time_string: True wenn separate Datums- und Zeitstrings verwendet werden
+        date_str: Datumsstring im Format "DD.MM.YYYY" oder "DDMMYYYY"
+        time_str: Zeitstring im Format "HH:MM" oder "HHMM"
+    """
+    # Bei Verwendung von Strings für Datum/Zeit (über Slash-Befehle oder Modal)
+    if is_date_time_string and date_str and time_str:
+        try:
+            # Parse date (format: DD.MM.YYYY or DDMMYYYY)
+            if "." in date_str:
+                day, month, year = map(int, date_str.split("."))
+            else:
+                day = int(date_str[:2])
+                month = int(date_str[2:4])
+                year = int(date_str[4:])
+            
+            # Parse time (format: HH:MM or HHMM)
+            if ":" in time_str:
+                hour, minute = map(int, time_str.split(":"))
+            else:
+                hour = int(time_str[:2])
+                minute = int(time_str[2:])
+            
+            # Erstelle Datetime mit Europe/Berlin Zeitzone
+            # Dies berücksichtigt automatisch, ob das Datum in Sommer- oder Winterzeit fällt
+            local_dt = datetime(year, month, day, hour, minute, tzinfo=EUROPE_BERLIN)
+            logger.info(f"Converted local time {local_dt} (Europe/Berlin) to UTC")
+            return local_dt.astimezone(timezone.utc)
+        except Exception as e:
+            logger.error(f"Error converting date/time strings to UTC: {e}")
+            return None
+    
+    # Bei Verwendung eines vorhandenen Datetime-Objekts
+    if local_dt:
+        if local_dt.tzinfo is None:
+            # Setze Zeitzone auf Europe/Berlin
+            local_dt = local_dt.replace(tzinfo=EUROPE_BERLIN)
+        return local_dt.astimezone(timezone.utc)
+    
+    return None
 
 def utc_to_local(utc_dt):
-    """Konvertiert UTC zu lokaler Zeit für Anzeige"""
+    """Konvertiert UTC zu CET/CEST basierend auf dem Datum"""
+    if utc_dt is None:
+        return None
+        
     if utc_dt.tzinfo is None:
-        # Wenn keine Zeitzone, als UTC betrachten
         utc_dt = utc_dt.replace(tzinfo=timezone.utc)
-    # Nach lokaler Zeit konvertieren
-    return utc_dt.astimezone()
+    
+    # Konvertiere nach Europe/Berlin, berücksichtigt automatisch DST
+    return utc_dt.astimezone(EUROPE_BERLIN)
 
 def format_local_datetime(utc_dt):
-    """Formatiert UTC-Zeit zur lokalen Anzeige"""
+    """Formatiert UTC-Zeit zur lokalen Anzeige in CET/CEST"""
     local_dt = utc_to_local(utc_dt)
+    if local_dt is None:
+        return {
+            "date": None,
+            "time": None,
+            "datetime": None
+        }
     return {
         "date": local_dt.strftime("%d.%m.%Y"),
         "time": local_dt.strftime("%H:%M"),
@@ -930,34 +981,33 @@ class MyBot(discord.Client):
                         continue
                     
                     try:
-                        # Extrahiere Datum und Zeit aus dem Event
-                        if "datetime_obj" in event and event["datetime_obj"]:
+                        # Verwende ausschließlich die neue Methode für die Zeitumrechnung
+                        event_dt = local_to_utc(None, is_date_time_string=True, 
+                                               date_str=event.get("date"), 
+                                               time_str=event.get("time"))
+                        
+                        # Falls keine Zeit-Strings vorhanden sind, probiere datetime_obj
+                        if not event_dt and "datetime_obj" in event and event["datetime_obj"]:
                             try:
                                 event_dt = datetime.fromisoformat(event["datetime_obj"])
                                 # Stelle sicher, dass es UTC ist
                                 if event_dt.tzinfo is None:
                                     event_dt = event_dt.replace(tzinfo=timezone.utc)
-                            except (ValueError, TypeError):
-                                # Fallback auf Datum und Zeit aus den Feldern
-                                day, month, year = map(int, event["date"].split("."))
-                                hour, minute = map(int, event["time"].split(":"))
-                                # Lokale Werte als UTC interpretieren (für bestehende Events)
-                                local_dt = datetime(year, month, day, hour, minute)
-                                event_dt = local_to_utc(local_dt)
-                        else:
-                            # Datum und Zeit aus den Feldern
-                            day, month, year = map(int, event["date"].split("."))
-                            hour, minute = map(int, event["time"].split(":"))
-                            # Lokale Werte als UTC interpretieren (für bestehende Events)
-                            local_dt = datetime(year, month, day, hour, minute)
-                            event_dt = local_to_utc(local_dt)
+                                logger.info(f"Event datetime from datetime_obj: {event_dt} (UTC)")
+                            except (ValueError, TypeError) as e:
+                                logger.warning(f"Could not parse datetime_obj for event '{event_title}': {e}")
+                        
+                        if not event_dt:
+                            logger.error(f"Cannot determine event time for '{event_title}', skipping")
+                            continue
                         
                         # Prüfe, ob 30 Minuten seit Eventbeginn vergangen sind
                         if now < event_dt + timedelta(minutes=30):
-                            logger.info(f"Event '{event_title}' still within 30-minute grace period, skipping")
+                            logger.info(f"Event '{event_title}' still within 30-minute grace period, skipping (Event time: {event_dt}, Current time: {now})")
                             continue
                         
-                        logger.info(f"Event '{event_title}' expired and 30-minute grace period passed, cleaning thread")
+                        time_diff = now - event_dt
+                        logger.info(f"Event '{event_title}' expired and 30-minute grace period passed, cleaning thread. Time difference: {time_diff}")
                         
                         # Hole die Thread-ID
                         thread_id = event.get('thread_id')
@@ -1423,24 +1473,22 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             # Sofort die Interaktion beantworten, bevor irgendetwas anderes passiert
             await interaction.response.defer(ephemeral=True)
             
-            # Parse date and time to create a datetime object
-            try:
-                date_parts = self.date.split('.')
-                time_parts = self.time.split(':')
-                
-                if len(date_parts) == 3 and len(time_parts) == 2:
-                    day, month, year = map(int, date_parts)
-                    hour, minute = map(int, time_parts)
-                    # Lokale Zeit erstellen und in UTC umwandeln
-                    local_dt = datetime(year, month, day, hour, minute)
-                    event_datetime = local_to_utc(local_dt)
-                else:
-                    # Fallback to current time if parsing fails
-                    event_datetime = datetime.now(timezone.utc)
-                    logger.warning(f"Konnte kein datetime-Objekt aus Datum '{self.date}' und Zeit '{self.time}' erstellen. Verwende aktuelle UTC-Zeit.")
-            except Exception as e:
-                event_datetime = datetime.now(timezone.utc)
-                logger.warning(f"Fehler beim Erstellen des datetime-Objekts: {e}. Verwende aktuelle UTC-Zeit.")
+            # Verwende die verbesserte Methode für die Zeitumrechnung
+            event_datetime = local_to_utc(None, is_date_time_string=True, 
+                                          date_str=self.date, time_str=self.time)
+            
+            if not event_datetime:
+                # Ohne Fallback direkt Fehler melden
+                await interaction.followup.send("Ungültiges Datum oder ungültige Zeit. Bitte verwende die Formate DD.MM.YYYY und HH:MM.", ephemeral=True)
+                return
+            
+            # Log the date/time conversion
+            logger.info(f"Created event datetime: {event_datetime.isoformat()} (UTC) from {self.date} {self.time} (Europe/Berlin)")
+            
+            # Format date and time for display (local time)
+            local_format = format_local_datetime(event_datetime)
+            formatted_date = local_format["date"]
+            formatted_time = local_format["time"]
             
             # Check if we're in participant-only mode
             roles_input = self.roles.value.strip() if self.roles.value else ""
@@ -1484,8 +1532,8 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             # Create event object - always generate a new event_id
             event = Event(
                 title=self.title,
-                date=self.date,
-                time=self.time,
+                date=formatted_date,  # Verwende formatiertes Datum für Anzeige
+                time=formatted_time,  # Verwende formatierte Zeit für Anzeige
                 description=self.description.value,
                 roles=roles,
                 datetime_obj=event_datetime,
@@ -2195,50 +2243,24 @@ def clean_old_events(events_data):
             continue
         
         try:
-            # Try to use datetime_obj first if available
-            if "datetime_obj" in event:
+            # Verwende ausschließlich die neue Methode für die Zeitumrechnung
+            event_dt = local_to_utc(None, is_date_time_string=True, 
+                                    date_str=event.get("date"), 
+                                    time_str=event.get("time"))
+            
+            # Wenn datetime_obj vorhanden ist und die Konvertierung fehlgeschlagen ist
+            if not event_dt and "datetime_obj" in event and event["datetime_obj"]:
                 try:
                     event_dt = datetime.fromisoformat(event["datetime_obj"])
                     # Stelle sicher, dass es UTC ist
                     if event_dt.tzinfo is None:
                         event_dt = event_dt.replace(tzinfo=timezone.utc)
-                    # Zusätzliches Logging: Datum/Zeit des Events
                     logger.info(f"[CLEAN_EVENTS DEBUG] Event datetime from datetime_obj: {event_dt} (UTC)")
                 except (ValueError, TypeError):
-                    event_dt = None
                     logger.warning(f"[CLEAN_EVENTS DEBUG] Could not parse datetime_obj: {event['datetime_obj']}")
-            else:
-                event_dt = None
-            
-            # If datetime_obj is not available or invalid, parse date and time
-            if event_dt is None:
-                # Parse date (format: DD.MM.YYYY)
-                if "." in event["date"]:
-                    day, month, year = map(int, event["date"].split("."))
-                else:
-                    # Try to parse without dots (DDMMYYYY)
-                    date_str = event["date"]
-                    day = int(date_str[:2])
-                    month = int(date_str[2:4])
-                    year = int(date_str[4:])
-                
-                # Parse time (format: HH:MM)
-                if ":" in event["time"]:
-                    hour, minute = map(int, event["time"].split(":"))
-                else:
-                    # Try to parse without colon (HHMM)
-                    time_str = event["time"]
-                    hour = int(time_str[:2])
-                    minute = int(time_str[2:])
-                
-                # Create datetime object (lokale Werte als UTC interpretieren für bestehende Events)
-                local_dt = datetime(year, month, day, hour, minute)
-                event_dt = local_to_utc(local_dt)
-                # Zusätzliches Logging: Datum/Zeit des Events
-                logger.info(f"[CLEAN_EVENTS DEBUG] Event datetime from parsing: {event_dt} (UTC)")
             
             # Wenn das Event begonnen hat und noch "active" ist, setze auf "expired"
-            if event_dt < now and event.get("status") == "active":
+            if event_dt and event_dt < now and event.get("status") == "active":
                 # Zusätzliches Logging: Zeitvergleich
                 logger.info(f"[CLEAN_EVENTS DEBUG] Event time {event_dt} is before current time {now}, difference: {now - event_dt}")
                 event["status"] = "expired"
@@ -2246,7 +2268,9 @@ def clean_old_events(events_data):
                 logger.info(f"Marking event as expired: {event_title} (Date: {event.get('date', 'N/A')}, Time: {event.get('time', 'N/A')})")
             else:
                 # Zusätzliches Logging: Warum das Event nicht als abgelaufen markiert wurde
-                if event_dt >= now:
+                if not event_dt:
+                    logger.warning(f"[CLEAN_EVENTS DEBUG] Could not determine event time for {event_title}")
+                elif event_dt >= now:
                     logger.info(f"[CLEAN_EVENTS DEBUG] Event time {event_dt} is not before current time {now}, keeping status: {current_status}")
                 elif event.get("status") != "active":
                     logger.info(f"[CLEAN_EVENTS DEBUG] Event already has non-active status: {current_status}")
@@ -2390,23 +2414,17 @@ async def eventify(
     image_url: str = None
 ):
     try:
-        # Parse date and time
-        parsed_date = parse_date(date)
-        parsed_time = parse_time(time)
-
-        if not parsed_date or not parsed_time:
-            await interaction.response.send_message("Ungültiges Datum oder ungültige Zeit. Bitte verwende die Formate DDMMYYYY und HHMM.", ephemeral=True)
-            return
-
         # Check title length (max 40 characters)
         if len(title) > 40:
             await interaction.response.send_message("Der Titel darf maximal 40 Zeichen lang sein.", ephemeral=True)
             return
 
-        # Combine date and time into a datetime object
-        local_datetime = datetime.combine(parsed_date, parsed_time)
-        # Convert to UTC
-        full_datetime = local_to_utc(local_datetime)
+        # Verwende die verbesserte Funktion für Zeitzonen-Konvertierung
+        full_datetime = local_to_utc(None, is_date_time_string=True, date_str=date, time_str=time)
+        
+        if not full_datetime:
+            await interaction.response.send_message("Ungültiges Datum oder ungültige Zeit. Bitte verwende die Formate DDMMYYYY und HHMM.", ephemeral=True)
+            return
         
         # Check if the date is in the future
         if full_datetime < datetime.now(timezone.utc):
@@ -2417,6 +2435,8 @@ async def eventify(
         local_format = format_local_datetime(full_datetime)
         formatted_date = local_format["date"]
         formatted_time = local_format["time"]
+        
+        logger.info(f"Creating event: {title} at {formatted_date} {formatted_time} (UTC: {full_datetime.isoformat()})")
 
         if description is not None:
             # Direct event creation without modal
