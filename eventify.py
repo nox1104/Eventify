@@ -1786,7 +1786,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
             try:
                 logger.info(f"Attempting to create thread for '{event.title}'")
                 logger.info(f"Event post exists with ID: {event_post.id}, channel ID: {event_post.channel.id}")
-                logger.info(f"Thread creation parameters: name='{event.title}', auto_archive_duration={thread_archive_duration if 'thread_archive_duration' in locals() else 'default'}")
+                logger.info(f"Thread creation parameters: name='{event.title}'")
                 logger.info(f"Bot permissions in channel: {channel.permissions_for(interaction.guild.me).value}")
                 logger.info(f"Channel type: {type(channel).__name__}")
                 logger.info(f"Event post type: {type(event_post).__name__}")
@@ -2753,7 +2753,8 @@ async def eventify(
             try:
                 logger.info(f"Attempting to create thread for '{event.title}'")
                 logger.info(f"Event post exists with ID: {event_post.id}, channel ID: {event_post.channel.id}")
-                logger.info(f"Discord permissions in channel: {channel.permissions_for(interaction.guild.me).value}")
+                logger.info(f"Thread creation parameters: name='{event.title}'")
+                logger.info(f"Bot permissions in channel: {channel.permissions_for(interaction.guild.me).value}")
                 
                 # Detailed logging before thread creation attempt
                 logger.info(f"[Thread Creation] Starting thread creation attempt for event '{event.title}'")

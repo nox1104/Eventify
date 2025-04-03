@@ -28,4 +28,5 @@ backups/
 nox/ 
 events.json
 overview.json
-
+utc_conversion_done.flag
+convert_events_to_utc.py
