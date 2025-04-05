@@ -380,6 +380,7 @@ class MyBot(discord.Client):
                 if now > event_dt + timedelta(hours=1):
                     # Nur Zahlenanmeldungen blockieren
                     if message.content.strip().isdigit() or (message.content.strip() and message.content.strip()[0].isdigit()):
+                        await message.add_reaction('❌')  # Zeitsymbol als Reaktion
                         await message.add_reaction('⏱️')  # Zeitsymbol als Reaktion
                         await message.author.send(f"Anmeldungen für das Event **{event.get('title')}** sind nicht mehr möglich, da das Event vor über einer Stunde begonnen hat.")
                         logger.info(f"Blocked registration from {message.author.name} - event {event.get('title')} started more than 1 hour ago")
@@ -387,6 +388,7 @@ class MyBot(discord.Client):
                     
                     # Für Abmeldungen (- oder -X) ebenfalls blockieren
                     if message.content.strip() == '-' or (message.content.strip().startswith('-') and message.content.strip()[1:].isdigit()):
+                        await message.add_reaction('❌')  # Zeitsymbol als Reaktion
                         await message.add_reaction('⏱️')  # Zeitsymbol als Reaktion
                         await message.author.send(f"Abmeldungen für das Event **{event.get('title')}** sind nicht mehr möglich, da das Event vor über einer Stunde begonnen hat.")
                         logger.info(f"Blocked unregistration from {message.author.name} - event {event.get('title')} started more than 1 hour ago")
@@ -2944,13 +2946,7 @@ async def remind_participants(interaction: discord.Interaction, comment: str = N
             if now > event_dt + timedelta(hours=1):
                 # Benutzer informieren (ephemeral im Thread)
                 await interaction.response.send_message("Erinnerungen sind nicht mehr möglich, da das Event vor über einer Stunde begonnen hat.", ephemeral=True)
-                
-                # DM an den Benutzer senden
-                try:
-                    await interaction.user.send(f"Der Befehl /remind ist für das Event **{event.get('title')}** nicht mehr verfügbar, da das Event vor über einer Stunde begonnen hat.")
-                    logger.info(f"Blocked /remind command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
-                except Exception as dm_error:
-                    logger.error(f"Failed to send DM about /remind time restriction: {dm_error}")
+                logger.info(f"Blocked /remind command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
                 return
         except Exception as e:
             logger.error(f"Error checking event time for /remind command: {e}")
@@ -3173,13 +3169,7 @@ async def add_participant(
             if now > event_dt + timedelta(hours=1):
                 # Benutzer informieren (ephemeral im Thread)
                 await interaction.response.send_message("Teilnehmer können nicht mehr hinzugefügt werden, da das Event vor über einer Stunde begonnen hat.", ephemeral=True)
-                
-                # DM an den Benutzer senden
-                try:
-                    await interaction.user.send(f"Der Befehl /add ist für das Event **{event.get('title')}** nicht mehr verfügbar, da das Event vor über einer Stunde begonnen hat.")
-                    logger.info(f"Blocked /add command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
-                except Exception as dm_error:
-                    logger.error(f"Failed to send DM about /add time restriction: {dm_error}")
+                logger.info(f"Blocked /add command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
                 return
         except Exception as e:
             logger.error(f"Error checking event time for /add command: {e}")
@@ -3428,13 +3418,7 @@ async def remove_participant(
             if now > event_dt + timedelta(hours=1):
                 # Benutzer informieren (ephemeral im Thread)
                 await interaction.response.send_message("Teilnehmer können nicht mehr entfernt werden, da das Event vor über einer Stunde begonnen hat.", ephemeral=True)
-                
-                # DM an den Benutzer senden
-                try:
-                    await interaction.user.send(f"Der Befehl /remove ist für das Event **{event.get('title')}** nicht mehr verfügbar, da das Event vor über einer Stunde begonnen hat.")
-                    logger.info(f"Blocked /remove command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
-                except Exception as dm_error:
-                    logger.error(f"Failed to send DM about /remove time restriction: {dm_error}")
+                logger.info(f"Blocked /remove command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
                 return
         except Exception as e:
             logger.error(f"Error checking event time for /remove command: {e}")
@@ -3639,13 +3623,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
             if now > event_dt + timedelta(hours=1):
                 # Benutzer informieren (ephemeral im Thread)
                 await interaction.response.send_message("Neue Rollen können nicht mehr vorgeschlagen werden, da das Event vor über einer Stunde begonnen hat.", ephemeral=True)
-                
-                # DM an den Benutzer senden
-                try:
-                    await interaction.user.send(f"Der Befehl /propose ist für das Event **{event.get('title')}** nicht mehr verfügbar, da das Event vor über einer Stunde begonnen hat.")
-                    logger.info(f"Blocked /propose command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
-                except Exception as dm_error:
-                    logger.error(f"Failed to send DM about /propose time restriction: {dm_error}")
+                logger.info(f"Blocked /propose command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
                 return
         except Exception as e:
             logger.error(f"Error checking event time for /propose command: {e}")
