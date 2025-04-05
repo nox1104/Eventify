@@ -2378,7 +2378,7 @@ def clean_old_events(events_data):
                     logger.warning(f"[CLEAN_EVENTS DEBUG] Could not parse datetime_obj: {event['datetime_obj']}")
             
             # Wenn das Event begonnen hat und noch "active" ist, setze auf "expired"
-            if event_dt and event_dt < now and event.get("status") == "active":
+            if event_dt and event_dt + timedelta(hours=1) < now and event.get("status") == "active":
                 # Zusätzliches Logging: Zeitvergleich
                 logger.info(f"[CLEAN_EVENTS DEBUG] Event time {event_dt} is before current time {now}, difference: {now - event_dt}")
                 event["status"] = "expired"
