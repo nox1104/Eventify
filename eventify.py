@@ -2981,9 +2981,9 @@ async def remind_participants(interaction: discord.Interaction, comment: str = N
                 user = await interaction.client.fetch_user(int(participant_id))
                 if user:
                     reminder_message = (
-                        f"Erinnerung an Event: **{event['title']}**\n"
-                        f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
-                        f"Uhrzeit: **{event['time']}**\n"
+                        f"**Erinnerung** an Event: {event['title']}\n"
+                        f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
+                        f"Uhrzeit: {event['time']}\n"
                     )
                     
                     # Add the custom message if it exists
@@ -3094,9 +3094,9 @@ async def cancel_event(interaction: discord.Interaction, reason: str = None):
                         notified_user_ids.add(user_id)
         
         # Erstelle die Absage-Nachricht
-        cancel_message = f"**Event abgesagt:** {event['title']}\n**Datum:** {event['date']} **Zeit:** {event['time']}"
+        cancel_message = f"**Event abgesagt:** {event['title']}\nDatum: {event['date']} Zeit: {event['time']}"
         if reason:
-            cancel_message += f"\n**Grund:** {reason}"
+            cancel_message += f"\nGrund: **{reason}**"
         if event_link:
             cancel_message += f"\n[Zum Event]({event_link})"
         
@@ -3228,18 +3228,18 @@ async def add_participant(
                 else:
                     event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
                 
-                await interaction.response.send_message(f"Kommentar für {player_name} in Rolle {role_name} aktualisiert.")
+                await interaction.response.send_message(f"Kommentar für **{player_name}** in Rolle **{role_name}** aktualisiert.\nNeuer Kommentar: **{comment}**")
             else:
-                await interaction.response.send_message(f"{player_name} ist bereits für Rolle {role_name} eingetragen.")
+                await interaction.response.send_message(f"{player_name} ist bereits für Rolle **{role_name}** eingetragen.")
             
             # Inform the participant about the comment update
             try:
                 event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                 dm_message = (
                     f"**{event['caller_name']}** hat deinen Kommentar für die Rolle **{role_name}** aktualisiert.\n"
-                    f"Event: **{event['title']}**\n"
-                    f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
-                    f"Uhrzeit: **{event['time']}**\n"
+                    f"Event: {event['title']}\n"
+                    f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
+                    f"Uhrzeit: {event['time']}\n"
                     f"Neuer Kommentar: **{comment}**\n"
 
                     f"[Zum Event]({event_link})"
@@ -3308,14 +3308,14 @@ async def add_participant(
                     try:
                         event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                         dm_message = (
-                            f"**{interaction.user.display_name}** hat dich von der Rolle **{already_in_role}** zur Rolle **{role_name}** verschoben.\n"
+                            f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **{already_in_role}** in die Rolle **{role_name}** verschoben.\n"
                         )
                         if comment:
                             dm_message += f"Kommentar: **{comment}**\n"
                         dm_message += (
-                            f"Event: **{event['title']}**\n"
-                            f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
-                            f"Uhrzeit: **{event['time']}**\n"
+                            f"Event: {event['title']}\n"
+                            f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
+                            f"Uhrzeit: {event['time']}\n"
                             f"[Zum Event]({event_link})"
                         )
                         await user.send(dm_message)
@@ -3332,16 +3332,16 @@ async def add_participant(
                     try:
                         event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                         dm_message = (
-                            f"**{interaction.user.display_name}** hat dich für die Rolle **{role_name}** eingetragen.\n"
+                            f"Du wurdest von **{interaction.user.display_name}** in die Rolle **{role_name}** eingetragen.\n"
+                        )
+                        dm_message += (
+                            f"Event: {event['title']}\n"
+                            f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
+                            f"Uhrzeit: {event['time']}\n"
                         )
                         if comment:
                             dm_message += f"Kommentar: **{comment}**\n"
-                        dm_message += (
-                            f"Event: **{event['title']}**\n"
-                            f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
-                            f"Uhrzeit: **{event['time']}**\n"
-                            f"[Zum Event]({event_link})"
-                        )
+                        dm_message += f"[Zum Event]({event_link})"
                         await user.send(dm_message)
                     except Exception as e:
                         logger.error(f"Failed to send DM to user {user.id}: {e}")
@@ -3356,16 +3356,16 @@ async def add_participant(
                 try:
                     event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                     dm_message = (
-                        f"**{interaction.user.display_name}** hat dich für die Rolle **{role_name}** eingetragen.\n"
+                        f"Du wurdest von **{interaction.user.display_name}** für die Rolle **{role_name}** eingetragen.\n"
+                    )
+                    dm_message += (
+                        f"Event: {event['title']}\n"
+                        f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
+                        f"Uhrzeit: {event['time']}\n"
                     )
                     if comment:
                         dm_message += f"Kommentar: **{comment}**\n"
-                    dm_message += (
-                        f"Event: **{event['title']}**\n"
-                        f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
-                        f"Uhrzeit: **{event['time']}**\n"
-                        f"[Zum Event]({event_link})"
-                    )
+                    dm_message += f"[Zum Event]({event_link})"
                     await user.send(dm_message)
                 except Exception as e:
                     logger.error(f"Failed to send DM to user {user.id}: {e}")
@@ -3466,23 +3466,61 @@ async def remove_participant(
                 # Inform the participant about the removal from all roles
                 try:
                     event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
-                    dm_message = (
-                        f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **{', '.join(removed_roles)}** entfernt.\n"
-                        f"Event: **{event['title']}**\n"
-                        f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
-                        f"Uhrzeit: **{event['time']}**\n"
+                    
+                    # Check if FILLALL is among the removed roles
+                    has_fillall = any(r.lower() in ["fill", "fillall"] for r in removed_roles)
+                    normal_roles = [r for r in removed_roles if r.lower() not in ["fill", "fillall"]]
+                    
+                    # Fall 1: Benutzer aus normalen Rollen und FILLALL entfernt
+                    if has_fillall and normal_roles:
+                        dm_message = (
+                            f"Du wurdest von **{interaction.user.display_name}** aus den Rollen **{', '.join(normal_roles)}** und **FILLALL** entfernt.\n"
+                        )
+                    # Fall 2: Benutzer nur aus normalen Rollen entfernt
+                    elif normal_roles:
+                        role_text = normal_roles[0] if len(normal_roles) == 1 else ', '.join(normal_roles)
+                        dm_message = (
+                            f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **{role_text}** entfernt.\n"
+                        )
+                    # Fall 3: Benutzer nur aus FILLALL entfernt
+                    else:
+                        dm_message = (
+                            f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **FILLALL** entfernt.\n"
+                        )
+                    
+                    dm_message += (
+                        f"Event: {event['title']}\n"
+                        f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
+                        f"Uhrzeit: {event['time']}\n"
                     )
                     if comment:
                         dm_message += f"Kommentar: **{comment}**\n"
                     dm_message += f"[Zum Event]({event_link})"
                     await user.send(dm_message)
-                    thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{', '.join(removed_roles)}** entfernt."
+                    
+                    # Die Thread-Nachricht an die DM-Nachricht anpassen
+                    if has_fillall and normal_roles:
+                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus den Rollen **{', '.join(normal_roles)}** und **FILLALL** entfernt."
+                    elif normal_roles:
+                        role_text = normal_roles[0] if len(normal_roles) == 1 else ', '.join(normal_roles)
+                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_text}** entfernt."
+                    else:
+                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **FILLALL** entfernt."
+                    
                     if comment:
                         thread_message += f"\nKommentar: **{comment}**"
                     await interaction.response.send_message(thread_message)
                 except Exception as e:
                     logger.error(f"Failed to send DM to user {user.id}: {e}")
-                    thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{', '.join(removed_roles)}** entfernt."
+                    # Bei DM-Fehler trotzdem die korrekte Thread-Nachricht senden
+                    if has_fillall and normal_roles:
+                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus den Rollen **{', '.join(normal_roles)}** und **FILLALL** entfernt."
+                    elif normal_roles:
+                        role_text = normal_roles[0] if len(normal_roles) == 1 else ', '.join(normal_roles)
+                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_text}** entfernt."
+                    else:
+                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **FILLALL** entfernt."
+                    
                     if comment:
                         thread_message += f"\nKommentar: **{comment}**"
                     await interaction.response.send_message(thread_message)
@@ -3510,25 +3548,44 @@ async def remove_participant(
                     # Inform the participant about the removal from the specific role
                     try:
                         event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
-                        dm_message = (
-                            f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **{role_name}** im Event **{event['title']}** entfernt.\n"
+                        
+                        # Prüfen ob es sich um eine FILLALL-Rolle handelt
+                        if role_name.lower() in ["fill", "fillall"]:
+                            dm_message = (
+                                f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **FILLALL** entfernt.\n"
+                            )
+                        else:
+                            dm_message = (
+                                f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **{role_name}** entfernt.\n"
+                            )
+                        
+                        dm_message += (
+                            f"Event: {event['title']}\n"
+                            f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
+                            f"Uhrzeit: {event['time']}\n"
                         )
                         if comment:
                             dm_message += f"Kommentar: **{comment}**\n"
-                        dm_message += (
-                            f"Event: **{event['title']}**\n"
-                            f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
-                            f"Uhrzeit: **{event['time']}**\n"
-                            f"[Zum Event]({event_link})"
-                        )
+                        dm_message += f"[Zum Event]({event_link})"
                         await user.send(dm_message)
-                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_name}** entfernt."
+                        
+                        # Thread-Nachricht an DM-Nachricht anpassen
+                        if role_name.lower() in ["fill", "fillall"]:
+                            thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **FILLALL** entfernt."
+                        else:
+                            thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_name}** entfernt."
+                        
                         if comment:
                             thread_message += f"\nKommentar: **{comment}**"
                         await interaction.response.send_message(thread_message)
                     except Exception as e:
                         logger.error(f"Failed to send DM to user {user.id}: {e}")
-                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_name}** entfernt."
+                        # Bei DM-Fehler trotzdem die korrekte Thread-Nachricht senden
+                        if role_name.lower() in ["fill", "fillall"]:
+                            thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **FILLALL** entfernt."
+                        else:
+                            thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_name}** entfernt."
+                        
                         if comment:
                             thread_message += f"\nKommentar: **{comment}**"
                         await interaction.response.send_message(thread_message)
@@ -3747,7 +3804,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                             dm_message = (
                                 f"Dein Rollenvorschlag **{self.proposed_role}** wurde angenommen!\n"
                                 f"Du wurdest automatisch in diese Rolle eingetragen.\n"
-                                f"Event: **{current_event['title']}**\n"
+                                f"Event: {current_event['title']}\n"
                                 f"Datum: {current_event['date']}\n"
                                 f"Uhrzeit: {current_event['time']}\n"
                                 f"[Zum Event]({event_link})"

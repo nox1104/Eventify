@@ -37,10 +37,10 @@ Im Event-Thread kann jeder Benutzer andere Teilnehmer hinzufügen oder entfernen
    - `role_number`: Die Nummer der Rolle, z.B. 1 für die erste Rolle
    - `comment` (optional): Ein Kommentar, der neben dem Namen angezeigt wird (auf 30 Zeichen begrenzt)
 3. Der hinzugefügte Teilnehmer erhält automatisch eine private Nachricht mit:
-   - Event-Titel
    - Zugewiesene Rolle
-   - Kommentar (falls vorhanden)
+   - Event-Titel
    - Datum und Uhrzeit
+   - Kommentar (falls vorhanden)
    - Link zum Event
 4. Im Thread erscheint eine Nachricht: "**user** hat **user** zur Rolle **role** hinzugefügt."
 
@@ -56,7 +56,11 @@ Im Event-Thread kann jeder Benutzer andere Teilnehmer hinzufügen oder entfernen
    - Kommentar (falls vorhanden)
    - Datum und Uhrzeit
    - Link zum Event
-4. Im Thread erscheint eine Nachricht: "**user** hat **user** aus der Rolle **role** entfernt."
+4. Im Thread erscheint eine Nachricht:
+   - Bei Entfernung aus normalen Rollen: "**user** hat **user** aus der Rolle **role** entfernt."
+   - Bei Entfernung aus mehreren Rollen: "**user** hat **user** aus den Rollen **role1, role2** entfernt."
+   - Bei Entfernung aus FILLALL: "**user** hat **user** aus der Rolle **FILLALL** entfernt."
+    - Wenn ein Kommentar angegeben wurde, wird dieser in der DN angezeigt
 
 ### Teilnehmer erinnern
 
@@ -66,7 +70,7 @@ Im Event-Thread kann jeder Benutzer andere Teilnehmer hinzufügen oder entfernen
    - Beispiel: `/remind comment: Denkt an eure Buffs und Tränke!`
 3. Der Bot sendet dann:
    - Eine private Nachricht an alle eingetragenen Teilnehmer mit:
-     - Event-Titel
+     - **Erinnerung** an Event: Titel
      - Datum und Uhrzeit
      - Deine zusätzliche Nachricht (falls angegeben)
      - Link zum Event
@@ -153,9 +157,9 @@ Der Nur-Teilnehmer-Modus ist für Events gedacht, bei denen keine spezifischen R
 3. Der Bot führt dann automatisch folgende Aktionen aus:
    - Der Titel des Events wird mit `[ABGESAGT]` markiert
    - Alle angemeldeten Teilnehmer erhalten eine private Nachricht mit:
-     - Information über die Absage
-     - Datum und Uhrzeit des abgesagten Events
-     - Den angegebenen Grund (falls vorhanden)
+     - **Event abgesagt:** Titel
+     - Datum und Zeit
+     - Den angegebenen Grund (falls vorhanden, dieser wird fett hervorgehoben)
      - Link zum Event-Post
    - Das Event wird aus der Eventübersicht entfernt
    - Eine neue Eventübersicht ohne das abgesagte Event wird erstellt
