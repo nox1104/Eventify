@@ -369,6 +369,31 @@ class MyBot(discord.Client):
             
             if not event:
                 return
+                
+            # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
+            try:
+                # Event-Zeit direkt aus datetime_obj verwenden
+                event_dt = datetime.fromisoformat(event.get('datetime_obj'))
+                now = datetime.now(timezone.utc)
+                
+                # Wenn mehr als 1 Stunde seit Eventbeginn vergangen ist, keine Zahlenanmeldungen mehr zulassen
+                if now > event_dt + timedelta(hours=1):
+                    # Nur Zahlenanmeldungen blockieren
+                    if message.content.strip().isdigit() or (message.content.strip() and message.content.strip()[0].isdigit()):
+                        await message.add_reaction('⏱️')  # Zeitsymbol als Reaktion
+                        await message.author.send(f"Anmeldungen für das Event **{event.get('title')}** sind nicht mehr möglich, da das Event vor über einer Stunde begonnen hat.")
+                        logger.info(f"Blocked registration from {message.author.name} - event {event.get('title')} started more than 1 hour ago")
+                        return
+                    
+                    # Für Abmeldungen (- oder -X) ebenfalls blockieren
+                    if message.content.strip() == '-' or (message.content.strip().startswith('-') and message.content.strip()[1:].isdigit()):
+                        await message.add_reaction('⏱️')  # Zeitsymbol als Reaktion
+                        await message.author.send(f"Abmeldungen für das Event **{event.get('title')}** sind nicht mehr möglich, da das Event vor über einer Stunde begonnen hat.")
+                        logger.info(f"Blocked unregistration from {message.author.name} - event {event.get('title')} started more than 1 hour ago")
+                        return
+            except Exception as e:
+                logger.error(f"Error checking event time for registration limit: {e}")
+                # Im Fehlerfall Anmeldungen dennoch erlauben
 
             # Process role signup (single digit number)
             if message.content.strip().isdigit():
@@ -1097,46 +1122,28 @@ class MyBot(discord.Client):
         """Löscht Threads für abgelaufene Events nach 30-Minuten-Wartezeit"""
         try:
             now = datetime.now(timezone.utc)
-            logger.info(f"{now} - Checking for old event threads...")
+            logger.info(f"{now} - Checking for expired events (thread deletion disabled)...")
             
             # Lade Events mit Status "expired" (abgelaufen, aber Thread noch aktiv)
             events_data = load_upcoming_events(include_expired=True, include_cleaned=False)
             
             # Filtere nur nach Events mit Status "expired"
             expired_events = [e for e in events_data.get("events", []) if e.get("status") == "expired"]
-            logger.info(f"Found {len(expired_events)} expired events to check for thread deletion")
+            logger.info(f"Found {len(expired_events)} expired events (would have checked for thread deletion)")
             
+            # Thread-Löschung ist deaktiviert, wie vom Benutzer gewünscht
+            # Threads bleiben bestehen für Kommunikation auch nach Event-Ende
+            
+            """
+            # Die ursprüngliche Thread-Löschungslogik wurde deaktiviert
             events_cleaned = 0
-            
             for event in expired_events:
                 try:
-                    event_title = event.get('title', 'Unknown Event')
-                    event_id = event.get('event_id')
+                    event_title = event.get("title", "Unknown")
                     
-                    if not event_id:
-                        logger.warning(f"No event_id found for event '{event_title}'")
-                        continue
-                    
+                    # Parse event datetime direkt aus datetime_obj
                     try:
-                        # Verwende ausschließlich die neue Methode für die Zeitumrechnung
-                        event_dt = local_to_utc(None, is_date_time_string=True, 
-                                               date_str=event.get("date"), 
-                                               time_str=event.get("time"))
-                        
-                        # Falls keine Zeit-Strings vorhanden sind, probiere datetime_obj
-                        if not event_dt and "datetime_obj" in event and event["datetime_obj"]:
-                            try:
-                                event_dt = datetime.fromisoformat(event["datetime_obj"])
-                                # Stelle sicher, dass es UTC ist
-                                if event_dt.tzinfo is None:
-                                    event_dt = event_dt.replace(tzinfo=timezone.utc)
-                                logger.info(f"Event datetime from datetime_obj: {event_dt} (UTC)")
-                            except (ValueError, TypeError) as e:
-                                logger.warning(f"Could not parse datetime_obj for event '{event_title}': {e}")
-                        
-                        if not event_dt:
-                            logger.error(f"Cannot determine event time for '{event_title}', skipping")
-                            continue
+                        event_dt = datetime.fromisoformat(event.get('datetime_obj'))
                         
                         # Prüfe, ob 30 Minuten seit Eventbeginn vergangen sind
                         if now < event_dt + timedelta(minutes=30):
@@ -1144,39 +1151,21 @@ class MyBot(discord.Client):
                             continue
                         
                         time_diff = now - event_dt
-                        logger.info(f"Event '{event_title}' expired and 30-minute grace period passed, cleaning thread. Time difference: {time_diff}")
+                        logger.info(f"Event '{event_title}' expired and 30-minute grace period passed, thread would have been deleted. Time difference: {time_diff}")
                         
                         # Hole die Thread-ID
                         thread_id = event.get('thread_id')
                         if not thread_id:
                             logger.warning(f"No thread_id found for expired event '{event_title}'")
                             continue
-                        
-                        # Lösche den Thread
-                        for guild in self.guilds:
-                            thread = await self.fetch_thread(guild, thread_id)
-                            if thread:
-                                try:
-                                    await thread.delete()
-                                    logger.info(f"Successfully deleted thread for expired event '{event_title}'")
-                                    
-                                    # Markiere Event als "cleaned"
-                                    event["status"] = "cleaned"
-                                    events_cleaned += 1
-                                    
-                                    # Aktualisiere die Eventübersicht sofort nachdem ein Thread gelöscht wurde
-                                    try:
-                                        await create_event_listing(guild)
-                                        logger.info(f"Event overview refreshed for guild {guild.name} after deleting thread for '{event_title}'")
-                                    except Exception as e:
-                                        logger.error(f"Error refreshing event overview after deleting thread: {e}")
-                                    
-                                    break
-                                except Exception as e:
-                                    logger.error(f"Error deleting thread for event '{event_title}': {e}")
+                            
+                        # Der Thread wird nicht mehr gelöscht
+                        # Stattdessen markieren wir das Event als "cleaned", damit es nicht ständig geprüft wird
+                        event["status"] = "cleaned"
+                        events_cleaned += 1
                     
                     except (ValueError, KeyError) as e:
-                        logger.error(f"Error parsing date/time for event '{event_title}': {e}")
+                        logger.error(f"Error parsing datetime_obj for event '{event_title}': {e}")
                 
                 except Exception as e:
                     logger.error(f"Error processing event: {e}")
@@ -1185,15 +1174,7 @@ class MyBot(discord.Client):
             if events_cleaned > 0:
                 logger.info(f"Marked {events_cleaned} events as cleaned")
                 save_events_to_json(events_data)
-                
-                # Aktualisiere die Eventübersicht nachdem Events gelöscht wurden
-                logger.info(f"Refreshing event overview after cleaning {events_cleaned} events")
-                for guild in self.guilds:
-                    try:
-                        await create_event_listing(guild)
-                        logger.info(f"Event overview successfully refreshed for guild {guild.name}")
-                    except Exception as e:
-                        logger.error(f"Error refreshing event overview for guild {guild.name}: {e}")
+            """
                 
         except Exception as e:
             logger.error(f"Error in delete_old_event_threads: {e}")
@@ -2930,9 +2911,9 @@ async def eventify(
         print(f"Error in create_event: {e}")
         await interaction.response.send_message(f"Ein Fehler ist aufgetreten: {str(e)}", ephemeral=True)
 
-@bot.tree.command(name="remind", description="Sende eine Erinnerung an alle eingetragenen Teilnehmer (nur für Event-Ersteller)")
+@bot.tree.command(name="remind", description="Sende eine Erinnerung an alle eingetragenen Teilnehmer")
 @app_commands.guild_only()
-async def remind_participants(interaction: discord.Interaction, message: str = None):
+async def remind_participants(interaction: discord.Interaction, comment: str = None):
     try:
         # Check if the command is executed in a thread
         if not isinstance(interaction.channel, discord.Thread):
@@ -2952,11 +2933,33 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
+            
+        # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
+        try:
+            # Event-Zeit direkt aus datetime_obj verwenden
+            event_dt = datetime.fromisoformat(event.get('datetime_obj'))
+            now = datetime.now(timezone.utc)
+            
+            # Wenn mehr als 1 Stunde seit Eventbeginn vergangen ist, Slash-Befehl blockieren
+            if now > event_dt + timedelta(hours=1):
+                # Benutzer informieren (ephemeral im Thread)
+                await interaction.response.send_message("Erinnerungen sind nicht mehr möglich, da das Event vor über einer Stunde begonnen hat.", ephemeral=True)
+                
+                # DM an den Benutzer senden
+                try:
+                    await interaction.user.send(f"Der Befehl /remind ist für das Event **{event.get('title')}** nicht mehr verfügbar, da das Event vor über einer Stunde begonnen hat.")
+                    logger.info(f"Blocked /remind command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
+                except Exception as dm_error:
+                    logger.error(f"Failed to send DM about /remind time restriction: {dm_error}")
+                return
+        except Exception as e:
+            logger.error(f"Error checking event time for /remind command: {e}")
+            # Im Fehlerfall Command dennoch erlauben
 
-        # Check if the user is the event caller
-        if str(interaction.user.id) != event.get('caller_id'):
-            await interaction.response.send_message("Nur der Event-Ersteller kann Erinnerungen versenden.", ephemeral=True)
-            return
+        # Remove the check that restricts to event creator
+        # if str(interaction.user.id) != event.get('caller_id'):
+        #     await interaction.response.send_message("Nur der Event-Ersteller kann Erinnerungen versenden.", ephemeral=True)
+        #     return
 
         # Create the event link
         message_id = event.get('message_id')
@@ -2978,14 +2981,14 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
                 user = await interaction.client.fetch_user(int(participant_id))
                 if user:
                     reminder_message = (
-                        f"**Erinnerung an Event: {event['title']}**\n"
-                        f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
-                        f"Uhrzeit: {event['time']}\n"
+                        f"Erinnerung an Event: **{event['title']}**\n"
+                        f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
+                        f"Uhrzeit: **{event['time']}**\n"
                     )
                     
                     # Add the custom message if it exists
-                    if message:
-                        reminder_message += f"{message}\n"
+                    if comment:
+                        reminder_message += f"Kommentar: **{comment}**\n"
                     
                     if event_link:
                         reminder_message += f"[Zum Event]({event_link})"
@@ -2996,10 +2999,12 @@ async def remind_participants(interaction: discord.Interaction, message: str = N
                 logger.error(f"Failed to send reminder to user {participant_id}: {e}")
                 failed_count += 1
         
-        # Send confirmation
+        # Add message in thread about the reminder
+        comment_text = ""
+        if comment:
+            comment_text = f"\nKommentar: **{comment}**"
         await interaction.response.send_message(
-            f"Erinnerung an {success_count} Teilnehmer gesendet. {failed_count} fehlgeschlagen.", 
-            ephemeral=True
+            f"**{interaction.user.display_name}** hat alle Teilnehmer per DN an das Event erinnert.{comment_text}"
         )
 
     except Exception as e:
@@ -3130,7 +3135,7 @@ async def cancel_event(interaction: discord.Interaction, reason: str = None):
         logger.error(f"Fehler bei der Event-Absage: {e}")
         await interaction.followup.send(f"Ein Fehler ist aufgetreten: {str(e)}")
 
-@bot.tree.command(name="add", description="Füge einen Teilnehmer zu einer Rolle hinzu (nur für Event-Ersteller)")
+@bot.tree.command(name="add", description="Füge einen Teilnehmer zu einer Rolle hinzu")
 @app_commands.guild_only()
 async def add_participant(
     interaction: discord.Interaction, 
@@ -3157,11 +3162,33 @@ async def add_participant(
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
+            
+        # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
+        try:
+            # Event-Zeit direkt aus datetime_obj verwenden
+            event_dt = datetime.fromisoformat(event.get('datetime_obj'))
+            now = datetime.now(timezone.utc)
+            
+            # Wenn mehr als 1 Stunde seit Eventbeginn vergangen ist, Slash-Befehl blockieren
+            if now > event_dt + timedelta(hours=1):
+                # Benutzer informieren (ephemeral im Thread)
+                await interaction.response.send_message("Teilnehmer können nicht mehr hinzugefügt werden, da das Event vor über einer Stunde begonnen hat.", ephemeral=True)
+                
+                # DM an den Benutzer senden
+                try:
+                    await interaction.user.send(f"Der Befehl /add ist für das Event **{event.get('title')}** nicht mehr verfügbar, da das Event vor über einer Stunde begonnen hat.")
+                    logger.info(f"Blocked /add command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
+                except Exception as dm_error:
+                    logger.error(f"Failed to send DM about /add time restriction: {dm_error}")
+                return
+        except Exception as e:
+            logger.error(f"Error checking event time for /add command: {e}")
+            # Im Fehlerfall Command dennoch erlauben
 
-        # Check if the user is the event caller
-        if str(interaction.user.id) != event.get('caller_id'):
-            await interaction.response.send_message("Nur der Event-Ersteller kann Teilnehmer hinzufügen.", ephemeral=True)
-            return
+        # Remove the check that restricts to event creator
+        # if str(interaction.user.id) != event.get('caller_id'):
+        #     await interaction.response.send_message("Nur der Event-Ersteller kann Teilnehmer hinzufügen.", ephemeral=True)
+        #     return
         
         # Convert the displayed role number to the actual index
         actual_role_index = bot.role_number_to_index(event, role_number)
@@ -3201,18 +3228,20 @@ async def add_participant(
                 else:
                     event['participants'][role_key][existing_entry] = (existing_data[0], existing_data[1], existing_data[2], comment)
                 
-                await interaction.response.send_message(f"Kommentar für {player_name} in Rolle {role_name} aktualisiert.", ephemeral=True)
+                await interaction.response.send_message(f"Kommentar für {player_name} in Rolle {role_name} aktualisiert.")
             else:
-                await interaction.response.send_message(f"{player_name} ist bereits für Rolle {role_name} eingetragen.", ephemeral=True)
+                await interaction.response.send_message(f"{player_name} ist bereits für Rolle {role_name} eingetragen.")
             
             # Inform the participant about the comment update
             try:
                 event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                 dm_message = (
                     f"**{event['caller_name']}** hat deinen Kommentar für die Rolle **{role_name}** aktualisiert.\n"
+                    f"Event: **{event['title']}**\n"
+                    f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
+                    f"Uhrzeit: **{event['time']}**\n"
                     f"Neuer Kommentar: **{comment}**\n"
-                    f"Datum: {event['date']}\n"
-                    f"Uhrzeit: {event['time']}\n"
+
                     f"[Zum Event]({event_link})"
                 )
                 await user.send(dm_message)
@@ -3245,6 +3274,7 @@ async def add_participant(
                 already_in_role = None
                 already_in_role_index = None
                 already_in_role_key = None
+                already_in_entry_idx = None
                 
                 for r_idx, r_name in enumerate(event['roles']):
                     # Skip Fill/FillALL roles in the check
@@ -3268,81 +3298,99 @@ async def add_participant(
                     # Remove player from previous role
                     event['participants'][already_in_role_key].pop(already_in_entry_idx)
                     
-                    # Notify about the role change
-                    await interaction.response.send_message(
-                        f"{player_name} wurde von Rolle **{already_in_role}** entfernt und zu Rolle **{role_name}** hinzugefügt.", 
-                        ephemeral=True
-                    )
+                    # Post a message in the thread
+                    thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{already_in_role}** entfernt und zur Rolle **{role_name}** hinzugefügt."
+                    if comment:
+                        thread_message += f"\nKommentar: **{comment}**"
+                    await interaction.response.send_message(thread_message)
                     
                     # Notify the user about being moved to a different role
                     try:
                         event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                         dm_message = (
-                            f"**{event['caller_name']}** hat dich von der Rolle **{already_in_role}** zur Rolle **{role_name}** verschoben.\n"
-                            f"{comment if comment else ''}\n"
-                            f"Datum: {event['date']}\n"
-                            f"Uhrzeit: {event['time']}\n"
+                            f"**{interaction.user.display_name}** hat dich von der Rolle **{already_in_role}** zur Rolle **{role_name}** verschoben.\n"
+                        )
+                        if comment:
+                            dm_message += f"Kommentar: **{comment}**\n"
+                        dm_message += (
+                            f"Event: **{event['title']}**\n"
+                            f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
+                            f"Uhrzeit: **{event['time']}**\n"
                             f"[Zum Event]({event_link})"
                         )
                         await user.send(dm_message)
                     except Exception as e:
                         logger.error(f"Failed to send DM to user {user.id}: {e}")
                 else:
-                    # Regular confirmation message if user wasn't in another role
-                    await interaction.response.send_message(f"{player_name} wurde zu Rolle **{role_name}** hinzugefügt.", ephemeral=True)
+                    # Post a message in the thread
+                    thread_message = f"**{interaction.user.display_name}** hat **{player_name}** zur Rolle **{role_name}** hinzugefügt."
+                    if comment:
+                        thread_message += f"\nKommentar: **{comment}**"
+                    await interaction.response.send_message(thread_message)
                     
                     # Regular notification for new role assignment
                     try:
                         event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                         dm_message = (
-                            f"**{event['caller_name']}** hat dich für die Rolle **{role_name}** eingetragen.\n"
-                            f"{comment if comment else ''}\n"
-                            f"Datum: {event['date']}\n"
-                            f"Uhrzeit: {event['time']}\n"
+                            f"**{interaction.user.display_name}** hat dich für die Rolle **{role_name}** eingetragen.\n"
+                        )
+                        if comment:
+                            dm_message += f"Kommentar: **{comment}**\n"
+                        dm_message += (
+                            f"Event: **{event['title']}**\n"
+                            f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
+                            f"Uhrzeit: **{event['time']}**\n"
                             f"[Zum Event]({event_link})"
                         )
                         await user.send(dm_message)
                     except Exception as e:
                         logger.error(f"Failed to send DM to user {user.id}: {e}")
             else:
-                # For Fill/FillALL roles, proceed as before
-                await interaction.response.send_message(f"{player_name} wurde zu Rolle **{role_name}** hinzugefügt.", ephemeral=True)
+                # For Fill/FillALL roles, post a message in the thread
+                thread_message = f"**{interaction.user.display_name}** hat **{player_name}** zur Rolle **{role_name}** hinzugefügt."
+                if comment:
+                    thread_message += f"\nKommentar: **{comment}**"
+                await interaction.response.send_message(thread_message)
                 
                 # Notify the user about the role assignment
                 try:
                     event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                     dm_message = (
-                        f"**{event['caller_name']}** hat dich für die Rolle **{role_name}** eingetragen.\n"
-                        f"{comment if comment else ''}\n"
-                        f"Datum: {event['date']}\n"
-                        f"Uhrzeit: {event['time']}\n"
+                        f"**{interaction.user.display_name}** hat dich für die Rolle **{role_name}** eingetragen.\n"
+                    )
+                    if comment:
+                        dm_message += f"Kommentar: **{comment}**\n"
+                    dm_message += (
+                        f"Event: **{event['title']}**\n"
+                        f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
+                        f"Uhrzeit: **{event['time']}**\n"
                         f"[Zum Event]({event_link})"
                     )
                     await user.send(dm_message)
                 except Exception as e:
                     logger.error(f"Failed to send DM to user {user.id}: {e}")
             
-            # Add the participant to the new role
-            entry_data = (player_name, player_id, current_time)
+            # Add the participant to the role - always do this last to avoid issues if something fails above
+            entry = [player_name, player_id, current_time]
             if comment:
-                # Limit comment to 30 characters for all roles (including FILLALL)
+                # Limit comment to 30 characters
                 if len(comment) > 30:
                     comment = comment[:30] + "..."
-                entry_data = entry_data + (comment,)
-            
-            event['participants'][role_key].append(entry_data)
-            
-            save_event_to_json(event)
-            await bot.update_event_message(interaction.channel, event)
-            
-            # Also refresh the event overview
-            await create_event_listing(interaction.guild)
+                entry.append(comment)
+            event['participants'][role_key].append(tuple(entry))
         
+        # Update the event and save to JSON
+        save_event_to_json(event)
+        await bot.update_event_message(interaction.channel, event)
+        
+        # Also refresh the event overview
+        await create_event_listing(interaction.guild)
+            
     except Exception as e:
         logger.error(f"Error in add_participant: {e}")
         await interaction.response.send_message("Ein Fehler ist beim Hinzufügen des Teilnehmers aufgetreten.", ephemeral=True)
 
-@bot.tree.command(name="remove", description="Entferne einen Teilnehmer aus einer oder allen Rollen (nur für Event-Ersteller)")
+@bot.tree.command(name="remove", description="Entferne einen Teilnehmer aus einer oder allen Rollen")
 @app_commands.guild_only()
 async def remove_participant(
     interaction: discord.Interaction, 
@@ -3370,10 +3418,32 @@ async def remove_participant(
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
 
-        # Check if the user is the event caller
-        if str(interaction.user.id) != event.get('caller_id'):
-            await interaction.response.send_message("Nur der Event-Ersteller kann Teilnehmer entfernen.", ephemeral=True)
-            return
+        # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
+        try:
+            # Event-Zeit direkt aus datetime_obj verwenden
+            event_dt = datetime.fromisoformat(event.get('datetime_obj'))
+            now = datetime.now(timezone.utc)
+            
+            # Wenn mehr als 1 Stunde seit Eventbeginn vergangen ist, Slash-Befehl blockieren
+            if now > event_dt + timedelta(hours=1):
+                # Benutzer informieren (ephemeral im Thread)
+                await interaction.response.send_message("Teilnehmer können nicht mehr entfernt werden, da das Event vor über einer Stunde begonnen hat.", ephemeral=True)
+                
+                # DM an den Benutzer senden
+                try:
+                    await interaction.user.send(f"Der Befehl /remove ist für das Event **{event.get('title')}** nicht mehr verfügbar, da das Event vor über einer Stunde begonnen hat.")
+                    logger.info(f"Blocked /remove command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
+                except Exception as dm_error:
+                    logger.error(f"Failed to send DM about /remove time restriction: {dm_error}")
+                return
+        except Exception as e:
+            logger.error(f"Error checking event time for /remove command: {e}")
+            # Im Fehlerfall Command dennoch erlauben
+
+        # Remove the check that restricts to event creator
+        # if str(interaction.user.id) != event.get('caller_id'):
+        #     await interaction.response.send_message("Nur der Event-Ersteller kann Teilnehmer entfernen.", ephemeral=True)
+        #     return
             
         player_id = str(user.id)
         player_name = user.display_name
@@ -3397,20 +3467,25 @@ async def remove_participant(
                 try:
                     event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                     dm_message = (
-                        f"Du wurdest von **{event['caller_name']}** aus der Rolle **{', '.join(removed_roles)}** im Event **{event['title']}** entfernt.\n"
+                        f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **{', '.join(removed_roles)}** entfernt.\n"
+                        f"Event: **{event['title']}**\n"
+                        f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
+                        f"Uhrzeit: **{event['time']}**\n"
                     )
                     if comment:
                         dm_message += f"Kommentar: **{comment}**\n"
-                    dm_message += (
-                        f"Datum: {event['date']}\n"
-                        f"Uhrzeit: {event['time']}\n"
-                        f"[Zum Event]({event_link})"
-                    )
+                    dm_message += f"[Zum Event]({event_link})"
                     await user.send(dm_message)
-                    await interaction.response.send_message(f"{player_name} wurde aus **{', '.join(removed_roles)}** entfernt und hat eine DN erhalten.")
+                    thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{', '.join(removed_roles)}** entfernt."
+                    if comment:
+                        thread_message += f"\nKommentar: **{comment}**"
+                    await interaction.response.send_message(thread_message)
                 except Exception as e:
                     logger.error(f"Failed to send DM to user {user.id}: {e}")
-                    await interaction.response.send_message(f"{player_name} wurde aus **{', '.join(removed_roles)}** entfernt. Eine DN konnte nicht gesendet werden!")
+                    thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{', '.join(removed_roles)}** entfernt."
+                    if comment:
+                        thread_message += f"\nKommentar: **{comment}**"
+                    await interaction.response.send_message(thread_message)
             else:
                 await interaction.response.send_message(f"{player_name} war für keine Rolle eingetragen.", ephemeral=True)
         else:
@@ -3436,22 +3511,29 @@ async def remove_participant(
                     try:
                         event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
                         dm_message = (
-                            f"Du wurdest von **{event['caller_name']}** aus der Rolle **{role_name}** im Event **{event['title']}** entfernt.\n"
+                            f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **{role_name}** im Event **{event['title']}** entfernt.\n"
                         )
                         if comment:
                             dm_message += f"Kommentar: **{comment}**\n"
                         dm_message += (
-                            f"Datum: {event['date']}\n"
-                            f"Uhrzeit: {event['time']}\n"
+                            f"Event: **{event['title']}**\n"
+                            f"Datum: **{event['date']} ({get_weekday_abbr(event['date'])})**\n"
+                            f"Uhrzeit: **{event['time']}**\n"
                             f"[Zum Event]({event_link})"
                         )
                         await user.send(dm_message)
-                        await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt und hat eine DN erhalten.")
+                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_name}** entfernt."
+                        if comment:
+                            thread_message += f"\nKommentar: **{comment}**"
+                        await interaction.response.send_message(thread_message)
                     except Exception as e:
                         logger.error(f"Failed to send DM to user {user.id}: {e}")
-                        await interaction.response.send_message(f"{player_name} wurde aus Rolle \"{role_name}\" entfernt.")
+                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_name}** entfernt."
+                        if comment:
+                            thread_message += f"\nKommentar: **{comment}**"
+                        await interaction.response.send_message(thread_message)
                 else:
-                    await interaction.response.send_message(f"{player_name} war nicht für Rolle \"{role_name}\" eingetragen.")
+                    await interaction.response.send_message(f"{player_name} war nicht für Rolle \"{role_name}\" eingetragen.", ephemeral=True)
             else:
                 await interaction.response.send_message(f"Rolle {role_name} hat keine Teilnehmer.", ephemeral=True)
         
@@ -3489,6 +3571,28 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
+        
+        # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
+        try:
+            # Event-Zeit direkt aus datetime_obj verwenden
+            event_dt = datetime.fromisoformat(event.get('datetime_obj'))
+            now = datetime.now(timezone.utc)
+            
+            # Wenn mehr als 1 Stunde seit Eventbeginn vergangen ist, Slash-Befehl blockieren
+            if now > event_dt + timedelta(hours=1):
+                # Benutzer informieren (ephemeral im Thread)
+                await interaction.response.send_message("Neue Rollen können nicht mehr vorgeschlagen werden, da das Event vor über einer Stunde begonnen hat.", ephemeral=True)
+                
+                # DM an den Benutzer senden
+                try:
+                    await interaction.user.send(f"Der Befehl /propose ist für das Event **{event.get('title')}** nicht mehr verfügbar, da das Event vor über einer Stunde begonnen hat.")
+                    logger.info(f"Blocked /propose command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
+                except Exception as dm_error:
+                    logger.error(f"Failed to send DM about /propose time restriction: {dm_error}")
+                return
+        except Exception as e:
+            logger.error(f"Error checking event time for /propose command: {e}")
+            # Im Fehlerfall Command dennoch erlauben
         
         # Check if the event is in participant_only_mode
         is_participant_only = event.get('participant_only_mode', False)

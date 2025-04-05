@@ -26,6 +26,53 @@ Als Teilnehmer brauchst du nur die ersten paar Zeilen zu lesen. Lass dich nicht 
 2. Schreibe oder `-`, um dich von allen Rollen abzumelden
 3. Oder schreibe `-X`, wobei X die Nummer der Rolle ist, von der du dich abmelden möchtest
 
+### Teilnehmer verwalten
+
+Im Event-Thread kann jeder Benutzer andere Teilnehmer hinzufügen oder entfernen:
+
+#### Teilnehmer hinzufügen:
+1. Verwende im Event-Thread den Befehl `/add`
+2. Gib folgende Parameter ein:
+   - `user`: Der Discord-Benutzer, den du hinzufügen möchtest (per Autocomplete)
+   - `role_number`: Die Nummer der Rolle, z.B. 1 für die erste Rolle
+   - `comment` (optional): Ein Kommentar, der neben dem Namen angezeigt wird (auf 30 Zeichen begrenzt)
+3. Der hinzugefügte Teilnehmer erhält automatisch eine private Nachricht mit:
+   - Event-Titel
+   - Zugewiesene Rolle
+   - Kommentar (falls vorhanden)
+   - Datum und Uhrzeit
+   - Link zum Event
+4. Im Thread erscheint eine Nachricht: "**user** hat **user** zur Rolle **role** hinzugefügt."
+
+#### Teilnehmer entfernen:
+1. Verwende im Event-Thread den Befehl `/remove`
+2. Gib folgende Parameter ein:
+   - `user`: Der Discord-Benutzer, den du entfernen möchtest (per Autocomplete)
+   - `role_number` (optional): Die Nummer der Rolle. Wenn nicht angegeben, wird der Teilnehmer aus allen Rollen entfernt
+   - `comment` (optional): Ein Kommentar, der in der DM an den entfernten Benutzer gesendet wird
+3. Der entfernte Teilnehmer erhält automatisch eine private Nachricht mit:
+   - Event-Titel
+   - Entfernte Rolle(n)
+   - Kommentar (falls vorhanden)
+   - Datum und Uhrzeit
+   - Link zum Event
+4. Im Thread erscheint eine Nachricht: "**user** hat **user** aus der Rolle **role** entfernt."
+
+### Teilnehmer erinnern
+
+1. Gehe in den Event-Thread
+2. Verwende den Slash-Befehl `/remind`
+   - Optional kannst du eine zusätzliche Nachricht mit `comment:` hinzufügen
+   - Beispiel: `/remind comment: Denkt an eure Buffs und Tränke!`
+3. Der Bot sendet dann:
+   - Eine private Nachricht an alle eingetragenen Teilnehmer mit:
+     - Event-Titel
+     - Datum und Uhrzeit
+     - Deine zusätzliche Nachricht (falls angegeben)
+     - Link zum Event
+   - Eine Nachricht im Thread: "**user** hat alle Teilnehmer per DN (mit dem Kommentar: **comment**) an das Event erinnert."
+   - Kommentar (falls vorhanden)
+
 ### Rollen vorschlagen
 
 Als Teilnehmer kannst du zusätzliche Rollen für ein Event vorschlagen:
@@ -97,20 +144,6 @@ Der Nur-Teilnehmer-Modus ist für Events gedacht, bei denen keine spezifischen R
   - Der `/propose`-Befehl zum Vorschlagen neuer Rollen ist im Nur-Teilnehmer-Modus nicht verfügbar
   - Die Anzeige ist übersichtlicher, da nur eine einzelne Teilnehmerliste angezeigt wird
 
-### Teilnehmer erinnern
-
-1. Gehe in den Event-Thread
-2. Verwende den Slash-Befehl `/remind`
-   - Optional kannst du eine zusätzliche Nachricht mit `message:` hinzufügen
-   - Beispiel: `/remind message: Denkt an eure Buffs und Tränke!`
-3. Der Bot sendet dann:
-   - Eine private Nachricht an alle eingetragenen Teilnehmer mit:
-     - Event-Titel
-     - Datum und Uhrzeit
-     - Deine zusätzliche Nachricht (falls angegeben)
-     - Link zum Event
-   - Eine Bestätigung an dich, wie viele Erinnerungen erfolgreich versendet wurden
-
 ### Event absagen
 
 1. Gehe in den Event-Thread
@@ -128,35 +161,6 @@ Der Nur-Teilnehmer-Modus ist für Events gedacht, bei denen keine spezifischen R
    - Eine neue Eventübersicht ohne das abgesagte Event wird erstellt
    - Der Event-Thread wird sofort gelöscht, um zu verhindern, dass sich weitere Teilnehmer anmelden
 
-### Teilnehmer verwalten
-
-Als Event-Ersteller kannst du andere Teilnehmer hinzufügen oder entfernen:
-
-#### Teilnehmer hinzufügen:
-1. Verwende im Event-Thread den Befehl `/add`
-2. Gib folgende Parameter ein:
-   - `user`: Der Discord-Benutzer, den du hinzufügen möchtest (per Autocomplete)
-   - `role_number`: Die Nummer der Rolle, z.B. 1 für die erste Rolle
-   - `comment` (optional): Ein Kommentar, der neben dem Namen angezeigt wird (auf 30 Zeichen begrenzt)
-3. Der hinzugefügte Teilnehmer erhält automatisch eine private Nachricht mit:
-   - Event-Titel
-   - Zugewiesene Rolle
-   - Kommentar (falls vorhanden)
-   - Datum und Uhrzeit
-   - Link zum Event
-
-#### Teilnehmer entfernen:
-1. Verwende im Event-Thread den Befehl `/remove`
-2. Gib folgende Parameter ein:
-   - `user`: Der Discord-Benutzer, den du entfernen möchtest (per Autocomplete)
-   - `role_number` (optional): Die Nummer der Rolle. Wenn nicht angegeben, wird der Teilnehmer aus allen Rollen entfernt
-3. Der entfernte Teilnehmer erhält automatisch eine private Nachricht mit:
-   - Event-Titel
-   - Entfernte Rolle(n)
-   - Kommentar (falls vorhanden)
-   - Datum und Uhrzeit
-   - Link zum Event
-
 ### Rollenbesetzung anzeigen
 
 Die Anzahl der besetzten Rollen wird automatisch am Anfang der Rollenliste angezeigt:
@@ -166,7 +170,22 @@ Die Anzahl der besetzten Rollen wird automatisch am Anfang der Rollenliste angez
 
 Wichtig: Ein Spieler wird immer nur einmal gezählt, auch wenn er in mehreren Rollen (inkl. FillALL) eingetragen ist.
 
+### Zeitlimitierung nach Eventbeginn
 
+Die Threads für Events bleiben dauerhaft bestehen, damit ihr auch nach dem Event noch Bilder teilen und euch unterhalten könnt. Um jedoch ein versehentliches Anmelden für vergangene Events oder andere Missverständnisse zu vermeiden, gelten folgende Regeln:
+
+- **Eine Stunde nach Eventbeginn** werden folgende Aktionen nicht mehr möglich sein:
+  - Anmeldung per Zahl für eine Rolle (z.B. "1", "2 mit Kommentar")
+  - Abmeldung per "-" oder "-2"
+  - Verwendung aller Event-Befehle im Thread:
+    - `/add` - Teilnehmer hinzufügen
+    - `/remove` - Teilnehmer entfernen
+    - `/remind` - Teilnehmer erinnern
+    - `/propose` - Neue Rolle vorschlagen
+    
+- **Was passiert bei Versuchen nach dem Zeitlimit?**
+  - Bei Zahlenanmeldungen: Reaktion mit ⏱️ und DN
+  - Bei Slash-Befehlen: Ephemeral-Nachricht und DN
 
 ### Formatierung der Beschreibung
 
@@ -202,8 +221,6 @@ Um Links in Discord klickbar zu machen, verwende die folgende Markdown-Syntax:
 Der Bot hält den Event-Kanal automatisch sauber und übersichtlich:
 
 - **Automatische Bereinigung** – Entfernt automatisch:
-  - nach 30 Minuten
-    - Event-Threads 
   - nach 12 Tagen:
     - Systemnachrichten und Benachrichtigungen
     - Alte Event-Listen
@@ -255,3 +272,4 @@ Irgendwas
 Orangenblätter
 Cursed
 ```
+
