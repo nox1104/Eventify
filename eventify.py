@@ -301,6 +301,29 @@ class MyBot(discord.Client):
                 event = next((e for e in events_data["events"] if e.get('title') == event_title), None)
             
             if event:
+                # Prüfe, ob das Event abgesagt wurde
+                if event.get('status') == "canceled" or "[ABGESAGT]" in event.get('title', ''):
+                    await message.add_reaction('❌')
+                    await message.author.send(f"Dieses Event wurde bereits abgesagt. Anmeldungen sind nicht mehr möglich.")
+                    return
+                
+                # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
+                try:
+                    # Event-Zeit direkt aus datetime_obj verwenden
+                    event_dt = datetime.fromisoformat(event.get('datetime_obj'))
+                    now = datetime.now(timezone.utc)
+                    
+                    # Wenn mehr als 1 Stunde seit Eventbeginn vergangen ist, Anmeldungen blockieren
+                    if now > event_dt + timedelta(hours=1):
+                        # Benutzer informieren
+                        await message.add_reaction('❌')
+                        await message.author.send(f"Anmeldungen sind nicht mehr möglich, da das Event vor über einer Stunde begonnen hat.")
+                        logger.info(f"Blocked role signup from {message.author.name} - event {event.get('title')} started more than 1 hour ago")
+                        return
+                except Exception as e:
+                    logger.error(f"Error checking event time for role signup: {e}")
+                    # Im Fehlerfall Anmeldung trotzdem erlauben
+                
                 # Berechne den korrekten Rollenindex unter Berücksichtigung der Überschriften
                 role_index = -1
                 header_count = 0
@@ -562,72 +585,97 @@ class MyBot(discord.Client):
             
             # Fallback: try to find by title (for backwards compatibility)
             if not event:
-                event = next((e for e in events_data["events"] if e.get('title') == message.channel.name), None)
-
-            if event:
-                player_name = message.author.name
-                player_id = str(message.author.id)
+                event_title = message.channel.name
+                event = next((e for e in events_data["events"] if e.get('title') == event_title), None)
+            
+            if not event:
+                await message.add_reaction('⚠️')
+                await message.channel.send("Kein passendes Event für diesen Thread gefunden.")
+                return
+            
+            # Prüfe, ob das Event abgesagt wurde
+            if event.get('status') == "canceled" or "[ABGESAGT]" in event.get('title', ''):
+                await message.add_reaction('❌')
+                await message.author.send(f"Dieses Event wurde bereits abgesagt. Abmeldungen sind nicht mehr möglich.")
+                return
+            
+            # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
+            try:
+                # Event-Zeit direkt aus datetime_obj verwenden
+                event_dt = datetime.fromisoformat(event.get('datetime_obj'))
+                now = datetime.now(timezone.utc)
+                
+                # Wenn mehr als 1 Stunde seit Eventbeginn vergangen ist, Abmeldungen blockieren
+                if now > event_dt + timedelta(hours=1):
+                    # Benutzer informieren
+                    await message.add_reaction('❌')
+                    await message.author.send(f"Abmeldungen sind nicht mehr möglich, da das Event vor über einer Stunde begonnen hat.")
+                    logger.info(f"Blocked unregister from {message.author.name} - event {event.get('title')} started more than 1 hour ago")
+                    return
+            except Exception as e:
+                logger.error(f"Error checking event time for unregister: {e}")
+                # Im Fehlerfall Abmeldung trotzdem erlauben
+            
+            player_name = message.author.name
+            player_id = str(message.author.id)
+            removed_count = 0
+            
+            # If it's a general unregister from all roles (-)
+            if not is_specific_role:
+                # Keep track of how many roles the player was removed from
                 removed_count = 0
                 
-                # If it's a general unregister from all roles (-)
-                if not is_specific_role:
-                    # Keep track of how many roles the player was removed from
-                    removed_count = 0
-                    
-                    # Check all roles
-                    for r_idx, r_name in enumerate(event['roles']):
-                        r_key = f"{r_idx}:{r_name}"
-                        if r_key in event.get('participants', {}):
-                            # Check if player is in this role
-                            initial_count = len(event['participants'][r_key])
-                            event['participants'][r_key] = [p for p in event['participants'][r_key] if p[1] != player_id]
-                            removed_count += initial_count - len(event['participants'][r_key])
-                    
-                    logger.info(f"Removed {player_name} from {removed_count} roles in event {event['title']}")
-                    
-                    # Only reply if player was actually removed from something
-                    if removed_count > 0:
-                        # Update the event message
-                        await self._update_event_and_save(message, event, events_data)
-                        await message.add_reaction('✅')  # Add confirmation reaction
-                    else:
-                        await message.add_reaction('❓')  # Player wasn't registered
+                # Check all roles
+                for r_idx, r_name in enumerate(event['roles']):
+                    r_key = f"{r_idx}:{r_name}"
+                    if r_key in event.get('participants', {}):
+                        # Check if player is in this role
+                        initial_count = len(event['participants'][r_key])
+                        event['participants'][r_key] = [p for p in event['participants'][r_key] if p[1] != player_id]
+                        removed_count += initial_count - len(event['participants'][r_key])
+                
+                logger.info(f"Removed {player_name} from {removed_count} roles in event {event['title']}")
+                
+                # Only reply if player was actually removed from something
+                if removed_count > 0:
+                    # Update the event message
+                    await self._update_event_and_save(message, event, events_data)
+                    await message.add_reaction('✅')  # Add confirmation reaction
                 else:
-                    # This is a specific role unregister
-                    # If role_number is provided, convert it to role_index
-                    if role_number is not None:
-                        role_index = self.role_number_to_index(event, role_number)
-                    
-                    if role_index is not None and 0 <= role_index < len(event['roles']):
-                        role_name = event['roles'][role_index]
-                        role_key = f"{role_index}:{role_name}"
-                        
-                        logger.info(f"Unregistering {player_name} from role {role_name} at index {role_index}")
-                        
-                        if role_key in event.get('participants', {}):
-                            # Find and remove the player from the role
-                            initial_count = len(event['participants'][role_key])
-                            event['participants'][role_key] = [p for p in event['participants'][role_key] if p[1] != player_id]
-                            removed_count = initial_count - len(event['participants'][role_key])
-                            
-                            if removed_count > 0:
-                                logger.info(f"Removed {player_name} from role {role_name}")
-                                
-                                # Update the event message and save to JSON
-                                await self._update_event_and_save(message, event, events_data)
-                                await message.add_reaction('✅')  # Add confirmation reaction
-                            else:
-                                logger.info(f"{player_name} was not registered for role {role_name}")
-                                await message.add_reaction('❓')  # Player wasn't registered
-                        else:
-                            logger.info(f"Role {role_name} has no participants")
-                            await message.add_reaction('❓')  # Info reaction
-                    else:
-                        logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
-                        await message.add_reaction('❓')  # Invalid role
+                    await message.add_reaction('❓')  # Player wasn't registered
             else:
-                logger.warning(f"No event found matching thread name: {message.channel.name}")
-                await message.channel.send("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
+                # This is a specific role unregister
+                # If role_number is provided, convert it to role_index
+                if role_number is not None:
+                    role_index = self.role_number_to_index(event, role_number)
+                
+                if role_index is not None and 0 <= role_index < len(event['roles']):
+                    role_name = event['roles'][role_index]
+                    role_key = f"{role_index}:{role_name}"
+                    
+                    logger.info(f"Unregistering {player_name} from role {role_name} at index {role_index}")
+                    
+                    if role_key in event.get('participants', {}):
+                        # Find and remove the player from the role
+                        initial_count = len(event['participants'][role_key])
+                        event['participants'][role_key] = [p for p in event['participants'][role_key] if p[1] != player_id]
+                        removed_count = initial_count - len(event['participants'][role_key])
+                        
+                        if removed_count > 0:
+                            logger.info(f"Removed {player_name} from role {role_name}")
+                            
+                            # Update the event message and save to JSON
+                            await self._update_event_and_save(message, event, events_data)
+                            await message.add_reaction('✅')  # Add confirmation reaction
+                        else:
+                            logger.info(f"{player_name} was not registered for role {role_name}")
+                            await message.add_reaction('❓')  # Player wasn't registered
+                    else:
+                        logger.info(f"Role {role_name} has no participants")
+                        await message.add_reaction('❓')  # Info reaction
+                else:
+                    logger.warning(f"Invalid role index: {role_index}. Event has {len(event['roles'])} roles.")
+                    await message.add_reaction('❓')  # Invalid role
         except Exception as e:
             logger.error(f"Error processing unregister: {e}")
             await message.channel.send(f"Fehler bei der Verarbeitung deiner Anfrage: {str(e)}", ephemeral=True)
@@ -2798,6 +2846,11 @@ async def remind_participants(interaction: discord.Interaction, comment: str = N
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
             
+        # Prüfe, ob das Event abgesagt wurde
+        if event.get('status') == "canceled" or "[ABGESAGT]" in event.get('title', ''):
+            await interaction.response.send_message("Dieses Event wurde abgesagt. Erinnerungen können nicht mehr versendet werden.", ephemeral=True)
+            return
+
         # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
         try:
             # Event-Zeit direkt aus datetime_obj verwenden
@@ -2913,6 +2966,7 @@ async def cancel_event(interaction: discord.Interaction, reason: str = None):
         
         # Event als abgesagt markieren
         event["title"] = f"{event['title']} [ABGESAGT]"
+        event["status"] = "canceled"  # Setze den Status auf abgesagt
         
         # Event-Nachricht aktualisieren
         try:
@@ -2970,25 +3024,27 @@ async def cancel_event(interaction: discord.Interaction, reason: str = None):
             except Exception as e:
                 logger.error(f"Error sending cancellation DM to {user_id}: {e}")
 
-        # Event aus der Liste entfernen und speichern
-        event_id = event.get("event_id")
-        for i, e in enumerate(events_data["events"]):
-            if e.get("event_id") == event_id:
-                del events_data["events"][i]
-                break
+        # Event speichern (nicht mehr löschen)
         save_events_to_json(events_data)
         
         # Neue Eventübersicht erstellen
         await create_event_listing(interaction.guild)
         
-        # Bestätigung senden und Thread sofort löschen
-        await interaction.followup.send(f"Event wurde abgesagt. {sent_count} Benutzer wurden benachrichtigt. Der Thread wird jetzt gelöscht.")
+        # Thread-Nachricht senden und Thread-Name aktualisieren wenn möglich
+        if reason:
+            thread_message = f"**Event wurde abgesagt. Grund: {reason}**\nAn- und Abmeldungen sowie weitere Aktionen sind nicht mehr möglich."
+        else:
+            thread_message = f"**Event wurde abgesagt.**\nAn- und Abmeldungen sowie weitere Aktionen sind nicht mehr möglich."
+
+        # Bestätigung senden
+        await interaction.followup.send(f"Event wurde abgesagt. {sent_count} Benutzer wurden benachrichtigt. Der Thread bleibt für Diskussionen erhalten.")
+        await thread.send(thread_message)
         
+        # Versuche, den Thread-Namen zu aktualisieren (wenn möglich)
         try:
-            await thread.delete()
+            await thread.edit(name=f"{thread.name} [ABGESAGT]")
         except Exception as e:
-            logger.error(f"Fehler beim Löschen des Event-Threads: {e}")
-            await interaction.followup.send("Der Thread konnte nicht gelöscht werden, versuche es später nochmal.", ephemeral=True)
+            logger.error(f"Fehler beim Aktualisieren des Thread-Namens: {e}")
     except Exception as e:
         logger.error(f"Fehler bei der Event-Absage: {e}")
         await interaction.followup.send(f"Ein Fehler ist aufgetreten: {str(e)}")
@@ -3020,7 +3076,12 @@ async def add_participant(
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
-            
+        
+        # Prüfe, ob das Event abgesagt wurde
+        if event.get('status') == "canceled" or "[ABGESAGT]" in event.get('title', ''):
+            await interaction.response.send_message("Dieses Event wurde abgesagt. Anmeldungen sind nicht mehr möglich.", ephemeral=True)
+            return
+        
         # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
         try:
             # Event-Zeit direkt aus datetime_obj verwenden
@@ -3270,6 +3331,11 @@ async def remove_participant(
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
             return
 
+        # Prüfe, ob das Event abgesagt wurde
+        if event.get('status') == "canceled" or "[ABGESAGT]" in event.get('title', ''):
+            await interaction.response.send_message("Dieses Event wurde abgesagt. Abmeldungen sind nicht mehr möglich.", ephemeral=True)
+            return
+
         # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
         try:
             # Event-Zeit direkt aus datetime_obj verwenden
@@ -3473,6 +3539,11 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
 
         if not event:
             await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
+            return
+        
+        # Prüfe, ob das Event abgesagt wurde
+        if event.get('status') == "canceled" or "[ABGESAGT]" in event.get('title', ''):
+            await interaction.response.send_message("Dieses Event wurde bereits abgesagt. Neue Rollenvorschläge sind nicht mehr möglich.", ephemeral=True)
             return
         
         # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
