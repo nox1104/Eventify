@@ -2778,8 +2778,18 @@ async def eventify(
                     embed.add_field(name="", value=fill_text, inline=False)
             
             # Send the event post and create a thread
-            event_post = await channel.send(embed=embed)
-            logger.info(f"Event post created for '{event.title}' with message ID: {event_post.id}")
+            # Create a simplified embed without image for initial posting
+            temp_embed = discord.Embed(
+                title=f"__**{event.title}**__",
+                color=0x0dceda
+            )
+            # Add only essential information
+            temp_embed.add_field(name="Datum", value=f"{event.date} ({weekday})", inline=True)
+            temp_embed.add_field(name="Uhrzeit", value=event.time, inline=True)
+            
+            # Send the temporary event post without the image
+            event_post = await channel.send(embed=temp_embed)
+            logger.info(f"Temporary event post created for '{event.title}' with message ID: {event_post.id}")
             
             try:
                 logger.info(f"Attempting to create thread for '{event.title}'")
@@ -2787,39 +2797,14 @@ async def eventify(
                 logger.info(f"Thread creation parameters: name='{event.title}'")
                 logger.info(f"Bot permissions in channel: {channel.permissions_for(interaction.guild.me).value}")
                 
-                # Detailed logging before thread creation attempt
+                # Create thread directly without retries
                 logger.info(f"[Thread Creation] Starting thread creation attempt for event '{event.title}'")
-                logger.info(f"[Thread Creation] Discord API state before attempt: Session ID: N/A")
-                logger.info(f"[Thread Creation] Event message creation timestamp: {event_post.created_at}")
+                thread = await event_post.create_thread(name=event.title)
+                logger.info(f"[Thread Creation] Thread creation successful with thread ID: {thread.id}")
                 
-                # Add retry mechanism for thread creation
-                max_retries = 3
-                retry_delay = 2  # seconds
-                thread = None
-                
-                for retry_count in range(max_retries):
-                    try:
-                        logger.info(f"[Thread Creation] Attempt {retry_count + 1}/{max_retries} to create thread")
-                        thread = await event_post.create_thread(name=event.title)
-                        logger.info(f"[Thread Creation] Thread creation API call completed successfully on attempt {retry_count + 1}")
-                        break  # Exit loop on success
-                    except discord.HTTPException as e:
-                        logger.error(f"[Thread Creation] HTTP exception during thread creation attempt {retry_count + 1}: {str(e)}")
-                        if retry_count < max_retries - 1:
-                            logger.info(f"[Thread Creation] Waiting {retry_delay} seconds before retry...")
-                            await asyncio.sleep(retry_delay)
-                            retry_delay *= 2  # Exponential backoff
-                        else:
-                            logger.error(f"[Thread Creation] All {max_retries} thread creation attempts failed")
-                            raise  # Re-raise after all retries fail
-                    except Exception as e:
-                        logger.error(f"[Thread Creation] Exception during thread creation API call: {str(e)}")
-                        raise  # Non-HTTP exceptions are immediately re-raised
-                
-                if not thread:
-                    error_msg = f"Konnte keinen Thread für '{event.title}' nach {max_retries} Versuchen erstellen"
-                    logger.error(f"[Thread Creation] {error_msg}")
-                    raise Exception(error_msg)
+                # Now update the original message with the complete embed including image
+                await event_post.edit(embed=embed)
+                logger.info(f"Updated event post with complete embed including image")
                 
                 logger.info(f"Thread successfully created for '{event.title}' with thread ID: {thread.id}")
                 logger.info(f"Thread details: name='{thread.name}', owner_id={thread.owner_id}, parent_id={thread.parent_id}, archived={thread.archived}, locked={thread.locked}")
@@ -3831,7 +3816,7 @@ async def propose_role(interaction: discord.Interaction, role_name: str):
                             await bot.update_event_message(thread, current_event)
                             
                             # Send message to thread about the accepted proposal
-                            await thread.send(f"{self.proposer_name} hat die Rolle **{self.proposed_role}** vorgeschlagen und der Vorschlag wurde angenommen.")
+                            await thread.send(f"**{self.proposer_name}** hat die Rolle **{self.proposed_role}** vorgeschlagen und der Vorschlag wurde angenommen.")
                             
                             # Also refresh the event overview
                             await create_event_listing(guild)
