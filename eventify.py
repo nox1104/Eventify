@@ -3144,7 +3144,7 @@ async def cancel_event(interaction: discord.Interaction, reason: str = None):
                         notified_user_ids.add(user_id)
         
         # Erstelle die Absage-Nachricht
-        cancel_message = f"**Event abgesagt:** {event['title']}\nDatum: {event['date']} Zeit: {event['time']}"
+        cancel_message = f"**Event abgesagt:** {event['title']}\nDatum: {event['date']} \nZeit: {event['time']}"
         if reason:
             cancel_message += f"\nGrund: **{reason}**"
         if event_link:
