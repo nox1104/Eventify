@@ -3161,13 +3161,15 @@ async def cancel_event(interaction: discord.Interaction, reason: str = None):
 
         # Bestätigung senden
         await interaction.followup.send(f"Event wurde abgesagt. {sent_count} Benutzer wurden benachrichtigt. Der Thread bleibt für Diskussionen erhalten.")
-        await thread.send(thread_message)
         
         # Versuche, den Thread-Namen zu aktualisieren (wenn möglich)
         try:
             await thread.edit(name=f"{thread.name} [ABGESAGT]")
         except Exception as e:
             logger.error(f"Fehler beim Aktualisieren des Thread-Namens: {e}")
+            
+        # Thread-Nachricht senden nachdem der Thread-Name aktualisiert wurde
+        await thread.send(thread_message)
     except Exception as e:
         logger.error(f"Fehler bei der Event-Absage: {e}")
         await interaction.followup.send(f"Ein Fehler ist aufgetreten: {str(e)}")
