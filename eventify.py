@@ -3397,9 +3397,9 @@ async def remove_participant(
             return
         
         # Lade Event-Daten
-        events = load_upcoming_events(include_expired=True)
+        events_data = load_upcoming_events(include_expired=True)
         event = None
-        for e in events:
+        for e in events_data["events"]:
             if e.get('thread_id') == interaction.channel.id:
                 event = e
                 break
