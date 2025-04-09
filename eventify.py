@@ -432,12 +432,26 @@ class MyBot(discord.Client):
                             else:
                                 is_fillall_role = False  # In participant_only_mode we allow comments
                             
-                            # For FillALL, we ignore comments and allow multiple roles
+                            # For FillALL role
                             if is_fillall_role:
-                                # Add new entry with timestamp (ignore comment for FillALL)
-                                # Modified to include comment for FillALL roles
+                                # Check if player is already signed up for another role (and remove them from it)
+                                for r_idx, r_name in enumerate(event['roles']):
+                                    # Skip FILLALL roles and headers in the check
+                                    if (r_name.lower() == "fill" or r_name.lower() == "fillall" or 
+                                        (r_name.startswith('(') and r_name.endswith(')'))):
+                                        continue
+                                    
+                                    r_key = f"{r_idx}:{r_name}"
+                                    if r_key in event.get('participants', {}):
+                                        # Find and remove the player if present
+                                        initial_count = len(event['participants'][r_key])
+                                        event['participants'][r_key] = [p for p in event['participants'][r_key] if p[1] != player_id]
+                                        if initial_count > len(event['participants'][r_key]):
+                                            logger.info(f"Removed {player_name} from role {r_name} when signing up for FILLALL")
+                                
+                                # Add player to FILLALL role
                                 if comment:
-                                    # Limit comment to 30 characters for FillALL roles
+                                    # Limit comment to 30 characters for FILLALL roles
                                     if len(comment) > 30:
                                         comment = comment[:30] + "..."
                                     event['participants'][role_key].append((player_name, player_id, current_time, comment))
@@ -464,6 +478,21 @@ class MyBot(discord.Client):
                                 await self._update_event_and_save(message, event, events_data)
                                 await message.add_reaction('✅')  # Add confirmation reaction
                         else:
+                            # For normal roles, check if player is already signed up for FILLALL and remove them
+                            fillall_removed = False
+                            for r_idx, r_name in enumerate(event['roles']):
+                                if r_name.lower() == "fill" or r_name.lower() == "fillall":
+                                    r_key = f"{r_idx}:{r_name}"
+                                    if r_key in event.get('participants', {}):
+                                        # Find and remove the player if present
+                                        initial_count = len(event['participants'][r_key])
+                                        event['participants'][r_key] = [p for p in event['participants'][r_key] if p[1] != player_id]
+                                        if initial_count > len(event['participants'][r_key]):
+                                            logger.info(f"Removed {player_name} from FILLALL when signing up for role {role_name}")
+                                            fillall_removed = True
+                            
+                            # The rest of the normal role signup continues as before...
+                            
                             # Check if player is already signed up for another role (except Fill)
                             already_signed_up = False
                             player_current_role = None
@@ -881,9 +910,6 @@ class MyBot(discord.Client):
                 filled_roles = 0  # Counter for filled roles
                 total_roles = 0   # Counter for total roles (excluding section headers)
                 
-                # Track users in regular roles to avoid double counting with FillALL
-                users_in_regular_roles = set()
-
                 # Go through all roles and section headers in the original order
                 all_items = section_headers + regular_roles
                 all_items.sort(key=lambda x: x[0])  # Sort by original index
@@ -903,10 +929,6 @@ class MyBot(discord.Client):
                         
                         if role_participants:
                             filled_roles += 1
-                            # Add user to set of users in regular roles
-                            for p in role_participants:
-                                if len(p) >= 2:  # Ensure we have at least name and ID
-                                    users_in_regular_roles.add(p[1])
                             
                             # Sort participants by timestamp and show only the first
                             sorted_participants = sorted(role_participants, key=lambda x: x[2] if len(x) > 2 else 0)
@@ -938,13 +960,13 @@ class MyBot(discord.Client):
 
                 # Add all regular roles as a single field with occupancy count
                 if field_content:
-                    # Count FillALL participants who aren't in regular roles
+                    # Count all FILLALL participants (no longer need to check for regular roles overlap)
                     fillall_count = 0
                     if fill_index is not None:
                         fill_key = f"{fill_index}:{roles[fill_index]}"
                         fill_participants = participants.get(fill_key, [])
                         if fill_participants:
-                            fillall_count = len([p for p in fill_participants if len(p) >= 2 and p[1] not in users_in_regular_roles])
+                            fillall_count = len([p for p in fill_participants if len(p) >= 2])
                     
                     # Add occupancy count in the field name
                     embed.add_field(name=f"Rollen ({filled_roles + fillall_count}/{total_roles})", value=field_content, inline=True)
@@ -961,11 +983,9 @@ class MyBot(discord.Client):
                         # Sort participants by timestamp
                         sorted_fill = sorted(fill_participants, key=lambda x: x[2] if len(x) > 2 else 0)
                         
-                        # Count FillALL participants who aren't in regular roles
-                        fillall_participants = [p for p in sorted_fill if len(p) >= 2 and p[1] not in users_in_regular_roles]
-                        
-                        # Display all participants for FillALL without extra newline
+                        # Display all FILLALL participants (no need to filter)
                         fill_players_text = fill_text + "\n" + "\n".join([f"<@{p[1]}>" + (f" {p[3][:30] + '...' if len(p) > 3 and p[3] and len(p[3]) > 30 else p[3]}" if len(p) > 3 and p[3] else "") for p in sorted_fill if len(p) >= 2])
+                        
                         
                         # Add Fill role to embed with empty name to reduce spacing
                         embed.add_field(name="", value=fill_players_text or fill_text, inline=False)
@@ -1300,7 +1320,6 @@ class MyBot(discord.Client):
 def calculate_role_counts(roles, participants):
     """
     Berechnet die Anzahl der besetzten und insgesamt verfügbaren Rollen für ein Event.
-    Berücksichtigt FILLALL-Teilnehmer nur, wenn sie nicht bereits in anderen Rollen sind.
     
     Args:
         roles: Liste der Rollen im Event
@@ -1312,17 +1331,7 @@ def calculate_role_counts(roles, participants):
     filled_slots = 0
     total_slots = 0
     
-    # Set zum Speichern bereits gezählter User-IDs
-    users_in_regular_roles = set()
-    
-    # Finde den Index der FILLALL-Rolle
-    fill_index = None
-    for i, role in enumerate(roles):
-        if isinstance(role, str) and role.lower() in ["fill", "fillall"]:
-            fill_index = i
-            break
-    
-    # Erst normale Rollen zählen und User-IDs sammeln
+    # Count regular roles (excluding headers and FILLALL)
     for i, role in enumerate(roles):
         # Überschriften und FILL/FILLALL-Rollen überspringen
         if (isinstance(role, str) and 
@@ -1337,18 +1346,19 @@ def calculate_role_counts(roles, participants):
         role_key = f"{i}:{role}"
         if role_key in participants and len(participants[role_key]) > 0:
             filled_slots += 1
-            
-            # Teilnehmer-IDs zu den bereits gezählten hinzufügen
-            for participant in participants[role_key]:
-                if len(participant) >= 2:
-                    users_in_regular_roles.add(participant[1])
     
-    # Danach FILLALL-Teilnehmer zählen, die nicht schon in anderen Rollen sind
+    # FILLALL-Teilnehmer zählen (jetzt einfach alle, da keine Überschneidung möglich)
+    fill_index = None
+    for i, role in enumerate(roles):
+        if isinstance(role, str) and role.lower() in ["fill", "fillall"]:
+            fill_index = i
+            break
+    
     if fill_index is not None:
         fill_key = f"{fill_index}:{roles[fill_index]}"
         if fill_key in participants:
             for participant in participants[fill_key]:
-                if len(participant) >= 2 and participant[1] not in users_in_regular_roles:
+                if len(participant) >= 2:
                     filled_slots += 1
     
     return filled_slots, total_slots
@@ -3154,6 +3164,88 @@ async def add_participant(
             
             # Check if this is the "Fill" role by name
             is_fill_role = role_name.lower() == "fill" or role_name.lower() == "fillall"
+            is_fillall_role = role_name.lower() == "fillall"
+            
+            # FILLALL special handling - if adding to FILLALL, remove from regular roles
+            if is_fillall_role:
+                removed_roles = []
+                
+                # First remove user from any regular roles
+                for r_idx, r_name in enumerate(event['roles']):
+                    # Skip FILLALL roles and headers in the check
+                    if (r_name.lower() == "fill" or r_name.lower() == "fillall" or 
+                        (r_name.startswith('(') and r_name.endswith(')'))):
+                        continue
+                    
+                    r_key = f"{r_idx}:{r_name}"
+                    if r_key in event.get('participants', {}):
+                        # Find and remove the player if present
+                        initial_count = len(event['participants'][r_key])
+                        event['participants'][r_key] = [p for p in event['participants'][r_key] if p[1] != player_id]
+                        if initial_count > len(event['participants'][r_key]):
+                            removed_roles.append(r_name)
+                            logger.info(f"Removed {player_name} from role {r_name} when adding to FILLALL")
+                
+                # Modify thread message to include removed roles information
+                thread_message = f"**{interaction.user.display_name}** hat **{player_name}** zur Rolle **{role_name}** hinzugefügt."
+                if removed_roles:
+                    thread_message += f" (Automatisch entfernt aus: **{', '.join(removed_roles)}**)"
+                if comment:
+                    thread_message += f"\nKommentar: **{comment}**"
+                await interaction.response.send_message(thread_message)
+                
+                # Notify the user about the role assignment and removals
+                try:
+                    event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+                    dm_message = f"Du wurdest von **{interaction.user.display_name}** für die Rolle **{role_name}** eingetragen.\n"
+                    
+                    if removed_roles:
+                        dm_message += f"(Automatisch entfernt aus: **{', '.join(removed_roles)}**)\n"
+                    
+                    dm_message += (
+                        f"Event: {event['title']}\n"
+                        f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
+                        f"Uhrzeit: {event['time']}\n"
+                    )
+                    if comment:
+                        dm_message += f"Kommentar: **{comment}**\n"
+                    dm_message += f"[Zum Event]({event_link})"
+                    await user.send(dm_message)
+                except Exception as e:
+                    logger.error(f"Failed to send DM to user {user.id}: {e}")
+                
+                # Add the participant to the FILLALL role
+                entry = [player_name, player_id, current_time]
+                if comment:
+                    # Limit comment to 30 characters
+                    if len(comment) > 30:
+                        comment = comment[:30] + "..."
+                    entry.append(comment)
+                event['participants'][role_key].append(tuple(entry))
+                
+                # Update the event and save to JSON
+                save_event_to_json(event)
+                await bot.update_event_message(interaction.channel, event)
+                return
+            
+            # For regular roles, check if player is in FILLALL and remove them
+            elif not is_fill_role:
+                fillall_removed = False
+                fillall_role_name = None
+                
+                for r_idx, r_name in enumerate(event['roles']):
+                    if r_name.lower() in ["fill", "fillall"]:
+                        fillall_role_name = r_name
+                        r_key = f"{r_idx}:{r_name}"
+                        if r_key in event.get('participants', {}):
+                            # Find and remove the player if present
+                            initial_count = len(event['participants'][r_key])
+                            event['participants'][r_key] = [p for p in event['participants'][r_key] if p[1] != player_id]
+                            if initial_count > len(event['participants'][r_key]):
+                                logger.info(f"Removed {player_name} from {r_name} when adding to role {role_name}")
+                                fillall_removed = True
+            
+            # Continue with existing role assignment logic
             
             # Check if the role already has participants (except for Fill roles or participant_only_mode)
             if not is_fill_role and not is_participant_only and len(event['participants'][role_key]) > 0:
@@ -3290,217 +3382,109 @@ async def add_participant(
         logger.error(f"Error in add_participant: {e}")
         await interaction.response.send_message("Ein Fehler ist beim Hinzufügen des Teilnehmers aufgetreten.", ephemeral=True)
 
-@bot.tree.command(name="remove", description="Entferne einen Teilnehmer aus einer oder allen Rollen")
+@bot.tree.command(name="remove", description="Entferne einen Teilnehmer aus dem Event")
 @app_commands.guild_only()
 async def remove_participant(
     interaction: discord.Interaction, 
     user: discord.Member, 
-    role_number: int = None,
     comment: str = None
 ):
+    """Entfernt einen Teilnehmer aus dem Event."""
     try:
-        # Check if the command is executed in a thread
+        # Prüfe, ob der Command in einem Thread ausgeführt wird
         if not isinstance(interaction.channel, discord.Thread):
-            await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
+            await interaction.response.send_message("Dieser Command kann nur in Event-Threads verwendet werden.", ephemeral=True)
             return
-
-        # Load the event (auch abgelaufene Events einschließen)
-        events_data = load_upcoming_events(include_expired=True)
-        # First try to find the event by thread_id (most reliable)
-        thread_id = interaction.channel.id
-        event = next((e for e in events_data["events"] if e.get('thread_id') == thread_id), None)
         
-        # Fallback: try to find by title (for backwards compatibility)
+        # Lade Event-Daten
+        events = load_upcoming_events(include_expired=True)
+        event = None
+        for e in events:
+            if e.get('thread_id') == interaction.channel.id:
+                event = e
+                break
+        
         if not event:
-            event = next((e for e in events_data["events"] if e.get('title') == interaction.channel.name), None)
-
-        if not event:
-            await interaction.response.send_message("Kein passendes Event für diesen Thread gefunden.", ephemeral=True)
+            await interaction.response.send_message("Kein Event in diesem Thread gefunden.", ephemeral=True)
             return
-
+        
         # Prüfe, ob das Event abgesagt wurde
-        if event.get('status') == "canceled" or "[ABGESAGT]" in event.get('title', ''):
-            await interaction.response.send_message("Dieses Event wurde abgesagt. Abmeldungen sind nicht mehr möglich.", ephemeral=True)
+        if event.get('canceled'):
+            await interaction.response.send_message("Dieses Event wurde bereits abgesagt.", ephemeral=True)
             return
-
-        # Prüfe, ob mehr als 1 Stunde seit Eventbeginn vergangen ist
-        try:
-            # Event-Zeit direkt aus datetime_obj verwenden
-            event_dt = datetime.fromisoformat(event.get('datetime_obj'))
-            now = datetime.now(timezone.utc)
-            
-            # Wenn mehr als 1 Stunde seit Eventbeginn vergangen ist, Slash-Befehl blockieren
-            if now > event_dt + timedelta(hours=1):
-                # Benutzer informieren (ephemeral im Thread)
-                await interaction.response.send_message("Teilnehmer können nicht mehr entfernt werden, da das Event vor über einer Stunde begonnen hat.", ephemeral=True)
-                logger.info(f"Blocked /remove command from {interaction.user.name} - event {event.get('title')} started more than 1 hour ago")
-                return
-        except Exception as e:
-            logger.error(f"Error checking event time for /remove command: {e}")
-            # Im Fehlerfall Command dennoch erlauben
-
-        # Remove the check that restricts to event creator
-        # if str(interaction.user.id) != event.get('caller_id'):
-        #     await interaction.response.send_message("Nur der Event-Ersteller kann Teilnehmer entfernen.", ephemeral=True)
-        #     return
-            
+        
+        # Prüfe, ob das Event bereits vor mehr als einer Stunde gestartet ist
+        event_datetime = datetime.strptime(f"{event['date']} {event['time']}", "%d.%m.%Y %H:%M")
+        if datetime.now() > event_datetime + timedelta(hours=1):
+            await interaction.response.send_message("Das Event ist bereits vor mehr als einer Stunde gestartet.", ephemeral=True)
+            return
+        
         player_id = str(user.id)
         player_name = user.display_name
-        removed_count = 0
         
-        # If no role number is specified, remove from all roles
-        if role_number is None:
-            # Collect the names of the roles from which the participant was removed
-            removed_roles = []
-            for r_idx, r_name in enumerate(event['roles']):
-                r_key = f"{r_idx}:{r_name}"
-                if r_key in event.get('participants', {}):
-                    if any(p[1] == player_id for p in event['participants'][r_key]):
-                        removed_roles.append(r_name)
-                    initial_count = len(event['participants'][r_key])
-                    event['participants'][r_key] = [p for p in event['participants'][r_key] if p[1] != player_id]
-                    removed_count += initial_count - len(event['participants'][r_key])
-            
-            if removed_count > 0:
-                # Inform the participant about the removal from all roles
-                try:
-                    event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
-                    
-                    # Check if FILLALL is among the removed roles
-                    has_fillall = any(r.lower() in ["fill", "fillall"] for r in removed_roles)
-                    normal_roles = [r for r in removed_roles if r.lower() not in ["fill", "fillall"]]
-                    
-                    # Fall 1: Benutzer aus normalen Rollen und FILLALL entfernt
-                    if has_fillall and normal_roles:
-                        dm_message = (
-                            f"Du wurdest von **{interaction.user.display_name}** aus den Rollen **{', '.join(normal_roles)}** und **FILLALL** entfernt.\n"
-                        )
-                    # Fall 2: Benutzer nur aus normalen Rollen entfernt
-                    elif normal_roles:
-                        role_text = normal_roles[0] if len(normal_roles) == 1 else ', '.join(normal_roles)
-                        dm_message = (
-                            f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **{role_text}** entfernt.\n"
-                        )
-                    # Fall 3: Benutzer nur aus FILLALL entfernt
-                    else:
-                        dm_message = (
-                            f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **FILLALL** entfernt.\n"
-                        )
-                    
-                    dm_message += (
-                        f"Event: {event['title']}\n"
-                        f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
-                        f"Uhrzeit: {event['time']}\n"
-                    )
-                    if comment:
-                        dm_message += f"Kommentar: **{comment}**\n"
-                    dm_message += f"[Zum Event]({event_link})"
-                    await user.send(dm_message)
-                    
-                    # Die Thread-Nachricht an die DM-Nachricht anpassen
-                    if has_fillall and normal_roles:
-                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus den Rollen **{', '.join(normal_roles)}** und **FILLALL** entfernt."
-                    elif normal_roles:
-                        role_text = normal_roles[0] if len(normal_roles) == 1 else ', '.join(normal_roles)
-                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_text}** entfernt."
-                    else:
-                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **FILLALL** entfernt."
-                    
-                    if comment:
-                        thread_message += f"\nKommentar: **{comment}**"
-                    await interaction.response.send_message(thread_message)
-                except Exception as e:
-                    logger.error(f"Failed to send DM to user {user.id}: {e}")
-                    # Bei DM-Fehler trotzdem die korrekte Thread-Nachricht senden
-                    if has_fillall and normal_roles:
-                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus den Rollen **{', '.join(normal_roles)}** und **FILLALL** entfernt."
-                    elif normal_roles:
-                        role_text = normal_roles[0] if len(normal_roles) == 1 else ', '.join(normal_roles)
-                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_text}** entfernt."
-                    else:
-                        thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **FILLALL** entfernt."
-                    
-                    if comment:
-                        thread_message += f"\nKommentar: **{comment}**"
-                    await interaction.response.send_message(thread_message)
-            else:
-                await interaction.response.send_message(f"{player_name} war für keine Rolle eingetragen.", ephemeral=True)
-        else:
-            # Remove from a specific role
-            actual_role_index = bot.role_number_to_index(event, role_number)
-            
-            if actual_role_index < 0:
-                await interaction.response.send_message(f"Ungültige Rollennummer: {role_number}", ephemeral=True)
-                return
-                
-            role_name = event['roles'][actual_role_index]
-            role_key = f"{actual_role_index}:{role_name}"
-            
+        # Suche den Benutzer in allen Rollen
+        removed = False
+        removed_role_name = None
+        is_fillall = False
+        
+        for role_idx, role_name in enumerate(event['roles']):
+            role_key = f"{role_idx}:{role_name}"
             if role_key in event.get('participants', {}):
+                # Prüfe, ob der Benutzer in dieser Rolle ist
                 initial_count = len(event['participants'][role_key])
-                # Check first if the player is in the role
-                was_in_role = any(p[1] == player_id for p in event['participants'][role_key])
                 event['participants'][role_key] = [p for p in event['participants'][role_key] if p[1] != player_id]
-                removed_count = initial_count - len(event['participants'][role_key])
+                removed = initial_count - len(event['participants'][role_key]) > 0
                 
-                if removed_count > 0:
-                    # Inform the participant about the removal from the specific role
-                    try:
-                        event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
-                        
-                        # Prüfen ob es sich um eine FILLALL-Rolle handelt
-                        if role_name.lower() in ["fill", "fillall"]:
-                            dm_message = (
-                                f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **FILLALL** entfernt.\n"
-                            )
-                        else:
-                            dm_message = (
-                                f"Du wurdest von **{interaction.user.display_name}** aus der Rolle **{role_name}** entfernt.\n"
-                            )
-                        
-                        dm_message += (
-                            f"Event: {event['title']}\n"
-                            f"Datum: {event['date']} ({get_weekday_abbr(event['date'])})\n"
-                            f"Uhrzeit: {event['time']}\n"
-                        )
-                        if comment:
-                            dm_message += f"Kommentar: **{comment}**\n"
-                        dm_message += f"[Zum Event]({event_link})"
-                        await user.send(dm_message)
-                        
-                        # Thread-Nachricht an DM-Nachricht anpassen
-                        if role_name.lower() in ["fill", "fillall"]:
-                            thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **FILLALL** entfernt."
-                        else:
-                            thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_name}** entfernt."
-                        
-                        if comment:
-                            thread_message += f"\nKommentar: **{comment}**"
-                        await interaction.response.send_message(thread_message)
-                    except Exception as e:
-                        logger.error(f"Failed to send DM to user {user.id}: {e}")
-                        # Bei DM-Fehler trotzdem die korrekte Thread-Nachricht senden
-                        if role_name.lower() in ["fill", "fillall"]:
-                            thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **FILLALL** entfernt."
-                        else:
-                            thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus der Rolle **{role_name}** entfernt."
-                        
-                        if comment:
-                            thread_message += f"\nKommentar: **{comment}**"
-                        await interaction.response.send_message(thread_message)
-                else:
-                    await interaction.response.send_message(f"{player_name} war nicht für Rolle \"{role_name}\" eingetragen.", ephemeral=True)
-            else:
-                await interaction.response.send_message(f"Rolle {role_name} hat keine Teilnehmer.", ephemeral=True)
+                if removed:
+                    removed_role_name = role_name
+                    is_fillall = role_name.lower() in ["fill", "fillall"]
+                    break
         
-        # Update the event only if something was changed
-        if removed_count > 0:
-            save_event_to_json(event)
-            await bot.update_event_message(interaction.channel, event)
+        if not removed:
+            await interaction.response.send_message(f"{player_name} ist in keinem Event eingetragen.", ephemeral=True)
+            return
+        
+        # Speichere das aktualisierte Event
+        save_event_to_json(event)
+        
+        # Sende eine DM an den entfernten Benutzer
+        try:
+            event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
+            dm_message = (
+                f"Du wurdest aus dem Event **{event['title']}** entfernt.\n"
+                f"Rolle: {removed_role_name}\n"
+                f"Datum: {event['date']}\n"
+                f"Uhrzeit: {event['time']}\n"
+            )
+            if comment:
+                dm_message += f"Kommentar: {comment}\n"
+            dm_message += f"[Zum Event]({event_link})"
             
-            # Also refresh the event overview
-            await create_event_listing(interaction.guild)
-            
+            await user.send(dm_message)
+        except Exception as e:
+            logger.error(f"Failed to send DM to {player_id}: {e}")
+        
+        # Aktualisiere die Event-Nachricht im Thread
+        try:
+            guild = bot.get_guild(interaction.guild.id)
+            if guild:
+                thread = await bot.fetch_thread(guild, interaction.channel.id)
+                if thread:
+                    await bot.update_event_message(thread, event)
+                    
+                    # Sende eine Nachricht im Thread
+                    thread_message = f"**{player_name}** wurde aus dem Event entfernt."
+                    if comment:
+                        thread_message += f"\nKommentar: {comment}"
+                    await thread.send(thread_message)
+                    
+                    # Aktualisiere die Event-Übersicht
+                    await create_event_listing(guild)
+        except Exception as e:
+            logger.error(f"Failed to update thread: {e}")
+        
+        await interaction.response.send_message(f"{player_name} wurde aus dem Event entfernt.", ephemeral=True)
+        
     except Exception as e:
         logger.error(f"Error in remove_participant: {e}")
         await interaction.response.send_message("Ein Fehler ist beim Entfernen des Teilnehmers aufgetreten.", ephemeral=True)

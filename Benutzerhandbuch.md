@@ -10,25 +10,23 @@ Als Teilnehmer brauchst du nur die ersten paar Zeilen zu lesen. Lass dich nicht 
 2. Schreibe die Nummer der Rolle, für die du dich anmelden möchtest (z.B. `1` für die erste Rolle)
 3. Optional kannst du einen Kommentar hinzufügen, indem du nach der Nummer einen Text schreibst 
    - z.B. `1 Komme etwas später` oder `15 mh, irh`
-   - @-Zeichen in Kommentaren werden automatisch entfernt, um Discord-erwähnungen zu vermeiden
+   - @-Zeichen in Kommentaren werden automatisch entfernt, um Discord-Erwähnungen zu vermeiden
 4. Wenn du bereits für eine andere Rolle angemeldet bist, wirst du automatisch von dieser abgemeldet und für die neue Rolle angemeldet
 
 ### Für FillALL anmelden
 
 1. Gehe in den Event-Thread
 2. Schreibe die Nummer der FillALL-Rolle (die letzte Nummer in der Liste)
-3. Du wirst als flexibler Teilnehmer eingetragen und kannst bei Bedarf verschiedene Rollen übernehmen
-4. Die FillALL-Anmeldung bleibt bestehen, auch wenn du dich für eine andere Rolle an- oder abmeldest
+3. Wenn du dich für eine reguläre Rolle anmeldest, wirst du automatisch von FILLALL abgemeldet (und umgekehrt)
 
 ### Von einer Rolle abmelden
 
 1. Gehe in den Event-Thread
 2. Schreibe oder `-`, um dich von allen Rollen abzumelden
-3. Oder schreibe `-X`, wobei X die Nummer der Rolle ist, von der du dich abmelden möchtest
 
 ### Teilnehmer verwalten
 
-Im Event-Thread kann jeder Benutzer andere Teilnehmer hinzufügen oder entfernen:
+Im Event-Thread kann jeder Benutzer andere Teilnehmer hinzufügen oder entfernen (bitte gehe damit verantwortungsvoll um):
 
 #### Teilnehmer hinzufügen:
 1. Verwende im Event-Thread den Befehl `/add`
@@ -42,25 +40,20 @@ Im Event-Thread kann jeder Benutzer andere Teilnehmer hinzufügen oder entfernen
    - Datum und Uhrzeit
    - Kommentar (falls vorhanden)
    - Link zum Event
-4. Im Thread erscheint eine Nachricht: "**user** hat **user** zur Rolle **role** hinzugefügt."
+4. Im Thread erscheint eine Nachricht
 
 #### Teilnehmer entfernen:
 1. Verwende im Event-Thread den Befehl `/remove`
 2. Gib folgende Parameter ein:
-   - `user`: Der Discord-Benutzer, den du entfernen möchtest (per Autocomplete)
-   - `role_number` (optional): Die Nummer der Rolle. Wenn nicht angegeben, wird der Teilnehmer aus allen Rollen entfernt
+   - `user`: Der Discord-Benutzer, den du entfernen möchtest
    - `comment` (optional): Ein Kommentar, der in der DM an den entfernten Benutzer gesendet wird
 3. Der entfernte Teilnehmer erhält automatisch eine private Nachricht mit:
    - Event-Titel
-   - Entfernte Rolle(n)
+   - Entfernte Rolle
    - Kommentar (falls vorhanden)
    - Datum und Uhrzeit
    - Link zum Event
-4. Im Thread erscheint eine Nachricht:
-   - Bei Entfernung aus normalen Rollen: "**user** hat **user** aus der Rolle **role** entfernt."
-   - Bei Entfernung aus mehreren Rollen: "**user** hat **user** aus den Rollen **role1, role2** entfernt."
-   - Bei Entfernung aus FILLALL: "**user** hat **user** aus der Rolle **FILLALL** entfernt."
-    - Wenn ein Kommentar angegeben wurde, wird dieser in der DN angezeigt
+4. Im Thread erscheint eine Nachricht
 
 ### Teilnehmer erinnern
 
@@ -74,8 +67,8 @@ Im Event-Thread kann jeder Benutzer andere Teilnehmer hinzufügen oder entfernen
      - Datum und Uhrzeit
      - Deine zusätzliche Nachricht (falls angegeben)
      - Link zum Event
-   - Eine Nachricht im Thread: "**user** hat alle Teilnehmer per DN (mit dem Kommentar: **comment**) an das Event erinnert."
-   - Kommentar (falls vorhanden)
+   - Eine Nachricht im Thread: "**user** hat alle Teilnehmer per DN an das Event erinnert."
+   - Kommentar: (falls vorhanden)
 
 ### Rollen vorschlagen
 
@@ -83,7 +76,7 @@ Als Teilnehmer kannst du zusätzliche Rollen für ein Event vorschlagen:
 
 1. Verwende im Event-Thread den Befehl `/propose`
 2. Gib den Namen der neuen Rolle ein:
-   - `role_name`: Der Name der Rolle, die du vorschlagen möchtest
+   - `role_name`: Der Name der Rolle, die du vorschlagen möchtest (`role_name: Plattenheiler`)
 
 Der Event-Ersteller erhält dann eine Nachricht mit deinem Vorschlag und kann diesen:
 - Annehmen: Die Rolle wird vor der FillALL-Rolle zum Event hinzugefügt
@@ -109,6 +102,11 @@ Mit dem Befehl `/eventify` kannst du ein neues Event erstellen. Du hast zwei Mö
 2. **Modal-Formular**: Wenn du `description` und `roles` weglässt, öffnet sich ein Formular mit zusätzlichen Eingabefeldern
    ```
    /eventify title: date: time:
+   ```
+
+3. **Nur-Teilnehmer** siehe weiter unten (mit `description:` aber ohne `roles:`)
+   ```
+   /eventify title: date: time: description:
    ```
 
 Folgende Parameter sind verfügbar:
@@ -153,7 +151,7 @@ Der Nur-Teilnehmer-Modus ist für Events gedacht, bei denen keine spezifischen R
 1. Gehe in den Event-Thread
 2. Verwende den Slash-Befehl `/cancel`
    - Optional kannst du einen Grund für die Absage mit `reason:` hinzufügen
-   - Beispiel: `/cancel reason: Event muss wegen zu wenig Teilnehmern abgesagt werden`
+   - Beispiel: `/cancel reason: Event muss wegen Willes abgesagt werden`
 3. Der Bot führt dann automatisch folgende Aktionen aus:
    - Der Titel des Events wird mit `[ABGESAGT]` markiert
    - Alle angemeldeten Teilnehmer erhalten eine private Nachricht mit:
@@ -162,8 +160,6 @@ Der Nur-Teilnehmer-Modus ist für Events gedacht, bei denen keine spezifischen R
      - Den angegebenen Grund (falls vorhanden, dieser wird fett hervorgehoben)
      - Link zum Event-Post
    - Das Event wird aus der Eventübersicht entfernt
-   - Eine neue Eventübersicht ohne das abgesagte Event wird erstellt
-   - Der Event-Thread wird sofort gelöscht, um zu verhindern, dass sich weitere Teilnehmer anmelden
 
 ### Rollenbesetzung anzeigen
 
@@ -171,12 +167,13 @@ Die Anzahl der besetzten Rollen wird automatisch am Anfang der Rollenliste angez
 - Die erste Zahl zeigt, wie viele Rollen besetzt sind
 - Die zweite Zahl zeigt die Gesamtzahl der verfügbaren Rollen
 - Beispiel: "Rollen 4/5" bedeutet, dass 4 von 5 Rollen besetzt sind
+- Es können überzählige Personen angezeigt werden (8/7). Wer sich zusätzlich anmeldet ist somit auf der Ersatzbank.
 
-Wichtig: Ein Spieler wird immer nur einmal gezählt, auch wenn er in mehreren Rollen (inkl. FillALL) eingetragen ist.
+Beachte: Ein Spieler kann entweder in einer regulären Rolle ODER in FILLALL eingetragen sein, nicht in beiden gleichzeitig.
 
 ### Zeitlimitierung nach Eventbeginn
 
-Die Threads für Events bleiben dauerhaft bestehen, damit ihr auch nach dem Event noch Bilder teilen und euch unterhalten könnt. Um jedoch ein versehentliches Anmelden für vergangene Events oder andere Missverständnisse zu vermeiden, gelten folgende Regeln:
+Die Threads für Events bleiben dauerhaft bestehen, damit ihr auch nach dem Event noch Bilder teilen und euch unterhalten könnt. Um jedoch ein versehentliches Anmelden für vergangene Events oder andere Missverständnisse zu vermeiden, geschiht Folgendes:
 
 - **Eine Stunde nach Eventbeginn** werden folgende Aktionen nicht mehr möglich sein:
   - Anmeldung per Zahl für eine Rolle (z.B. "1", "2 mit Kommentar")
@@ -186,10 +183,6 @@ Die Threads für Events bleiben dauerhaft bestehen, damit ihr auch nach dem Even
     - `/remove` - Teilnehmer entfernen
     - `/remind` - Teilnehmer erinnern
     - `/propose` - Neue Rolle vorschlagen
-    
-- **Was passiert bei Versuchen nach dem Zeitlimit?**
-  - Bei Zahlenanmeldungen: Reaktion mit ⏱️ und DN
-  - Bei Slash-Befehlen: Ephemeral-Nachricht und DN
 
 ### Formatierung der Beschreibung
 
@@ -198,13 +191,12 @@ Discord erlaubt ja einige Formatierungsoptionen von Markdown. Leider sind in Emb
 
 ### Rollenformatierung
 
-- **Normale Rollen**: Einfach den Namen der Rolle eingeben (z.B. "Tank", "Heiler", "DPS")
+- **Normale Rollen**: Einfach den Namen der Rolle eingeben (z.B. "Tank", "Heiler", "DPS"). Im Modal getrennt durch einen Zeilenumbruch.
 - **Abschnittsüberschriften**: In Klammern setzen, z.B. "(Core)" oder "(DPS)"
   - Abschnittsüberschriften werden fett dargestellt und zählen nicht bei der Nummerierung
   - Sie helfen, die Rollen übersichtlich zu gruppieren
 - **FillALL-Rolle**: Eine Rolle mit dem Namen "Fill" oder "FillALL" wird automatisch als flexible Rolle erkannt
   - Diese Rolle wird immer ans Ende der Liste verschoben
-  - Spieler können sich für FillALL zusätzlich zu einer normalen Rolle anmelden
 - **Leere Zeilen**: Werden ignoriert und haben keinen Einfluss auf die Nummerierung
 - **Zeilenumbrüche im Direktmodus**: Verwende `\n` für Zeilenumbrüche bei der direkten Eingabe über den `/eventify` Befehl
   - Beispiel für Rollen: `roles: Tank\nHealer\nDPS`
