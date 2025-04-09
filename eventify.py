@@ -529,10 +529,10 @@ class MyBot(discord.Client):
                                         # Get current role holder info
                                         current_holder = event['participants'][role_key][0]
                                         current_holder_id = current_holder[1]
+                                        current_holder_name = current_holder[0]
                                         
                                         dm_message = (
-                                            f"Nene, so geht das nicht. Die Rolle **{role_name}** hat sich bereits <@{current_holder_id}> ausgesucht, du Schlingel.\n"
-                                            f"Event: {event['title']}\n"
+                                            f"Nene, so geht das nicht. Die Rolle **{role_name}** hat sich bereits **{current_holder_name}** ausgesucht, du Schlingel.\n"                                            f"Event: {event['title']}\n"
                                             f"Datum: {event['date']}\n"
                                             f"Uhrzeit: {event['time']}\n"
                                             f"[Zum Event]({event_link})"
