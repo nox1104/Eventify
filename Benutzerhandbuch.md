@@ -128,6 +128,8 @@ Folgende Parameter sind verfügbar:
   - Das Bild wird unter der Beschreibung angezeigt
   - Unterstützte Bildformate: PNG, JPG, GIF
   - Der Link muss direkt zum Bild führen
+    - Bei Bildern von GoogleDrive muss man sich leider selbst den Link zusammenfügen, da es sich sonst nicht um einen direkten Link handelt:
+    - `https://drive.google.com/uc?id=DATEI-ID`
 
 In dieser Methode kommt es leider selten vor, dass der Thread nicht gebaut wird. Ich habe Logging implementiert, um die Ursache für diesen Fehler zu finden. 
 

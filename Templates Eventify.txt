@@ -1,0 +1,31 @@
+Templates Eventify
+
+/eventify title: date: time: description:
+
+/eventify title: date: time: description:Wöchentlicher Raid\nBringt Buffs und Flasks mit\nSeid pünktlich! roles: Tank\nHealer\nDPS\nRanged DPS
+
+/eventify title:Testevent date: time:2000 description:Wöchentlicher Raid\nBringt Food und Pots mit. roles:(Core)\nTank\nHealer\nDPS\nRanged DPS\n(Additional)\nDPS\nDPS\n(Reserve)\nShadowcaller\nLC\nSpirithunter mention_role: @FameFarm image_url:https://historiasdeastronomia.es/vistas/images/artistic/volans.jpg 
+
+/eventify title:HCE date: time:1800 description:The same procedure as every Friday, Fancies! roles:Tank\nHealer\nXBow\nLC\nSC image_url:https://drive.google.com/uc?id=1ADAvgN1wGkM2N7oZEUxSwuNj9HRjvOZN
+
+/eventify title:Testevent date: time:1900
+
+/eventify title:Testevent date: time:2300 description:test roles: test1\ntest2
+
+/eventify title:Duo-Mists (nur PVE) date: time: mention_role: description:Wir wollen entspannt beliebiges Equipment leveln. Hier darf man wilde Sets tragen.\n2.000.000 Ruhm pro Stunde\nWir machen Camps, Irrlichte, Zacken- und Kreisbosse,  Glühwürmchen, Kristalltiere, KnightfallAbbey, Stürmischer Nebel (Geschwächtes Irrlicht),Gathern... also eigentlich alles, was nicht PVP ist :)\nEs geht darum, einfach entspannt ein bisschen zu leven\nund nebenbei ein paar Ressourcen mitzunehmen.\nWaffe T8 , Rest egal. Mount: Hirsch oder sowas\nDie Zweierteams bilden wir bei Beginn des Events (vllt einfach nach der Anmeldereihenfolge?).?n\nTreffpunkt: Brecilien\n\n**PVP wird gemieden. Wir rennen...** image_url:https://www.gamersdecide.com/sites/default/files/2024-09/albion%20online%20best%20solo%20mist%20builds.jpg
+
+/eventify title:Gruppendungeon ab Lym Portal date: time: mention_role: description:Wir wollen entspannt beliebiges Equipment leveln. Hier darf man wilde Sets tragen.\n2.000.000 Ruhm pro Stunde\nEs geht darum, einfach entspannt ein bisschen zu leven\nWaffe T8 , Rest egal. Mount: egal\nDa wir durch die Black Zone laufen, könnte Escapegear sinnvoll sein ;)\nTreffpunkt: Lym Portal\n\n**PVP wird gemieden. Wir rennen...** image_url:
+
+/eventify title:Roads Kisten (BONUS) date: time: mention_role: description:Wir wollen entspannt beliebiges Equipment leveln. Hier darf man wilde Sets tragen.\nEs geht darum, einfach entspannt ein bisschen zu leven und die eine oder andere glitzernde Ressource mitzunehmen.\nWaffe T8 , Rest egal. Mount: Hirsch oder so\nTreffpunkt: Brecilien\n\n**PVP wird gemieden. Wir rennen...** roles:Tankin\nHeilerin\nDPS\nDPS\nDPS\nDPS\nDPS image_url:https://images.mmorpg.com/images/contentImages/332020/Roads_of_Avalon.jpg
+
+/eventify title:Eventify-Erklärbär date: time: description:- Du möchtest wissen, wie man Events erstellt?\n- Dich interessiert der Funktionumfang von Eventify?\n- Du hast Fragen zum Bot?\n\nKein Problem. Das bekommen wir hin.\n\nIch werde einmal im Schnelldurchlauf (10min) alles erklären und dann könnt ihr eure Fragen loswerden.\n\n__Wo?__ \n[Eventify-Testserver](https://discord.gg/g84WUSqE)\nSprachkanal: https://discord.com/channels/1338247403505193076/1338247404108910627\n\n**Wir werden pünktlich beginnen.** image_url:https://drive.google.com/uc?id=1jticfoI4LanEwE3spLxAz-8hTl69iFaq
+
+/eventify title:AVA DUNGEON 8.1 date: time: description:PVE COMP:\n 1x Offtank (Royal Jacket, Mistcaller, Assassin Hood, Guardian Armor, Knight Helmet)\n 1x Great Arcane (Occult, Guardian Helmet, Knight Helmet, BMS)\n 1x 1H Arcane (Enig, BMS, Guardian helmet, Knight helmet, Royal Jacket, 1h Frost staff)\n 1x Mainheal (Guardian Helmet)\n 1x Ironroot BMS (BMS, Knight helmet, Guardian Helmet)\n 3x Ironroot Heal (Fallen, Druid cowl, Lym Cape, Knight helmet)\n 1x Realmbreaker (Crystal Cursed, Knight Helemt)\n 1x Shadowcaller\n1+x Frost\n 0-1x Fire\n 0-1x Lightcaller\n 8x DPS\n 1x Scout (fast mount)\n roles:(Party 1)\nTank\nMainheal\nOfftank\nGA\n1h Arcane\nIronroot Heal\nIronroot Heal\nIronroot BMS\n(Party 2)\nRealmbreaker mit HP-Cut\nShadowcaller\nFrost\nFire\nLightcaller\nDPS\nDPS\nDPS\nDPS\nDPS\nDPS\nDPS\nDPS\nScout mention_role:AvaDungeon image_url:
+
+
+
+---
+https://cdn.pixabay.com/photo/2024/12/26/17/31/newborn-photography-9292505_1280.jpg
+---
+/remind comment: Wir treffen uns nachher auf dem Eventify-Testserver https://discord.gg/g84WUSqE im Sprachkanal https://discord.com/channels/1338247403505193076/1338247404108910627
+---

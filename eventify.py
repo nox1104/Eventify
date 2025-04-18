@@ -9,7 +9,7 @@ import uuid  # For generating random IDs
 from discord.ext import tasks
 import asyncio
 import sys
-from logging.handlers import RotatingFileHandler
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 import glob
 import copy
 import re
@@ -39,14 +39,18 @@ def setup_logging():
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
 
-    # Rotating file handler (limits file size and keeps old logs)
-    log_filename = f'logs/eventify_{datetime.now().strftime("%Y%m%d")}.log'
-    file_handler = RotatingFileHandler(
+    # Use TimedRotatingFileHandler to rotate at midnight UTC
+    log_filename = 'logs/eventify.log'
+    file_handler = TimedRotatingFileHandler(
         log_filename,
-        maxBytes=5*1024*1024,  # 5 MB per file
-        backupCount=42,         # Keep 42 old log files
-        encoding='utf-8'
+        when='midnight',     # Rotate at midnight
+        interval=1,          # Rotate every day
+        backupCount=42,      # Keep 42 days of logs
+        encoding='utf-8',
+        utc=True             # Use UTC time for rotation
     )
+    # Set a custom suffix with date
+    file_handler.suffix = "%Y%m%d"  # This will append date to the rotated log files
     file_handler.setFormatter(formatter)
     root_logger.addHandler(file_handler)
 
@@ -568,6 +572,7 @@ class MyBot(discord.Client):
                                         # Get current role holder info
                                         current_holder = event['participants'][role_key][0]
                                         current_holder_id = current_holder[1]
+                                        
                                         
                                         dm_message = (
                                             f"Nene, so geht das nicht. Die Rolle **{role_name}** hat sich bereits <@{current_holder_id}> ausgesucht, du Schlingel.\n"
