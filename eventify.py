@@ -204,8 +204,26 @@ class MyBot(discord.Client):
         print("Slash commands synchronized!")
         print("Bot is ready and listening for messages.")
         
+        # Sofort beim Start Events überprüfen und bereinigen
+        try:
+            # Überprüfe Ereignisse sofort
+            logger.info("Checking for expired events at startup...")
+            events_data = load_upcoming_events(include_expired=True, include_cleaned=False)
+            updated_data = clean_old_events(events_data)
+            
+            # Speichern und Übersicht aktualisieren
+            save_events_to_json(updated_data)
+            
+            # Aktualisiere die Eventübersicht in allen Guilds
+            for guild in self.guilds:
+                await create_event_listing(guild)
+                
+            logger.info("Initial event checks and cleanup completed successfully")
+        except Exception as e:
+            logger.error(f"Error during initial event cleanup: {e}")
+        
         # Start the loops
-        self.delete_old_event_threads.start()
+        self.check_expired_events.start()
         self.cleanup_event_channel.start()  # New loop added
 
     async def on_message(self, message):
@@ -1009,119 +1027,27 @@ class MyBot(discord.Client):
 
     def role_number_to_index(self, event, role_number):
         """
-        Wandelt die fortlaufende Rollennummer (1, 2, 3...) in den tatsächlichen Index in der Rollenliste um.
-        
-        Args:
-            event: Das Event-Objekt
-            role_number: Die angezeigte Rollennummer (1-basiert)
-        
-        Returns:
-            Der tatsächliche Index der Rolle im event['roles'] Array
+        Converts a role number to its corresponding index in the event's roles list.
+        Returns -1 if the role number is invalid.
         """
-        # Get roles from event
-        roles = event.get('roles', []) if isinstance(event, dict) else getattr(event, 'roles', [])
+        regular_roles = event.get("roles", [])
+        fill_index = None
         
-        # Check if we are in participant_only_mode
-        is_participant_only = event.get('participant_only_mode', False) if isinstance(event, dict) else getattr(event, 'participant_only_mode', False)
+        # Find the index of the FillALL role if it exists
+        for i, role in enumerate(regular_roles):
+            if role.get("name") == "FillALL":
+                fill_index = i
+                break
         
-        # In participant_only_mode it's simple: there is only one role (Participant) at position 0
-        if is_participant_only:
-            if role_number == 1:  # Since there is only one role, the number must be 1
-                return 0
-            else:
-                return -1  # Ungültige Rollennummer
-        
-        # In normal mode proceed as before
-        # Find the Fill role index
-        fill_index = next((i for i, role in enumerate(roles) if role.lower() in ["fill", "fillall"]), None)
-        
-        # Get all regular roles (excluding FillALL and section headers)
-        regular_roles = []
-        for i, role in enumerate(roles):
-            if i != fill_index:  # Alles außer die FillALL-Rolle
-                # Ignoriere Abschnittsüberschriften (Texte in Klammern)
-                if not (role.strip().startswith('(') and role.strip().endswith(')')):
-                    regular_roles.append((i, role))
-        
-        # Check if role_number is within range of regular roles
-        if 1 <= role_number <= len(regular_roles):
-            # Return the actual index of the role in the original roles array
-            return regular_roles[role_number-1][0]
+        if role_number <= len(regular_roles):
+            # Regular role number
+            return role_number - 1
         elif role_number == len(regular_roles) + 1 and fill_index is not None:
             # If the role_number is for the FillALL role
             return fill_index
         else:
             # Invalid role number
             return -1
-
-    @tasks.loop(minutes=5)
-    async def delete_old_event_threads(self):
-        """Löscht Threads für abgelaufene Events nach 30-Minuten-Wartezeit"""
-        try:
-            now = datetime.now(timezone.utc)
-            logger.info(f"{now} - Checking for expired events (thread deletion disabled)...")
-            
-            # Lade Events mit Status "expired" (abgelaufen, aber Thread noch aktiv)
-            events_data = load_upcoming_events(include_expired=True, include_cleaned=False)
-            
-            # Filtere nur nach Events mit Status "expired"
-            expired_events = [e for e in events_data.get("events", []) if e.get("status") == "expired"]
-            logger.info(f"Found {len(expired_events)} expired events (would have checked for thread deletion)")
-            
-            # Thread-Löschung ist deaktiviert, wie vom Benutzer gewünscht
-            # Threads bleiben bestehen für Kommunikation auch nach Event-Ende
-            
-            """
-            # Die ursprüngliche Thread-Löschungslogik wurde deaktiviert
-            events_cleaned = 0
-            for event in expired_events:
-                try:
-                    event_title = event.get("title", "Unknown")
-                    
-                    # Parse event datetime direkt aus datetime_obj
-                    try:
-                        event_dt = datetime.fromisoformat(event.get('datetime_obj'))
-                        
-                        # Prüfe, ob 30 Minuten seit Eventbeginn vergangen sind
-                        if now < event_dt + timedelta(minutes=30):
-                            logger.info(f"Event '{event_title}' still within 30-minute grace period, skipping (Event time: {event_dt}, Current time: {now})")
-                            continue
-                        
-                        time_diff = now - event_dt
-                        logger.info(f"Event '{event_title}' expired and 30-minute grace period passed, thread would have been deleted. Time difference: {time_diff}")
-                        
-                        # Hole die Thread-ID
-                        thread_id = event.get('thread_id')
-                        if not thread_id:
-                            logger.warning(f"No thread_id found for expired event '{event_title}'")
-                            continue
-                            
-                        # Der Thread wird nicht mehr gelöscht
-                        # Stattdessen markieren wir das Event als "cleaned", damit es nicht ständig geprüft wird
-                        event["status"] = "cleaned"
-                        events_cleaned += 1
-                    
-                    except (ValueError, KeyError) as e:
-                        logger.error(f"Error parsing datetime_obj for event '{event_title}': {e}")
-                
-                except Exception as e:
-                    logger.error(f"Error processing event: {e}")
-            
-            # Wenn Events als "cleaned" markiert wurden, speichere die Änderungen
-            if events_cleaned > 0:
-                logger.info(f"Marked {events_cleaned} events as cleaned")
-                save_events_to_json(events_data)
-            """
-                
-        except Exception as e:
-            logger.error(f"Error in delete_old_event_threads: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-
-    # Wait until the bot is ready before starting the loop
-    @delete_old_event_threads.before_loop
-    async def before_delete_old_event_threads(self):
-        await self.wait_until_ready()
 
     @tasks.loop(hours=6)  
     async def cleanup_event_channel(self):
@@ -1320,6 +1246,53 @@ class MyBot(discord.Client):
             await guild.leave()
         else:
             logger.info(f"Bot joined authorized server: {guild.name}")
+
+    @tasks.loop(minutes=5)
+    async def check_expired_events(self):
+        """Überprüft alle 5 Minuten, ob Events als expired markiert werden müssen"""
+        try:
+            logger.info("Checking for expired events...")
+            # Events laden
+            events_data = load_upcoming_events(include_expired=True, include_cleaned=False)
+            
+            # Status aktualisieren - Achtung: clean_old_events wird bereits durch load_upcoming_events aufgerufen
+            # Dies stellt sicher, dass alle abgelaufenen Events jetzt als "expired" markiert werden
+            updated_data = clean_old_events(events_data)
+            
+            # Prüfen ob sich etwas geändert hat
+            events_changed = False
+            if len(updated_data.get("events", [])) != len(events_data.get("events", [])):
+                events_changed = True
+            else:
+                # Prüfe, ob sich event.status geändert hat bei mindestens einem Event
+                for i, event in enumerate(updated_data.get("events", [])):
+                    if i < len(events_data.get("events", [])):
+                        if event.get("status") != events_data["events"][i].get("status"):
+                            events_changed = True
+                            break
+            
+            # Wenn sich etwas geändert hat, speichern und Übersicht aktualisieren
+            if events_changed:
+                logger.info("Events updated, saving changes and updating event listing")
+                save_events_to_json(updated_data)
+                # Aktualisiere die Eventübersicht in allen Guilds
+                for guild in self.guilds:
+                    try:
+                        await create_event_listing(guild)
+                        logger.info(f"Event listing updated for guild: {guild.name}")
+                    except Exception as guild_error:
+                        logger.error(f"Error updating event listing for guild {guild.name}: {guild_error}")
+            else:
+                logger.info("No expired events found, event listing not updated")
+    
+        except Exception as e:
+            logger.error(f"Error in check_expired_events: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    @check_expired_events.before_loop
+    async def before_check_expired_events(self):
+        await self.wait_until_ready()
 
 # Füge die Hilfsfunktion direkt vor der Event-Klasse ein
 def calculate_role_counts(roles, participants):
@@ -1914,7 +1887,7 @@ async def create_event_listing(guild):
         logger.error(f"Event channel not found in guild {guild.name}")
         return
     
-    # Filter events where no corresponding event post exists
+    # Filter events where no corresponding event post exists and ensure only active events are shown
     valid_events = []
     for event in events_data["events"]:
         if not isinstance(event, dict):
@@ -1922,10 +1895,15 @@ async def create_event_listing(guild):
             continue
             
         message_id = event.get("message_id")
+        status = event.get("status", "active")
         
-        # Skip events without message_id
+        # Skip events without message_id or non-active events
         if not message_id:
             logger.warning(f"Event {event.get('title')} has no message_id and will be skipped.")
+            continue
+            
+        if status != "active":
+            logger.info(f"Event {event.get('title')} has status '{status}' and will be skipped from overview.")
             continue
             
         valid_events.append(event)
@@ -2264,78 +2242,52 @@ def save_event_to_json(event):
         return False
 
 def clean_old_events(events_data):
-    """Markiert Events als abgelaufen (expired), wenn sie begonnen haben."""
-    # Erstelle eine Kopie, damit wir die Originaldaten nicht beeinflussen
+    """Markiert Events als abgelaufen (expired), wenn sie seit mehr als einer Stunde begonnen haben (UTC)."""
     updated_events = []
-    
-    # Zähler für Statusänderungen
     expired_count = 0
-    cleaned_count = 0
+    already_expired = 0
     
     # Aktuelle Zeit in UTC
     now = datetime.now(timezone.utc)
-    logger.info(f"[CLEAN_EVENTS DEBUG] Current UTC time: {now}")
     
     for event in events_data["events"]:
-        # Aktuelle Status speichern für Logging-Zwecke
         current_status = event.get("status", "active")
         event_title = event.get("title", "Unknown Event")
         
         # Überspringe bereits bereinigte Events ("cleaned")
         if current_status == "cleaned":
-            # Behalte bereinigte Events für Protokollzwecke
             updated_events.append(event)
             continue
-        
+            
+        # Prüfe bereits abgelaufene Events
+        if current_status == "expired":
+            already_expired += 1
+            updated_events.append(event)
+            continue
+            
         try:
-            # Verwende ausschließlich die neue Methode für die Zeitumrechnung
-            event_dt = local_to_utc(None, is_date_time_string=True, 
-                                    date_str=event.get("date"), 
-                                    time_str=event.get("time"))
-            
-            # Wenn datetime_obj vorhanden ist und die Konvertierung fehlgeschlagen ist
-            if not event_dt and "datetime_obj" in event and event["datetime_obj"]:
-                try:
-                    event_dt = datetime.fromisoformat(event["datetime_obj"])
-                    # Stelle sicher, dass es UTC ist
-                    if event_dt.tzinfo is None:
-                        event_dt = event_dt.replace(tzinfo=timezone.utc)
-                    logger.info(f"[CLEAN_EVENTS DEBUG] Event datetime from datetime_obj: {event_dt} (UTC)")
-                except (ValueError, TypeError):
-                    logger.warning(f"[CLEAN_EVENTS DEBUG] Could not parse datetime_obj: {event['datetime_obj']}")
-            
-            # Wenn das Event begonnen hat und noch "active" ist, setze auf "expired"
-            if event_dt and event_dt + timedelta(hours=1) < now and event.get("status") == "active":
-                # Zusätzliches Logging: Zeitvergleich
-                logger.info(f"[CLEAN_EVENTS DEBUG] Event time {event_dt} is before current time {now}, difference: {now - event_dt}")
-                event["status"] = "expired"
-                expired_count += 1
-                logger.info(f"Marking event as expired: {event_title} (Date: {event.get('date', 'N/A')}, Time: {event.get('time', 'N/A')})")
-            else:
-                # Zusätzliches Logging: Warum das Event nicht als abgelaufen markiert wurde
-                if not event_dt:
-                    logger.warning(f"[CLEAN_EVENTS DEBUG] Could not determine event time for {event_title}")
-                elif event_dt >= now:
-                    logger.info(f"[CLEAN_EVENTS DEBUG] Event time {event_dt} is not before current time {now}, keeping status: {current_status}")
-                elif event.get("status") != "active":
-                    logger.info(f"[CLEAN_EVENTS DEBUG] Event already has non-active status: {current_status}")
+            # Verwende das datetime_obj (ist bereits in UTC)
+            if "datetime_obj" in event and event["datetime_obj"]:
+                event_dt = datetime.fromisoformat(event["datetime_obj"])
+                if event_dt.tzinfo is None:
+                    event_dt = event_dt.replace(tzinfo=timezone.utc)
                 
-        except (ValueError, TypeError, KeyError, IndexError) as e:
-            logger.warning(f"Failed to parse date/time for event {event_title}: {e}")
+                # Prüfe ob Event seit mehr als einer Stunde läuft (alles in UTC)
+                if now > event_dt + timedelta(hours=1) and current_status == "active":
+                    event["status"] = "expired"
+                    expired_count += 1
+                    logger.info(f"Event expired (UTC): {event_title} (Started: {event_dt}, Current: {now}")
+            
+        except Exception as e:
+            logger.error(f"Error processing event {event_title}: {e}")
         
-        # Füge das Event zur aktualisierten Liste hinzu (unabhängig vom Status, solange nicht "cleaned")
         updated_events.append(event)
-        # Zusätzliches Logging: Finaler Status des Events
-        logger.info(f"[CLEAN_EVENTS DEBUG] Keeping event: {event_title}, final status: {event.get('status', 'active')}")
     
     if expired_count > 0:
         logger.info(f"Marked {expired_count} events as expired")
     
-    if cleaned_count > 0:
-        logger.info(f"Removed {cleaned_count} cleaned events")
-    
-    # Zusätzliches Logging: Anzahl der Events nach der Bereinigung
-    logger.info(f"[CLEAN_EVENTS DEBUG] After cleanup: {len(updated_events)} events remain")
+    if already_expired > 0:
+        logger.info(f"Found {already_expired} events already marked as expired")
     
     events_data["events"] = updated_events
     return events_data
@@ -2382,14 +2334,22 @@ def load_upcoming_events(include_expired=False, include_cleaned=False):
             # Filtere nach Status, falls erforderlich
             if not include_expired and not include_cleaned:
                 # Nur aktive Events für die Anzeige
-                filtered_events = {"events": [e for e in events["events"] 
-                                           if e.get("status", "active") == "active"]}
+                filtered_events = {"events": []}
+                
+                for event in events["events"]:
+                    if event.get("status", "active") == "active":
+                        filtered_events["events"].append(event)
+                
                 logger.info(f"Loaded {len(filtered_events['events'])} active events from events.json")
                 return filtered_events
             elif not include_cleaned:
                 # Aktive und abgelaufene Events (für Thread-Management)
-                filtered_events = {"events": [e for e in events["events"] 
-                                           if e.get("status", "active") != "cleaned"]}
+                filtered_events = {"events": []}
+                
+                for event in events["events"]:
+                    if event.get("status", "active") != "cleaned":
+                        filtered_events["events"].append(event)
+                
                 logger.info(f"Loaded {len(filtered_events['events'])} non-cleaned events from events.json")
                 return filtered_events
             else:
