@@ -206,13 +206,14 @@ Discord erlaubt ja einige Formatierungsoptionen von Markdown. Leider sind in Emb
 
 ### Nutzung von Links in Discord
 
-Um Links in Discord klickbar zu machen, verwende die folgende Markdown-Syntax:
-
 - **Klickbarer Link**: `[Linktext](https://example.com)`
   - `[builds](https://docs.google.com/spreadsheets/d/1pNt74V...)`
   - `[Bildbeschreibung](https://de.wikipedia.org/wiki/Fliegender_Fisch_(Sternbild)#/media/Datei:Uranometria_Pavo_et_al.png)`
-- Achte darauf, dass keine Leerzeichen zwischen den Klammern sind
-- Um ein Bild in deinem Event anzuzeigen, kannst du die `image_url` Option beim `/eventify` Befehl nutzen.
+  - Wenn der Linktext fett gedruckt sein soll, so sind die Sterne ganz vorn und ganz hinten zu setzen:
+    - `**[Bildbeschreibung](https://de.wikipedia.org/wiki/Fliegender_Fisch_(Sternbild)#/media/Datei:Uranometria_Pavo_et_al.png)**`
+  - Achte darauf, dass keine Leerzeichen zwischen den Klammern sind
+  - Um ein Bild in deinem Event anzuzeigen, kannst du die `image_url` Option beim `/eventify` Befehl nutzen.
+- Alternativ kannst du das Bild korrekt benannt ("Tankbuild") in einem Kanal des Servers posten und dann mit Rechtsklick den "Link kopieren" und dann in deine Eventbeschreibung einfügen.
 
 ### Event-Kanal Verwaltung
 
