@@ -2095,7 +2095,7 @@ async def create_event_listing(guild):
                 event_line = ""
                 if caller_id:
                     # We always have a message_id if we have a caller_id
-                    event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}){role_count_display} mit {caller_name}\n"
+                    event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}){role_count_display}\n"
                 else:
                     if message_id and message_id != "None" and message_id != None:
                         event_line = f"{time}  [**{title}**](https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}){role_count_display}\n"
