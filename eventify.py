@@ -1774,6 +1774,71 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                 except Exception as e:
                     logger.error(f"[Thread Creation] Failed to update event listing: {str(e)}")
                     # Continue despite event listing failure
+                
+                # Send ephemeral confirmation message
+                await interaction.followup.send("Dein Event wurde erstellt.", ephemeral=True)
+                
+                # Erstelle einen Eventify-Befehl als Vorlage für das nächste Mal
+                template_command = f"/eventify title:{event.title} date: time:"
+                
+                # Beschreibung mit korrekten Zeilenumbrüchen hinzufügen
+                if event.description:
+                    # Ersetze tatsächliche Zeilenumbrüche durch \n für die Vorlage
+                    escaped_description = event.description.replace("\n", "\\n")
+                    template_command += f" description:{escaped_description}"
+                
+                # Rollen hinzufügen, falls es keine Teilnehmer-only Veranstaltung ist
+                if not event.participant_only_mode and event.roles:
+                    # Entferne FILLALL aus der Rollenliste für die Vorlage, da es automatisch hinzugefügt wird
+                    roles_list = [role for role in event.roles if role.lower() != "fillall"]
+                    roles_text = "\\n".join(roles_list)
+                    template_command += f" roles:{roles_text}"
+                
+                # Mention-Rolle mit angeben, wenn vorhanden
+                if hasattr(event, 'mention_role_id') and event.mention_role_id:
+                    try:
+                        mention_role = interaction.guild.get_role(int(event.mention_role_id))
+                        if mention_role:
+                            template_command += f" mention_role:@{mention_role.name}"
+                    except Exception as e:
+                        logger.error(f"Failed to get mention role for template: {e}")
+                        # Fallback: nur den Parameter hinzufügen
+                        template_command += " mention_role:"
+                
+                # Bild-URL hinzufügen, falls vorhanden
+                if hasattr(event, 'image_url') and event.image_url:
+                    template_command += f" image_url:{event.image_url}"
+                
+                # Sende die Vorlage als direkte Nachricht an den Event-Ersteller
+                try:
+                    user = await interaction.client.fetch_user(int(event.caller_id))
+                    if user:
+                        # Erstelle einen Link zum Event-Kanal
+                        channel_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}"
+                        
+                        # Event-Link für die erste Nachricht
+                        event_link = channel_link
+                        if event.message_id:
+                            event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.message_id}"
+                        
+                        # Befehl ohne Codeblöcke senden und in einer separaten Nachricht, damit er auf mobilen Geräten
+                        # leicht kopiert werden kann, ohne dass die Formatierung mitkopiert wird
+                        dm_intro = (
+                            f"Hier ist eine Vorlage für dein Event **{event.title}**, die du für das nächste Mal verwenden kannst.\n"
+                            f"Kopiere den Befehl in der nächsten Nachricht und füge ihn im Event-Kanal ein.\n"
+                            f"[Zum Eventkanal]({event_link})\n"
+                        )
+                        
+                        # Zuerst Intro-Nachricht senden
+                        await user.send(dm_intro)
+                        
+                        # Dann den reinen Befehl ohne Formatierung senden
+                        await user.send(f"{template_command}")
+                        
+                        logger.info(f"Template message sent as DM to user {event.caller_id}")
+                except Exception as e:
+                    # Fehler beim Senden der DM loggen, aber nicht den Benutzer stören
+                    logger.error(f"Failed to send template as DM to user {event.caller_id}: {e}")
             except discord.Forbidden as e:
                 error_msg = f"Keine Berechtigung zum Erstellen des Threads für '{event.title}': {str(e)}"
                 logger.error(error_msg)
