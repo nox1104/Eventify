@@ -3489,7 +3489,7 @@ async def remove_participant(
         try:
             event_link = f"https://discord.com/channels/{interaction.guild.id}/{CHANNEL_ID_EVENT}/{event.get('message_id')}"
             dm_message = (
-                f"Du wurdest aus dem Event **{event['title']}** entfernt.\n"
+                f"Du wurdest von **{interaction.user.display_name}** aus dem Event **{event['title']}** entfernt.\n"
                 f"Rolle: {removed_role_name}\n"
                 f"Datum: {event['date']}\n"
                 f"Uhrzeit: {event['time']}\n"
@@ -3511,9 +3511,9 @@ async def remove_participant(
                     await bot.update_event_message(thread, event)
                     
                     # Sende eine Nachricht im Thread
-                    thread_message = f"**{player_name}** wurde aus dem Event entfernt."
+                    thread_message = f"**{interaction.user.display_name}** hat **{player_name}** aus dem Event entfernt."
                     if comment:
-                        thread_message += f"\nKommentar: {comment}"
+                        thread_message += f"\nKommentar: **{comment}**"
                     await thread.send(thread_message)
                     
                     # Aktualisiere die Event-Übersicht
