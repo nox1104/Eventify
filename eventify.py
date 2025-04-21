@@ -1825,8 +1825,7 @@ class EventModal(discord.ui.Modal, title="Eventify"):
                         # leicht kopiert werden kann, ohne dass die Formatierung mitkopiert wird
                         dm_intro = (
                             f"Hier ist eine Vorlage für dein Event **{event.title}**, die du für das nächste Mal verwenden kannst.\n"
-                            f"Kopiere den Befehl in der nächsten Nachricht und füge ihn im Event-Kanal ein.\n"
-                            f"[Zum Eventkanal]({event_link})\n"
+                            f"Kopiere den Befehl und füge ihn im [Eventify-Kanal]({event_link}) ein.\n"
                         )
                         
                         # Zuerst Intro-Nachricht senden
@@ -2487,9 +2486,9 @@ async def eventify(
     title: str,
     date: str,
     time: str,
+    mention_role: discord.Role,
     description: str = None,
     roles: str = None,
-    mention_role: discord.Role = None,
     image_url: str = None
 ):
     try:
