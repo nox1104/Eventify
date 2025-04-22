@@ -148,6 +148,17 @@ Der Nur-Teilnehmer-Modus ist für Events gedacht, bei denen keine spezifischen R
   - Der `/propose`-Befehl zum Vorschlagen neuer Rollen ist im Nur-Teilnehmer-Modus nicht verfügbar
   - Die Anzeige ist übersichtlicher, da nur eine einzelne Teilnehmerliste angezeigt wird
 
+### Event bearbeiten
+
+1. Gehe in den Event-Thread
+2. Verwende den Slash-Befehl `/edit`
+3. Im erscheinenden Formular kannst du folgende Aspekte deines Events bearbeiten:
+   - Titel des Events
+   - Beschreibung des Events
+4. Nach dem Speichern wird das Event automatisch aktualisiert
+5. Nur der Ersteller des Events kann diesen Befehl verwenden
+6. Alle angemeldeten Teilnehmer erhalten eine Nachricht
+
 ### Event absagen
 
 1. Gehe in den Event-Thread
@@ -220,11 +231,10 @@ Discord erlaubt ja einige Formatierungsoptionen von Markdown. Leider sind in Emb
 Der Bot hält den Event-Kanal automatisch sauber und übersichtlich:
 
 - **Automatische Bereinigung** – Entfernt automatisch:
-  - nach 12 Tagen:
+  - nach 3 Stunden:
     - Systemnachrichten und Benachrichtigungen
     - Alte Event-Listen
-    - Reguläre Nachrichten, die älter als 12 Tage sind
-  - Erstellt tägliche Backups der Event-Datei und behält die neuesten 42 Backups
+    - Reguläre Nachrichten, die älter als 3 Stunden sind
 
 ## Beispiele
 

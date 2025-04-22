@@ -223,8 +223,7 @@ class MyBot(discord.Client):
             logger.error(f"Error during initial event cleanup: {e}")
         
         # Start the loops
-        self.check_expired_events.start()
-        self.cleanup_event_channel.start()  # New loop added
+        self.manage_events_and_cleanup.start()
 
     async def on_message(self, message):
         try:
@@ -1053,96 +1052,132 @@ class MyBot(discord.Client):
             # Invalid role number
             return -1
 
-    @tasks.loop(hours=6)  
-    async def cleanup_event_channel(self):
+    @tasks.loop(minutes=5)
+    async def manage_events_and_cleanup(self):
         """
-        Cleans up the event channel based on status and age:
-        - Keeps active events
-        - Removes expired events after 12 days
-        - Removes regular messages after 12 days
+        Eine vereinfachte Funktion, die alle 5 Minuten läuft und folgende Aufgaben übernimmt:
+        1. Prüft alle Events und markiert abgelaufene als "expired"
+        2. Löscht Nachrichten im Event-Kanal, die älter als 3 Stunden sind
+        3. Erhält aktive Events und die Eventübersicht
+        4. Aktualisiert die Eventübersicht bei Änderungen
         """
-        logger.info(f"{datetime.now()} - Starting event channel cleanup...")
-        
-        # Backup erstellen bevor Änderungen vorgenommen werden
-        self.create_backup()
-        
-        DAYS_TO_KEEP = 12
-        
-        for guild in self.guilds:
-            channel = guild.get_channel(CHANNEL_ID_EVENT)
-            if not channel:
-                logger.warning(f"Event-Kanal in Guild {guild.name} nicht gefunden.")
-                continue
-
-            # Security check: Check permissions
-            permissions = channel.permissions_for(guild.me)
-            if not permissions.manage_messages:
-                logger.error("Bot hat keine Berechtigung zum Löschen von Nachrichten!")
-                continue
+        try:
+            logger.info("Starting event management and cleanup routine...")
+            
+            # Backup erstellen vor Änderungen
+            self.create_backup()
+            
+            # 1. Events laden und Status aktualisieren
+            events_data = load_upcoming_events(include_expired=True, include_cleaned=True)
+            events_changed = False
+            active_event_message_ids = set()
+            overview_id = load_overview_id()
+            
+            # Aktuelle Zeit in UTC
+            now = datetime.now(timezone.utc)
+            
+            # Eventliste für die Aktualisierung vorbereiten
+            updated_events = []
+            expired_count = 0
+            
+            # Status aller Events prüfen
+            for event in events_data.get("events", []):
+                event_title = event.get("title", "Unknown Event")
+                current_status = event.get("status", "active")
+                event_message_id = event.get("message_id")
                 
-            try:
-                # Events laden
-                events_data = load_upcoming_events(include_expired=True, include_cleaned=True)
-                events_to_keep = []
-                original_events_count = len(events_data.get("events", []))
+                # Event-Nachrichten IDs für aktive Events sammeln (für Löschschutz)
+                if current_status == "active" and event_message_id:
+                    try:
+                        active_event_message_ids.add(int(event_message_id))
+                    except (ValueError, TypeError):
+                        logger.warning(f"Ungültige message_id für Event {event_title}: {event_message_id}")
                 
-                # IDs der AKTIVEN Event-Nachrichten sammeln
-                active_event_message_ids = set()
-                for event in events_data["events"]:
-                    if event.get("status") == "active" and event.get("message_id"):
-                        active_event_message_ids.add(int(event["message_id"]))
+                try:
+                    # Prüfen, ob das Event abgelaufen ist (1 Stunde nach Beginn)
+                    if "datetime_obj" in event and event["datetime_obj"]:
+                        event_dt = datetime.fromisoformat(event["datetime_obj"])
+                        if event_dt.tzinfo is None:
+                            event_dt = event_dt.replace(tzinfo=timezone.utc)
+                        
+                        # Status aktualisieren wenn nötig
+                        if now > event_dt + timedelta(hours=1) and current_status == "active":
+                            event["status"] = "expired"
+                            expired_count += 1
+                            events_changed = True
+                            logger.info(f"Event abgelaufen: {event_title} (Beginn: {event_dt}, Aktuell: {now})")
+                        
+                except Exception as e:
+                    logger.error(f"Fehler bei der Verarbeitung des Events {event_title}: {e}")
                 
-                # Events nach Status/Alter sortieren
-                current_time = datetime.now(timezone.utc)
-                for event in events_data["events"]:
-                    if event.get("status") == "active":
-                        events_to_keep.append(event)
-                    else:
-                        try:
-                            event_time = datetime.fromisoformat(event["datetime_obj"])
-                            # Stelle sicher, dass es UTC ist
-                            if event_time.tzinfo is None:
-                                event_time = event_time.replace(tzinfo=timezone.utc)
-                            days_difference = (current_time - event_time).days
-                            
-                            if days_difference > DAYS_TO_KEEP:
-                                # Alte abgelaufene Events nicht behalten
-                                pass
-                            else:
-                                events_to_keep.append(event)
-                        except (ValueError, KeyError) as e:
-                            logger.error(f"Fehler beim Verarbeiten des Events {event.get('title', 'Unbekannt')}: {e}")
-                            events_to_keep.append(event)  # Im Zweifelsfall behalten
+                updated_events.append(event)
+            
+            # Aktualisierte Events speichern
+            events_data["events"] = updated_events
+            if expired_count > 0:
+                logger.info(f"{expired_count} Events als abgelaufen markiert")
+                save_events_to_json(events_data)
+            
+            # 2. Nachrichten bereinigen (älter als 3 Stunden, außer aktive Events und Übersicht)
+            for guild in self.guilds:
+                channel = guild.get_channel(CHANNEL_ID_EVENT)
+                if not channel:
+                    logger.warning(f"Event-Kanal in Guild {guild.name} nicht gefunden.")
+                    continue
                 
-                # Bereinigung aller alten Nachrichten (inkl. abgelaufener Events)
-                cutoff_date = datetime.now(timezone.utc) - timedelta(days=DAYS_TO_KEEP)
+                # Berechtigungen prüfen
+                if not channel.permissions_for(guild.me).manage_messages:
+                    logger.error(f"Bot hat keine Berechtigung zum Löschen von Nachrichten in Guild {guild.name}!")
+                    continue
+                
+                # Löschlogik: Entferne Nachrichten, die:
+                # - älter als 3 Stunden sind
+                # - keine aktiven Event-Nachrichten sind
+                # - nicht die Eventübersicht sind
+                cutoff_time = datetime.now(timezone.utc) - timedelta(hours=3)
                 
                 def should_delete_message(message):
+                    # Eventübersicht schützen
+                    if overview_id and message.id == int(overview_id):
+                        return False
+                    
                     # Aktive Events schützen
                     if message.id in active_event_message_ids:
                         return False
-                    # Neue Nachrichten schützen
-                    if message.created_at > cutoff_date:
+                    
+                    # Neue Nachrichten schützen (jünger als 3 Stunden)
+                    if message.created_at > cutoff_time:
                         return False
-                    # Alte Nachrichten löschen
+                    
+                    # Alle anderen alten Nachrichten löschen
                     return True
                 
-                # Purge mit Filter ausführen
                 try:
-                    deleted_msgs = await channel.purge(check=should_delete_message, limit=10000)
-                    logger.info(f"Guild {guild.id}: {len(deleted_msgs)} alte Nachrichten gelöscht")
+                    deleted_msgs = await channel.purge(check=should_delete_message, limit=100)
+                    if deleted_msgs:
+                        logger.info(f"Guild {guild.id}: {len(deleted_msgs)} alte Nachrichten gelöscht")
                 except Exception as e:
-                    logger.error(f"Fehler beim Purge: {e}")
-                
-                # Events-Datei aktualisieren
-                events_data["events"] = events_to_keep
-                save_events_to_json(events_data)
-                
-                removed_count = original_events_count - len(events_to_keep)
-                logger.info(f"Event-Bereinigung abgeschlossen: {removed_count} Events entfernt, {len(events_to_keep)} Events behalten")
-                
-            except Exception as e:
-                logger.error(f"Fehler bei der Bereinigung des Event-Kanals: {e}")
+                    logger.error(f"Fehler beim Löschen von Nachrichten: {e}")
+            
+            # 3. Eventübersicht aktualisieren wenn nötig
+            if events_changed:
+                for guild in self.guilds:
+                    try:
+                        await create_event_listing(guild)
+                        logger.info(f"Eventübersicht aktualisiert für Guild: {guild.name}")
+                    except Exception as e:
+                        logger.error(f"Fehler bei der Aktualisierung der Eventübersicht für Guild {guild.name}: {e}")
+            
+            logger.info("Event-Management und Bereinigung abgeschlossen")
+        
+        except Exception as e:
+            logger.error(f"Fehler in manage_events_and_cleanup: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    @manage_events_and_cleanup.before_loop
+    async def before_manage_events_and_cleanup(self):
+        await self.wait_until_ready()
 
     def create_backup(self):
         """Erstellt ein tägliches Backup der Events-Datei."""
@@ -1183,8 +1218,8 @@ class MyBot(discord.Client):
             logger.error(f"Fehler bei der Backup-Rotation: {e}")
 
     # Wait until the bot is ready before starting the loop
-    @cleanup_event_channel.before_loop
-    async def before_cleanup_event_channel(self):
+    @manage_events_and_cleanup.before_loop
+    async def before_manage_events_and_cleanup(self):
         await self.wait_until_ready()
 
     async def fetch_thread(self, guild, thread_id):
@@ -1250,53 +1285,6 @@ class MyBot(discord.Client):
             await guild.leave()
         else:
             logger.info(f"Bot joined authorized server: {guild.name}")
-
-    @tasks.loop(minutes=5)
-    async def check_expired_events(self):
-        """Überprüft alle 5 Minuten, ob Events als expired markiert werden müssen"""
-        try:
-            logger.info("Checking for expired events...")
-            # Events laden
-            events_data = load_upcoming_events(include_expired=True, include_cleaned=False)
-            
-            # Status aktualisieren - Achtung: clean_old_events wird bereits durch load_upcoming_events aufgerufen
-            # Dies stellt sicher, dass alle abgelaufenen Events jetzt als "expired" markiert werden
-            updated_data = clean_old_events(events_data)
-            
-            # Prüfen ob sich etwas geändert hat
-            events_changed = False
-            if len(updated_data.get("events", [])) != len(events_data.get("events", [])):
-                events_changed = True
-            else:
-                # Prüfe, ob sich event.status geändert hat bei mindestens einem Event
-                for i, event in enumerate(updated_data.get("events", [])):
-                    if i < len(events_data.get("events", [])):
-                        if event.get("status") != events_data["events"][i].get("status"):
-                            events_changed = True
-                            break
-            
-            # Wenn sich etwas geändert hat, speichern und Übersicht aktualisieren
-            if events_changed:
-                logger.info("Events updated, saving changes and updating event listing")
-                save_events_to_json(updated_data)
-                # Aktualisiere die Eventübersicht in allen Guilds
-                for guild in self.guilds:
-                    try:
-                        await create_event_listing(guild)
-                        logger.info(f"Event listing updated for guild: {guild.name}")
-                    except Exception as guild_error:
-                        logger.error(f"Error updating event listing for guild {guild.name}: {guild_error}")
-            else:
-                logger.info("No expired events found, event listing not updated")
-    
-        except Exception as e:
-            logger.error(f"Error in check_expired_events: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-
-    @check_expired_events.before_loop
-    async def before_check_expired_events(self):
-        await self.wait_until_ready()
 
 # Füge die Hilfsfunktion direkt vor der Event-Klasse ein
 def calculate_role_counts(roles, participants):
@@ -2476,9 +2464,9 @@ def save_events_to_json(events):
     title="Der Titel des Events",
     date="Das Datum des Events (DDMMYYYY)",
     time="Die Uhrzeit des Events (HHMM)",
+    mention_role="Eine Discord-Server-Rolle, die beim Event erwähnt werden soll (z.B. @FameFarm)",
     description="Optional: Die Beschreibung des Events (\\n für Zeilenumbrüche)",
     roles="Optional: Gib die Rollen ein (diesen Parameter weglassen für Nur-Teilnehmer-Modus)",
-    mention_role="Optional: Eine Rolle, die beim Event erwähnt werden soll",
     image_url="Optional: Ein Link zu einem Bild, das im Event angezeigt werden soll"
 )
 async def eventify(
@@ -3972,6 +3960,182 @@ async def refresh_overview(interaction: discord.Interaction):
             await interaction.followup.send(error_msg, ephemeral=True)
         except:
             logger.error("Konnte Fehlermeldung nicht senden")
+
+class EditEventModal(discord.ui.Modal, title="Event bearbeiten"):
+    def __init__(self, event):
+        super().__init__()
+        self.event = event
+        
+        self.title = discord.ui.TextInput(
+            label="Titel",
+            placeholder="Titel des Events",
+            default=event.get('title', ''),
+            max_length=40,
+            required=True
+        )
+        
+        self.description = discord.ui.TextInput(
+            label="Beschreibung",
+            placeholder="Beschreibung des Events",
+            default=event.get('description', ''),
+            style=discord.TextInputStyle.paragraph,
+            max_length=1020,
+            required=False
+        )
+        
+        self.add_item(self.title)
+        self.add_item(self.description)
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Sofort die Interaktion beantworten
+            await interaction.response.defer(ephemeral=True)
+            
+            # Die ursprünglichen Werte speichern
+            original_title = self.event.get('title')
+            original_description = self.event.get('description', '')
+            
+            # Änderungen für Benachrichtigung erfassen
+            title_changed = original_title != self.title.value
+            description_changed = original_description != self.description.value
+            
+            # Event-Objekt aktualisieren
+            self.event['title'] = self.title.value
+            self.event['description'] = self.description.value
+            
+            # Event speichern
+            save_event_to_json(self.event)
+            
+            # Event-Nachricht aktualisieren
+            try:
+                channel = interaction.guild.get_channel(CHANNEL_ID_EVENT)
+                message_id = self.event.get("message_id")
+                if channel and message_id:
+                    message = await channel.fetch_message(int(message_id))
+                    if message:
+                        # Event-Nachricht mit aktualisiertem Embed
+                        thread = interaction.channel
+                        await bot.update_event_message(thread, self.event)
+            except Exception as e:
+                logger.error(f"Fehler beim Aktualisieren der Event-Nachricht: {e}")
+            
+            # Eventübersicht aktualisieren
+            try:
+                await create_event_listing(interaction.guild)
+            except Exception as e:
+                logger.error(f"Fehler beim Aktualisieren der Eventübersicht: {e}")
+            
+            # Nachricht im Thread
+            confirm_message = "Event wurde aktualisiert."
+            if title_changed:
+                confirm_message += f"\nTitel geändert von **{original_title}** zu **{self.title.value}**"
+            if description_changed:
+                confirm_message += "\nBeschreibung wurde aktualisiert."
+            
+            await interaction.followup.send(confirm_message, ephemeral=True)
+            
+            # Thread-Name aktualisieren
+            try:
+                await interaction.channel.edit(name=f"{self.title.value}")
+            except Exception as e:
+                logger.error(f"Fehler beim Aktualisieren des Thread-Namens: {e}")
+            
+            # Nachricht im Thread für alle sichtbar
+            thread_message = f"**{interaction.user.display_name}** hat das Event aktualisiert."
+            await interaction.channel.send(thread_message)
+            
+            # Alle Teilnehmer benachrichtigen
+            participants = []
+            notified_user_ids = set()  # Bereits benachrichtigte Benutzer nachverfolgen
+            for role_key, role_participants in self.event.get("participants", {}).items():
+                for participant in role_participants:
+                    if len(participant) >= 2:
+                        user_id = int(participant[1])
+                        if user_id not in notified_user_ids:
+                            participants.append(participant)
+                            notified_user_ids.add(user_id)
+            
+            # Event-Link erstellen
+            event_link = None
+            try:
+                guild_id = interaction.guild.id
+                message_id = self.event.get("message_id")
+                if message_id:
+                    event_link = f"https://discord.com/channels/{guild_id}/{CHANNEL_ID_EVENT}/{message_id}"
+            except Exception as e:
+                logger.error(f"Fehler beim Erstellen des Event-Links: {e}")
+            
+            # Nachricht für Teilnehmer erstellen
+            update_message = f"Das Event **{self.event['title']}** wurde aktualisiert.\n"
+            
+            if title_changed:
+                update_message += f"Der Titel wurde von **{original_title}** zu **{self.title.value}** geändert.\n"
+            
+            update_message += f"Datum: {self.event['date']} ({get_weekday_abbr(self.event['date'])})\n"
+            update_message += f"Uhrzeit: {self.event['time']}\n"
+            
+            if description_changed:
+                # Finde Unterschiede in der Beschreibung und markiere sie
+                # Da dies komplex ist, senden wir einfach die gesamte aktualisierte Beschreibung
+                update_message += f"Aktualisierte Beschreibung:\n{self.description.value}\n"
+            
+            if event_link:
+                update_message += f"[Zum Event]({event_link})"
+            
+            # Sende Nachricht an alle Teilnehmer
+            sent_count = 0
+            for participant_data in participants:
+                try:
+                    user_id = int(participant_data[1])
+                    user = await interaction.client.fetch_user(user_id)
+                    if user:
+                        await user.send(update_message)
+                        sent_count += 1
+                except Exception as e:
+                    logger.error(f"Error sending update DM to {user_id}: {e}")
+            
+            logger.info(f"Event '{self.event['title']}' updated, {sent_count} participants notified")
+            
+        except Exception as e:
+            logger.error(f"Error in EditEventModal on_submit: {e}")
+            await interaction.followup.send(f"Ein Fehler ist aufgetreten: {str(e)}", ephemeral=True)
+
+@bot.tree.command(name="edit", description="Bearbeite Titel oder Beschreibung des Events")
+@app_commands.guild_only()
+async def edit_event(interaction: discord.Interaction):
+    """Bearbeitet ein bestehendes Event. Nur der Event-Ersteller kann diesen Befehl im Event-Thread verwenden."""
+    try:
+        # Prüfen, ob es sich um einen Event-Thread handelt
+        if not isinstance(interaction.channel, discord.Thread) or not interaction.channel.parent or interaction.channel.parent.id != CHANNEL_ID_EVENT:
+            await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
+            return
+        
+        # Event laden
+        event = None
+        thread_id = interaction.channel.id
+        events_data = load_upcoming_events()
+        
+        for e in events_data.get("events", []):
+            if e.get("thread_id") == str(thread_id):
+                event = e
+                break
+        
+        if not event:
+            await interaction.response.send_message("Event konnte nicht gefunden werden.", ephemeral=True)
+            return
+        
+        # Prüfen, ob der Benutzer der Event-Ersteller ist
+        if event.get("caller_id") != str(interaction.user.id):
+            await interaction.response.send_message("Nur der Ersteller des Events kann es bearbeiten.", ephemeral=True)
+            return
+        
+        # Bearbeitungsformular öffnen
+        modal = EditEventModal(event)
+        await interaction.response.send_modal(modal)
+        
+    except Exception as e:
+        logger.error(f"Error in edit_event: {e}")
+        await interaction.response.send_message(f"Ein Fehler ist aufgetreten: {str(e)}", ephemeral=True)
 
 bot.run(DISCORD_TOKEN)
             
