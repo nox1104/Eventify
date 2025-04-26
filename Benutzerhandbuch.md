@@ -186,9 +186,10 @@ Beachte: Ein Spieler kann entweder in einer regulären Rolle ODER in FILLALL ein
 
 ### Zeitlimitierung nach Eventbeginn
 
-Die Threads für Events bleiben dauerhaft bestehen, damit ihr auch nach dem Event noch Bilder teilen und euch unterhalten könnt. Um jedoch ein versehentliches Anmelden für vergangene Events oder andere Missverständnisse zu vermeiden, geschiht Folgendes:
+Die Threads für Events bleiben für 3 Stunden nach dem Eventbeginn bestehen, damit ihr auch nach dem Event noch Bilder teilen und euch unterhalten könnt. Um jedoch ein versehentliches Anmelden für vergangene Events oder andere Missverständnisse zu vermeiden, geschieht Folgendes:
 
-- **Eine Stunde nach Eventbeginn** werden folgende Aktionen nicht mehr möglich sein:
+- **Zum Eventzeitpunkt** verschwinden Events aus der Eventübersicht.
+- **Für 3 Stunden nach Eventbeginn** bleibt der Event-Thread zugänglich und Interaktionen sind weiterhin möglich:
   - Anmeldung per Zahl für eine Rolle (z.B. "1", "2 mit Kommentar")
   - Abmeldung per "-" oder "-2"
   - Verwendung aller Event-Befehle im Thread:
@@ -196,6 +197,9 @@ Die Threads für Events bleiben dauerhaft bestehen, damit ihr auch nach dem Even
     - `/remove` - Teilnehmer entfernen
     - `/remind` - Teilnehmer erinnern
     - `/propose` - Neue Rolle vorschlagen
+- **3 Stunden nach Eventbeginn** wird der Event vollständig aus dem System entfernt.
+
+Diese Zeitlimitierung sorgt für eine aufgeräumte Übersicht, die nur aktuelle und zukünftige Events anzeigt, während gleichzeitig genügend Zeit nach dem Event für Kommunikation und Organisation bleibt.
 
 ### Formatierung der Beschreibung
 
