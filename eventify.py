@@ -3070,7 +3070,7 @@ async def cancel_event(interaction: discord.Interaction, reason: str = None):
             thread_message = f"**Event wurde abgesagt.**\nAn- und Abmeldungen sowie weitere Aktionen sind nicht mehr möglich."
 
         # Bestätigung senden
-        await interaction.followup.send(f"Event wurde abgesagt. Der Thread bleibt für Diskussionen erhalten.")
+        await interaction.followup.send(f"Event wurde abgesagt. {sent_count} Benutzer wurden benachrichtigt. Der Thread bleibt für Diskussionen erhalten.")
         
         # Versuche, den Thread-Namen zu aktualisieren (wenn möglich)
         try:
@@ -3972,56 +3972,6 @@ async def refresh_overview(interaction: discord.Interaction):
             await interaction.followup.send(error_msg, ephemeral=True)
         except:
             logger.error("Konnte Fehlermeldung nicht senden")
-
-
-@bot.tree.command(name="edit", description="Bearbeite Titel oder Beschreibung des Events")
-@app_commands.guild_only()
-async def edit_event(interaction: discord.Interaction):
-    """Bearbeitet ein bestehendes Event. Nur der Event-Ersteller kann diesen Befehl im Event-Thread verwenden."""
-    try:
-        # Debug: Thread-Informationen
-        logger.info(f"Thread-Kanal: {interaction.channel}")
-        logger.info(f"Thread-ID: {interaction.channel.id}")
-        logger.info(f"Thread-Parent: {interaction.channel.parent.id if interaction.channel.parent else 'None'}")
-        logger.info(f"CHANNEL_ID_EVENT: {CHANNEL_ID_EVENT}")
-        
-        # Prüfen, ob es sich um einen Event-Thread handelt
-        if not isinstance(interaction.channel, discord.Thread) or not interaction.channel.parent or interaction.channel.parent.id != CHANNEL_ID_EVENT:
-            await interaction.response.send_message("Dieser Befehl kann nur in einem Event-Thread verwendet werden.", ephemeral=True)
-            return
-        
-        # Event laden
-        event = None
-        thread_id = interaction.channel.id
-        events_data = load_upcoming_events(include_expired=True)
-        
-        # Debugging: Alle Thread-IDs ausgeben
-        logger.info(f"Suche Event für Thread-ID: {thread_id}")
-        for idx, e in enumerate(events_data.get("events", [])):
-            logger.info(f"Event {idx+1}: '{e.get('title')}' - Thread-ID: {e.get('thread_id')} (Typ: {type(e.get('thread_id')).__name__})")
-        
-        for e in events_data.get("events", []):
-            # Thread-ID kann entweder als int oder string gespeichert sein, daher konvertieren wir beide zu strings für den Vergleich
-            if str(e.get("thread_id")) == str(thread_id):
-                event = e
-                break
-        
-        if not event:
-            await interaction.response.send_message(f"Event konnte nicht gefunden werden. Thread-ID: {thread_id}", ephemeral=True)
-            return
-        
-        # Prüfen, ob der Benutzer der Event-Ersteller ist
-        if event.get("caller_id") != str(interaction.user.id):
-            await interaction.response.send_message("Nur der Ersteller des Events kann es bearbeiten.", ephemeral=True)
-            return
-        
-        # Bearbeitungsformular öffnen
-        modal = EditEventModal(event)
-        await interaction.response.send_modal(modal)
-        
-    except Exception as e:
-        logger.error(f"Error in edit_event: {e}")
-        await interaction.response.send_message(f"Ein Fehler ist aufgetreten: {str(e)}", ephemeral=True)
 
 bot.run(DISCORD_TOKEN)
             
